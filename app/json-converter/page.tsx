@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface LessonStep {
   id: number;
@@ -17,6 +17,8 @@ interface Lesson {
   steps: LessonStep[];
 }
 
+const STORAGE_KEY = 'json-converter-lessons';
+
 export default function JsonConverterPage() {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [editingStep, setEditingStep] = useState<{ lessonIndex: number; stepIndex: number } | null>(null);
@@ -25,6 +27,37 @@ export default function JsonConverterPage() {
   const [addingStep, setAddingStep] = useState<number | null>(null);
   const [jsonInput, setJsonInput] = useState('');
   const [jsonError, setJsonError] = useState<string | null>(null);
+
+  // Load lessons from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedLessons = localStorage.getItem(STORAGE_KEY);
+        if (savedLessons) {
+          const parsed = JSON.parse(savedLessons);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setLessons(parsed);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading lessons from localStorage:', error);
+      }
+    }
+  }, []);
+
+  // Save lessons to localStorage whenever they change
+  useEffect(() => {
+    if (typeof window !== 'undefined' && lessons.length > 0) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(lessons));
+      } catch (error) {
+        console.error('Error saving lessons to localStorage:', error);
+      }
+    } else if (typeof window !== 'undefined' && lessons.length === 0) {
+      // Clear localStorage if lessons array is empty
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }, [lessons]);
 
   const loadExample = () => {
     const example: Lesson[] = [
@@ -70,6 +103,15 @@ export default function JsonConverterPage() {
       },
     ];
     setLessons(example);
+  };
+
+  const clearAll = () => {
+    if (confirm('Are you sure you want to clear all lessons? This cannot be undone.')) {
+      setLessons([]);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    }
   };
 
   const handleJsonParse = () => {
@@ -160,7 +202,7 @@ export default function JsonConverterPage() {
             Click on any step or lesson to edit • Add new items easily
           </p>
 
-          <div className="flex gap-3 mb-6">
+          <div className="flex gap-3 mb-6 flex-wrap">
             <button
               onClick={loadExample}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
@@ -179,6 +221,14 @@ export default function JsonConverterPage() {
             >
               📄 Get JSON
             </button>
+            {lessons.length > 0 && (
+              <button
+                onClick={clearAll}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors"
+              >
+                🗑️ Clear All
+              </button>
+            )}
           </div>
 
           {/* JSON Input */}
