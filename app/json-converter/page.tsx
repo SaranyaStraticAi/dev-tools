@@ -65,7 +65,7 @@ export default function JsonConverterPage() {
         id: 1,
         title: 'Use AI to perform Simple Trade',
         description: 'Learn how to execute trades using AI assistance',
-        icon: '💰',
+        icon: '',
         steps: [
           {
             id: 1,
@@ -85,7 +85,7 @@ export default function JsonConverterPage() {
         id: 2,
         title: 'Use AI to Analyze a Chart',
         description: 'Get detailed technical analysis and insights from charts',
-        icon: '📊',
+        icon: '',
         steps: [
           {
             id: 1,
@@ -101,6 +101,166 @@ export default function JsonConverterPage() {
           },
         ],
       },
+      {
+        id: 4,
+        title: 'Use AI to Manage your Portfolio',
+        description: 'Let the AI track, organize, and evaluate all your portfolios in one place. Get real-time insights, performance metrics, and risk analysis to manage your investments more efficiently.',
+        icon: '',
+        steps: [
+          {
+            prompt: 'Track my portfolio and show allocation and performance',
+            heading: 'Track and Organize Your Portfolio',
+            subtext: 'Use AI to record all your holdings in one place and track performance and allocation in real time',
+            id: 1
+          },
+          {
+            prompt: 'Analyze my portfolio risk and returns.',
+            heading: 'Analyze Performance and Risk',
+            subtext: 'Use AI to evaluate returns, risk exposure, and diversification to improve portfolio management.',
+            id: 2
+          }
+        ]
+      },
+      {
+        id: 5,
+        title: 'Use AI to Journal Your Trades',
+        description: 'Automatically record your trading activity with AI. Get detailed insights, summaries, and performance breakdowns to improve your trading decisions.',
+        icon: '',
+        steps: [
+          {
+            prompt: 'Record my latest trade',
+            heading: 'Record Your Trades',
+            subtext: 'Use AI to automatically log your trades, including entry, exit and basic trade details in one place',
+            id: 1
+          },
+          {
+            prompt: 'Summarize my trading performance.',
+            heading: 'Review Trade Insights ',
+            subtext: 'Ask the AI to summarize your trades and provide performance insights to help you improve future decisions ',
+            id: 2
+          }
+        ]
+      },
+      {
+        id: 6,
+        title: 'Use AI to Manage Your Risk and Leverage',
+        description: 'Let the AI analyze your trade size, market volatility, and account balance to recommend safer risk levels and optimal leverage. Stay protected from overexposure and maintain consistent trading discipline.',
+        icon: '',
+        steps: [
+          {
+            prompt: 'Check the risk on this trade',
+            heading: 'Assess Risk and Exposure',
+            subtext: 'Use AI to evaluate your trade size, account balance and market volatility to identify potential risk ',
+            id: 1
+          },
+          {
+            prompt: 'Suggest Safe Leverage for this trade',
+            heading: 'Set Safe Leverage Levels',
+            "subtext": 'Ask the AI to recommend suitable leverage based on your risk profile and market conditions',
+            id: 2
+          }
+        ]
+      },
+      {
+        id: 7,
+        title: 'Use AI to Prepare for Major Economic Releases',
+        description: 'Get a clear overview of major economic events scheduled to influence the markets. AI highlights high-impact news so you can plan your trades with confidence and avoid unexpected volatility.',
+        icon: '',
+        steps: [
+          {
+            prompt: "Show today's high impact economic news",
+            heading: 'Identify High Impact Economic Events',
+            subtext: 'Use AI to view upcoming major economic releases that can significantly impact the markets',
+            id: 1
+          },
+          {
+            prompt: 'How will this news affect my trades?',
+            heading: 'Plan Trades Around Volatility',
+            subtext: 'Ask the AI how these events may affect your trades so you can plan entries, exits and avoid risky periods',
+            id: 2
+          }
+        ]
+      },
+      {
+        id: 8,
+        title: 'Use AI to Create a Trading Plan',
+        description: 'Build a structured and personalized trading plan with AI. Define your goals, risk limits, strategies, and routines while the AI organizes everything into a clear, actionable framework for consistent trading performance.',
+        icon: '',
+        steps: [
+          {
+            prompt: 'Create my trading goals and risk rules.',
+            heading: 'Define Trading Goals and Rules',
+            subtext: 'Use AI to set your trading goals, risk limits and preferred trading style in clear structure.',
+            id: 1
+          },
+          {
+            prompt: 'Build a complete trading plan for me.',
+            heading: 'Generate a Trading Plan',
+            subtext: 'Ask the AI to organize your goals, strategies and routines into a complete , actionable trading plan.',
+            id: 2
+          }
+        ]
+      },
+      {
+        id: 9,
+        title: 'Use AI to Automate Backtesting for Any Strategy',
+        description: 'Run instant backtests on any trading strategy with AI. Analyze performance, accuracy, drawdowns, and risk metrics automatically to refine your approach and make data-driven trading decisions.',
+        icon: '',
+        steps: [
+          {
+            prompt: 'Backtest this trading strategy.',
+            heading: 'Run a Strategy Backtest',
+            subtext: 'Use AI to test a trading strategy on historical data to see how it performs.',
+            id: 1
+          },
+          {
+            prompt: 'Analyze the backtest results.',
+            heading: 'Review Backtest Results',
+            subtext: 'Ask the AI to analyze results like accuracy, drawdown and risk to improve the strategy ',
+            id: 2
+          }
+        ]
+      },
+      {
+        id: 10,
+        title: 'Use AI to Generate Market Summary and Daily Outlook',
+        description: 'Get a concise AI-generated overview of market conditions, key movements, and upcoming opportunities. Start each session with a clear, data-driven outlook to guide your trading decisions.',
+        icon: '',
+        steps: [
+          {
+            prompt: "Give me today's market summary.",
+            heading: 'Get Market Summary',
+            subtext: 'Use AI to receive a brief overview of current market conditions and key movements. ',
+            id: 1
+          },
+          {
+            prompt: "Show today's trading outlook.",
+            heading: 'View Daily Trading Outlook',
+            subtext: 'Ask the AI for a data driven outlook highlighting potential opportunities and risks for the day.',
+            id: 2
+          }
+        ]
+      },
+      {
+        id: 11,
+        title: 'Use AI to Analyse Candle Patterns and Price Action',
+        description: 'Let the AI break down candle formations and price action behavior in real time. Understand market sentiment, trend shifts, and potential trade setups with clear, data-backed insights.',
+        icon: '',
+        steps: [
+          {
+            prompt: "Analyze Candle Patterns.",
+            heading: "Identify Candle Patterns",
+            subtext: "Use AI to detect and explain candle patterns and price action in real time.",
+            id: 1
+          },
+          {
+            prompt: "Explain the current price action.",
+            heading: "Interpret Market Sentiment ",
+            subtext: "Ask the AI to explain What the price action indicates about trend detection and trade opportunities.",
+            id: 2
+          }
+        ]
+      }
     ];
     setLessons(example);
   };
@@ -364,7 +524,7 @@ export default function JsonConverterPage() {
                         </button>
                       )}
                     </div>
-                    
+
                     {/* Existing Steps */}
                     {lesson.steps && lesson.steps.length > 0 && (
                       <div className="space-y-4 mb-4">
