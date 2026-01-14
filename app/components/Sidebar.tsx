@@ -3,10 +3,24 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
+import { Lock, LogOut, LogIn } from 'lucide-react';
+import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
+import { loginRequest } from "@/lib/authConfig";
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const { instance, accounts } = useMsal();
+
+  const handleLogin = () => {
+    instance.loginPopup(loginRequest).catch(e => {
+      console.error(e);
+    });
+  };
+
+  const handleLogout = () => {
+    instance.logoutPopup();
+  };
 
   const navItems = [
     {
@@ -27,6 +41,11 @@ export default function Sidebar() {
           />
         </svg>
       ),
+    },
+    {
+      name: 'Envecl',
+      href: '/envecl',
+      icon: <Lock className="w-5 h-5" />,
     },
     {
       name: 'Clerk User Search',
@@ -121,9 +140,8 @@ export default function Sidebar() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 z-40 h-screen w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-transform duration-300 ease-in-out ${
-          isOpen ? 'translate-x-0' : '-translate-x-full'
-        } md:translate-x-0`}
+        className={`fixed top-0 left-0 z-40 h-screen w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'
+          } md:translate-x-0`}
       >
         <div className="flex flex-col h-full">
           {/* Logo/Header */}
@@ -145,11 +163,10 @@ export default function Sidebar() {
                   key={item.href}
                   href={item.href}
                   onClick={() => setIsOpen(false)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 ${
-                    isActive
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 ${isActive
                       ? 'bg-blue-600 text-white shadow-md'
                       : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                  }`}
+                    }`}
                 >
                   {item.icon}
                   <span className="font-medium">{item.name}</span>
@@ -158,11 +175,31 @@ export default function Sidebar() {
             })}
           </nav>
 
-          {/* Footer */}
+          {/* Auth Footer */}
           <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-            <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-              © 2024 Dev Tools
-            </p>
+            <AuthenticatedTemplate>
+              <div className="flex flex-col gap-2">
+                <div className="text-sm text-gray-600 dark:text-gray-400 truncate px-2">
+                  {accounts[0]?.username}
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                >
+                  <LogOut size={16} />
+                  Logout
+                </button>
+              </div>
+            </AuthenticatedTemplate>
+            <UnauthenticatedTemplate>
+              <button
+                onClick={handleLogin}
+                className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+              >
+                <LogIn size={16} />
+                Login
+              </button>
+            </UnauthenticatedTemplate>
           </div>
         </div>
       </aside>
@@ -177,5 +214,3 @@ export default function Sidebar() {
     </>
   );
 }
-
-
