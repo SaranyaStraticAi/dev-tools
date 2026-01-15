@@ -2,8 +2,9 @@
 
 import { AuthenticatedTemplate, UnauthenticatedTemplate, useMsal } from "@azure/msal-react";
 import { loginRequest } from "@/lib/authConfig";
-import Sidebar from "./Sidebar";
+import AppSidebar from "./Sidebar";
 import { Lock } from "lucide-react";
+import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
     const { instance } = useMsal();
@@ -17,10 +18,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return (
         <>
             <AuthenticatedTemplate>
-                <Sidebar />
-                <main className="md:ml-64 min-h-screen">
-                    {children}
-                </main>
+                <SidebarProvider>
+                    <AppSidebar />
+                    <SidebarInset>
+                        <header className="flex h-14 items-center gap-2 border-b px-4">
+                            <SidebarTrigger className="-ml-2" />
+                        </header>
+                        <main className="flex-1 p-4">
+                            {children}
+                        </main>
+                    </SidebarInset>
+                </SidebarProvider>
             </AuthenticatedTemplate>
             <UnauthenticatedTemplate>
                 <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">

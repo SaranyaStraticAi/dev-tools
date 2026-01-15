@@ -22,3 +22,9 @@ export const tokenRequest = {
     ],
     forceRefresh: false
 };
+
+// Grafana API token request - uses Azure Managed Grafana's resource ID
+export const grafanaTokenRequest = {
+    scopes: ["https://grafana.azure.com/.default"],
+    forceRefresh: false
+};
