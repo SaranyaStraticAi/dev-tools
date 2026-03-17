@@ -27,13 +27,23 @@ export async function POST(request: NextRequest) {
 
     // Search across all instances
     for (const instance of instances as ClerkInstance[]) {
-      if (!instance.publishableKey || !instance.secretKey) {
+      let secretKey = instance.secretKey;
+
+      // Handle default instances by looking up secrets from env variables
+      // to keep them secure and avoid sending them back and forth from the client
+      if ((instance as any).id === 'default-1') {
+        secretKey = process.env.CLERK_SECRET_KEY || '';
+      } else if ((instance as any).id === 'default-2') {
+        secretKey = process.env.CLERK_LIVE_SECRET_KEY || '';
+      }
+
+      if (!secretKey) {
         continue; // Skip invalid instances
       }
 
       try {
         const clerkClient = createClerkClient({
-          secretKey: instance.secretKey,
+          secretKey: secretKey,
         });
 
         // Try to get the user

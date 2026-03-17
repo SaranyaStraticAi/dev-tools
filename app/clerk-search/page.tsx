@@ -61,8 +61,23 @@ interface UserDetails {
 
 const STORAGE_KEY = 'clerk-instances';
 
+const DEFAULT_INSTANCES: ClerkInstance[] = [
+  {
+    id: 'default-1',
+    name: 'Dev Account',
+    publishableKey: 'pk_test_Y3Jpc3Atb3J5eC05NC5jbGVyay5hY2NvdW50cy5kZXYk',
+    secretKey: '', // Handled by server
+  },
+  {
+    id: 'default-2',
+    name: 'Live Account (VibeTrader)',
+    publishableKey: 'pk_live_Y2xlcmsudmliZXRyYWRlci5jb20k',
+    secretKey: '', // Handled by server
+  }
+];
+
 export default function ClerkSearchPage() {
-  const [instances, setInstances] = useState<ClerkInstance[]>([]);
+  const [instances, setInstances] = useState<ClerkInstance[]>(DEFAULT_INSTANCES);
   const [newInstance, setNewInstance] = useState({
     publishableKey: '',
     secretKey: '',
@@ -164,6 +179,7 @@ export default function ClerkSearchPage() {
         },
         body: JSON.stringify({
           instances: instances.map((inst) => ({
+            id: inst.id,
             name: inst.name,
             publishableKey: inst.publishableKey,
             secretKey: inst.secretKey,
