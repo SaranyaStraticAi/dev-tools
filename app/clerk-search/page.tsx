@@ -154,14 +154,14 @@ export default function ClerkSearchPage() {
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (instances.length === 0) {
       setError('Please add at least one Clerk instance');
       return;
     }
 
     if (!userId.trim()) {
-      setError('Please enter a user ID');
+      setError('Please enter a user ID or email address');
       return;
     }
 
@@ -314,13 +314,13 @@ export default function ClerkSearchPage() {
             <div className="flex gap-4">
               <div className="flex-1">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  User ID
+                  User ID or Email Address
                 </label>
                 <input
                   type="text"
                   value={userId}
                   onChange={(e) => setUserId(e.target.value)}
-                  placeholder="Enter user ID to search"
+                  placeholder="Enter user ID (user_...) or email address to search"
                   className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm"
                   required
                 />
