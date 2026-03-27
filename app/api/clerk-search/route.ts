@@ -9,7 +9,7 @@ interface ClerkInstance {
 
 export async function POST(request: NextRequest) {
   try {
-    const { instances, userId } = await request.json();
+    const { instances, userId: identifier } = await request.json();
 
     if (!instances || !Array.isArray(instances) || instances.length === 0) {
       return NextResponse.json(
@@ -18,12 +18,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+    if (!identifier || typeof identifier !== 'string' || identifier.trim() === '') {
       return NextResponse.json(
-        { error: 'User ID is required' },
+        { error: 'User ID or Email is required' },
         { status: 400 }
       );
     }
+
+    const isEmail = identifier.includes('@');
 
     // Search across all instances
     for (const instance of instances as ClerkInstance[]) {
@@ -46,8 +48,28 @@ export async function POST(request: NextRequest) {
           secretKey: secretKey,
         });
 
-        // Try to get the user
-        const user = await clerkClient.users.getUser(userId);
+        let user: any = null;
+
+        if (isEmail) {
+          // Search by email
+          const userList = await clerkClient.users.getUserList({
+            emailAddress: [identifier.trim()],
+            limit: 1,
+          });
+          if (userList.data.length > 0) {
+            user = userList.data[0];
+          }
+        } else {
+          // Try to get the user by ID
+          try {
+            user = await clerkClient.users.getUser(identifier.trim());
+          } catch (e: any) {
+            // If it's a 404, we'll just keep user as null
+            if (e.status !== 404 && e.statusCode !== 404) {
+              throw e;
+            }
+          }
+        }
 
         if (user) {
           // User found! Return all available details
@@ -121,7 +143,7 @@ export async function POST(request: NextRequest) {
     // User not found in any instance
     return NextResponse.json({
       success: false,
-      message: 'No user ID found in any Clerk instance',
+      message: `No user with ${isEmail ? 'email' : 'ID'} "${identifier}" found in any Clerk instance`,
       searchedInstances: instances.length,
     });
   } catch (error: any) {
