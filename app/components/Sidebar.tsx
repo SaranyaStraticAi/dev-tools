@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Lock, LogOut, LogIn, Database, Search, Users, Code, BarChart3 } from 'lucide-react';
+import { Lock, LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers } from 'lucide-react';
 import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
 import { loginRequest } from "@/lib/authConfig";
 import {
@@ -34,6 +34,11 @@ const navItems = [
     name: 'Clerk User Search',
     href: '/clerk-search',
     icon: Search,
+  },
+  {
+    name: 'MetaAPI Lookup',
+    href: '/metaapi-lookup',
+    icon: Layers,
   },
   {
     name: 'Users',

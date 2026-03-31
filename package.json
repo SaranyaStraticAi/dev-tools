@@ -9,6 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@azure/data-tables": "^13.3.2",
+    "@azure/identity": "^4.13.1",
     "@azure/msal-browser": "^4.27.0",
     "@azure/msal-react": "^3.0.23",
     "@clerk/backend": "^2.24.0",

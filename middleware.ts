@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
-  
+
   // Define paths that should be proxied to Grafana
   // /grafana-proxy -> explicitly proxied dashboard requests (strip prefix)
   // /public, /avatar -> Grafana static assets (keep path)
@@ -17,10 +17,11 @@ export function middleware(request: NextRequest) {
   // Proxy ALL /api requests to Grafana, EXCEPT for our local Next.js API routes
   // This ensures we catch all Grafana APIs (alerts, rules, datasources, etc.) automatically
   const isLocalApi = pathname.startsWith('/api/clerk-search') ||
-                     pathname.startsWith('/api/delete') ||
-                     pathname.startsWith('/api/grafana') ||
-                     pathname.startsWith('/api/query') ||
-                     pathname.startsWith('/api/auth'); // Standard next-auth path just in case
+    pathname.startsWith('/api/delete') ||
+    pathname.startsWith('/api/grafana') ||
+    pathname.startsWith('/api/query') ||
+    pathname.startsWith('/api/metaapi-lookup') ||
+    pathname.startsWith('/api/auth'); // Standard next-auth path just in case
 
   const isGrafanaApi = pathname.startsWith('/api/') && !isLocalApi;
 
@@ -40,10 +41,10 @@ export function middleware(request: NextRequest) {
     if (isExplicitProxy) {
       targetPath = pathname.replace('/grafana-proxy', '');
     }
-    
+
     // Construct target URL
     const url = new URL(`${grafanaUrl}${targetPath}`);
-    
+
     // Copy search params
     request.nextUrl.searchParams.forEach((value, key) => {
       url.searchParams.set(key, value);
@@ -52,7 +53,7 @@ export function middleware(request: NextRequest) {
     // Create a new request headers object
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set('Authorization', `Bearer ${apiToken}`);
-    
+
     // update Host and Origin headers to match the target Grafana instance
     // This resolves issues where Grafana rejects usage based on Host/Origin mismatch
     requestHeaders.set('Host', url.host);
