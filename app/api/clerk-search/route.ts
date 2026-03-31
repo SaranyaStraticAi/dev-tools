@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClerkClient } from '@clerk/backend';
+import { TableClient } from '@azure/data-tables';
 
 interface ClerkInstance {
   publishableKey: string;
@@ -124,6 +125,43 @@ export async function POST(request: NextRequest) {
               deleteSelfEnabled: user.deleteSelfEnabled,
               createOrganizationEnabled: user.createOrganizationEnabled,
               lastActiveAt: user.lastActiveAt,
+              metaApiConnection: await (async () => {
+                const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
+                if (!connectionString) return null;
+
+                try {
+                  const tableClient = TableClient.fromConnectionString(connectionString, 'UserBrokerConnections');
+                  const entity: any = await tableClient.getEntity(user.id, 'metaapi');
+
+                  if (entity) {
+                    let parsedMetadata = {};
+                    if (entity.metadata) {
+                      try {
+                        parsedMetadata = typeof entity.metadata === 'string'
+                          ? JSON.parse(entity.metadata)
+                          : entity.metadata;
+                      } catch { }
+                    }
+
+                    return {
+                      accountId: entity.accountId,
+                      connected: entity.connected,
+                      lastUpdated: entity.lastUpdated,
+                      brokerName: (parsedMetadata as any).brokerName || null,
+                      server: (parsedMetadata as any).server || null,
+                      platform: (parsedMetadata as any).platform || null,
+                      region: (parsedMetadata as any).region || null,
+                      metadata: parsedMetadata,
+                    };
+                  }
+                } catch (e: any) {
+                  // If 404, user just doesn't have a MetaAPI connection
+                  if (e.statusCode !== 404) {
+                    console.error('Error fetching MetaAPI connection for user:', e.message);
+                  }
+                }
+                return null;
+              })(),
             },
             foundInInstance: instance.name || instance.publishableKey,
             instanceIndex: instances.indexOf(instance),
