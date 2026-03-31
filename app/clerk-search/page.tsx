@@ -57,6 +57,16 @@ interface UserDetails {
   deleteSelfEnabled: boolean;
   createOrganizationEnabled: boolean;
   lastActiveAt: number | null;
+  metaApiConnection?: {
+    accountId: string;
+    connected: boolean;
+    lastUpdated: string | null;
+    brokerName: string | null;
+    server: string | null;
+    platform: string | null;
+    region: string | null;
+    metadata: Record<string, unknown>;
+  } | null;
 }
 
 const STORAGE_KEY = 'clerk-instances';
@@ -369,6 +379,54 @@ export default function ClerkSearchPage() {
             </h2>
 
             <div className="space-y-6">
+              {/* MetaAPI Connection Info */}
+              {userDetails.metaApiConnection && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                    MetaAPI Connection
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="p-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-lg">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Account ID</p>
+                      <p className="text-gray-900 dark:text-white font-mono text-sm break-all mt-1">
+                        {userDetails.metaApiConnection.accountId}
+                      </p>
+                    </div>
+                    <div className="p-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-lg">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Status</p>
+                      <p className={`font-medium mt-1 ${userDetails.metaApiConnection.connected ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {userDetails.metaApiConnection.connected ? '● Connected' : '○ Disconnected'}
+                      </p>
+                    </div>
+                    {userDetails.metaApiConnection.brokerName && (
+                      <div className="p-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-lg">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Broker</p>
+                        <p className="text-gray-900 dark:text-white mt-1">{userDetails.metaApiConnection.brokerName}</p>
+                      </div>
+                    )}
+                    {userDetails.metaApiConnection.server && (
+                      <div className="p-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-lg">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Server</p>
+                        <p className="text-gray-900 dark:text-white mt-1">{userDetails.metaApiConnection.server}</p>
+                      </div>
+                    )}
+                    {userDetails.metaApiConnection.platform && (
+                      <div className="p-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-lg">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Platform</p>
+                        <p className="text-gray-900 dark:text-white mt-1">{userDetails.metaApiConnection.platform}</p>
+                      </div>
+                    )}
+                    <div className="p-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-lg">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Last Updated</p>
+                      <p className="text-gray-900 dark:text-white mt-1">
+                        {formatDate(userDetails.metaApiConnection.lastUpdated as any)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Basic Information */}
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
