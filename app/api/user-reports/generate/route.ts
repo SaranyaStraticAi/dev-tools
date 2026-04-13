@@ -6,7 +6,7 @@ import {
   fetchBrokerInfo,
   fetchTradingMetrics,
   fetchLessonsCompleted,
-  countPartition,
+  fetchChatMetrics,
   pointQuery,
 } from '@/app/user-reports/lib/azure-tables';
 import {
@@ -132,7 +132,7 @@ export async function POST() {
               brokerInfo,
               prefs,
               watchlist,
-              threadCount,
+              chatMetrics,
               lessonsCompleted,
               tradingMetrics,
               telegramEntity,
@@ -143,7 +143,7 @@ export async function POST() {
               fetchBrokerInfo(tables.broker, userId),
               pointQuery<UserPreferencesEntity>(tables.prefs, userId, 'preferences'),
               pointQuery<UserPreferencesEntity>(tables.prefs, userId, 'watchlist'),
-              countPartition(tables.threads, userId),
+              fetchChatMetrics(tables.threads, tables.messages, userId),
               fetchLessonsCompleted(tables.lessons, userId),
               fetchTradingMetrics(tables.metrics, userId),
               pointQuery<TelegramEntity>(tables.telegram, 'telegram', userId),
@@ -189,7 +189,7 @@ export async function POST() {
             const onboardingCompleteStr = onboardingState?.completedAt ? 'true' : 'false';
             const telegramConnectedStr = telegramEntity?.chatId ? 'true' : 'false';
             const telegramVerifiedStr = telegramEntity?.verified ? 'true' : 'false';
-            const chatThreadCountStr = threadCount.toString();
+            const chatThreadCountStr = chatMetrics.threadCount.toString();
             const lessonsCompletedStr = lessonsCompleted.toString();
             const recentPairsCountStr = recentPairsCount.toString();
             const favoritePairsCountStr = favoritePairsCount.toString();
@@ -240,6 +240,8 @@ export async function POST() {
               surveyStatus,
               surveyAnsweredCount: answeredCount,
               surveyCompletionDate,
+              chatLastDate: chatMetrics.lastDate,
+              chatUserMsgCount: chatMetrics.userMsgCount,
             };
 
             const bucket = buildBucket(partialRow);

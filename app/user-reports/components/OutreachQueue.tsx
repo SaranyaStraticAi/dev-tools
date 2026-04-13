@@ -4,8 +4,9 @@ import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Copy, ExternalLink, CheckCircle, Download, Search } from 'lucide-react';
+import { Copy, ExternalLink, CheckCircle, Download, Search, Sparkles } from 'lucide-react';
 import { downloadCSV } from '../lib/csv';
+import { ChatAnalysisPanel } from './ChatAnalysisPanel';
 import type { UserRow, BehavioralBucket, FunnelStage } from '../types';
 
 interface Props {
@@ -51,6 +52,17 @@ const ACTION_COLORS: Record<string, string> = {
   'Nurture — keep warm':                      'bg-gray-100 text-gray-500',
 };
 
+function relativeTime(dateStr: string): string {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const days = Math.floor(diff / 86400000);
+  if (days === 0) return 'today';
+  if (days === 1) return '1d ago';
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
+
 function priorityColor(score: number) {
   if (score >= 70) return 'text-red-600 font-bold';
   if (score >= 40) return 'text-yellow-600 font-semibold';
@@ -82,6 +94,7 @@ export function OutreachQueue({ rows, activeTab: externalTab, onTabChange }: Pro
   });
 
   const [search, setSearch] = React.useState('');
+  const [activePanel, setActivePanel] = React.useState<{ userId: string; userName: string } | null>(null);
 
   const toggleContacted = (clerkId: string) => {
     setContacted((prev) => {
@@ -182,6 +195,7 @@ export function OutreachQueue({ rows, activeTab: externalTab, onTabChange }: Pro
               <th className="px-4 py-2 text-left">Stage</th>
               <th className="px-4 py-2 text-left">Score</th>
               <th className="px-4 py-2 text-left">Survey Summary</th>
+              <th className="px-4 py-2 text-left">Chats</th>
               <th className="px-4 py-2 text-left">Next Action</th>
               <th className="px-4 py-2 text-right">Inactive</th>
               <th className="px-4 py-2 text-center w-28">Actions</th>
@@ -190,7 +204,7 @@ export function OutreachQueue({ rows, activeTab: externalTab, onTabChange }: Pro
           <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
             {queueRows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-gray-400">
+                <td colSpan={9} className="px-4 py-10 text-center text-gray-400">
                   No users in this queue.
                 </td>
               </tr>
@@ -244,6 +258,32 @@ export function OutreachQueue({ rows, activeTab: externalTab, onTabChange }: Pro
                       <span className="text-gray-500 truncate block" title={surveyOneLiner(row)}>
                         {surveyOneLiner(row)}
                       </span>
+                    </td>
+
+                    {/* Chat Activity */}
+                    <td className="px-4 py-2">
+                      {row.chatUserMsgCount > 0 ? (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-gray-600 dark:text-gray-300 tabular-nums">
+                            {row.chatUserMsgCount} msg{row.chatUserMsgCount !== 1 ? 's' : ''}
+                            {row.chatLastDate && (
+                              <span className="text-gray-400 ml-1">· {relativeTime(row.chatLastDate)}</span>
+                            )}
+                          </span>
+                          <button
+                            onClick={() => {
+                              const name = [row.firstName, row.lastName].filter(Boolean).join(' ') || row.email;
+                              setActivePanel({ userId: row.clerkId, userName: name });
+                            }}
+                            className="flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-700 font-medium"
+                          >
+                            <Sparkles className="h-2.5 w-2.5" />
+                            Analyze
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
                     </td>
 
                     {/* Next Action */}
@@ -300,6 +340,15 @@ export function OutreachQueue({ rows, activeTab: externalTab, onTabChange }: Pro
           </p>
         )}
       </div>
+
+      {/* Chat Analysis Panel */}
+      {activePanel && (
+        <ChatAnalysisPanel
+          userId={activePanel.userId}
+          userName={activePanel.userName}
+          onClose={() => setActivePanel(null)}
+        />
+      )}
     </div>
   );
 }

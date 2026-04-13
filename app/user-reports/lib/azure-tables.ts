@@ -124,6 +124,49 @@ export async function fetchLessonsCompleted(
   }
 }
 
+export async function fetchChatMetrics(
+  threadsTable: TableClient,
+  messagesTable: TableClient,
+  userId: string
+): Promise<{ threadCount: number; lastDate: string; userMsgCount: number; threadIds: string[] }> {
+  try {
+    const threadIds: string[] = [];
+    let lastDate = '';
+
+    const threadEntities = threadsTable.listEntities<{ threadId?: string; createdAt?: string }>({
+      queryOptions: { filter: `PartitionKey eq '${userId}'` },
+    });
+
+    for await (const entity of threadEntities) {
+      if (entity.threadId) {
+        threadIds.push(entity.threadId);
+        const created = (entity as { createdAt?: string }).createdAt || '';
+        if (created && (!lastDate || created > lastDate)) {
+          lastDate = created;
+        }
+      }
+    }
+
+    // Count user messages across threads (cap at 10 most recent threads for perf)
+    const recentThreadIds = threadIds.slice(0, 10);
+    let userMsgCount = 0;
+    await Promise.all(
+      recentThreadIds.map(async (threadId) => {
+        const msgEntities = messagesTable.listEntities<{ role?: string }>({
+          queryOptions: { filter: `PartitionKey eq '${threadId}'` },
+        });
+        for await (const msg of msgEntities) {
+          if (msg.role === 'user') userMsgCount++;
+        }
+      })
+    );
+
+    return { threadCount: threadIds.length, lastDate, userMsgCount, threadIds };
+  } catch {
+    return { threadCount: 0, lastDate: '', userMsgCount: 0, threadIds: [] };
+  }
+}
+
 export function initTableClients(connectionString: string) {
   return {
     survey: TableClient.fromConnectionString(connectionString, 'SurveyResponses'),
@@ -131,6 +174,7 @@ export function initTableClients(connectionString: string) {
     broker: TableClient.fromConnectionString(connectionString, 'UserBrokerConnections'),
     prefs: TableClient.fromConnectionString(connectionString, 'UserPreferences'),
     threads: TableClient.fromConnectionString(connectionString, 'UserThreads'),
+    messages: TableClient.fromConnectionString(connectionString, 'ThreadMessages'),
     lessons: TableClient.fromConnectionString(connectionString, 'UserLessonProgress'),
     metrics: TableClient.fromConnectionString(connectionString, 'TradingFrequencyMetrics'),
     telegram: TableClient.fromConnectionString(connectionString, 'TelegramNotifications'),

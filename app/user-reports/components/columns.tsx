@@ -226,6 +226,30 @@ export const columns: ColumnDef<UserRow>[] = [
     },
   },
   {
+    accessorKey: 'chatUserMsgCount',
+    header: ({ column }) => (
+      <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>
+        Chat Msgs
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => {
+      const count = row.getValue('chatUserMsgCount') as number;
+      return <span className="text-sm tabular-nums">{count > 0 ? count : '—'}</span>;
+    },
+    sortingFn: (a, b) => (a.getValue('chatUserMsgCount') as number) - (b.getValue('chatUserMsgCount') as number),
+  },
+  {
+    accessorKey: 'chatLastDate',
+    header: 'Last Chat',
+    cell: ({ row }) => {
+      const date = row.getValue('chatLastDate') as string;
+      if (!date) return <span className="text-gray-400 text-xs">—</span>;
+      const d = new Date(date);
+      return <span className="text-sm text-gray-500">{d.toLocaleDateString()}</span>;
+    },
+  },
+  {
     accessorKey: 'lessonsCompleted',
     header: 'Lessons',
     cell: ({ row }) => {

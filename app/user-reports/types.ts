@@ -144,6 +144,9 @@ export interface UserRow {
   funnelStage: FunnelStage;
   outreachPriority: number;
   nextBestAction: string;
+  // Chat analysis fields
+  chatLastDate: string;
+  chatUserMsgCount: number;
 }
 
 // ──────────────────────────────────────────────
@@ -192,6 +195,20 @@ export interface ReportSummary {
   signupCohorts: SignupCohort[];
   avgTimeToBroker: number | null;
   surveyDropOff: SurveyDropOff[];
+}
+
+// ──────────────────────────────────────────────
+// LLM Chat Analysis result
+// ──────────────────────────────────────────────
+
+export interface ChatAnalysis {
+  topTopics: string[];
+  painPoints: string[];
+  featureRequests: string[];
+  tradingInterests: string[];
+  engagementPattern: 'power' | 'moderate' | 'minimal' | 'one-shot';
+  sophisticationLevel: 'beginner' | 'intermediate' | 'advanced';
+  summary: string;
 }
 
 // ──────────────────────────────────────────────
