@@ -3,16 +3,13 @@
 import {
   BarChart,
   Bar,
-  PieChart,
-  Pie,
   Cell,
   XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from 'recharts';
-import type { UserRow, ReportSummary } from '../types';
+import type { UserRow, ReportSummary, BehavioralBucket, OutreachSegment } from '../types';
 
 // ──────────────────────────────────────────────
 // Shared chart card wrapper
@@ -28,54 +25,100 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
 }
 
 // ──────────────────────────────────────────────
-// Engagement Chart (Pie)
+// Behavioral Bucket Chart (replaces Engagement Pie)
 // ──────────────────────────────────────────────
 
-const ENGAGEMENT_COLORS: Record<string, string> = {
-  power: '#7c3aed',
-  engaged: '#2563eb',
-  casual: '#0d9488',
-  ghost: '#9ca3af',
+const BUCKET_COLORS: Record<BehavioralBucket, string> = {
+  '🔌 Power Users':          '#7c3aed',
+  '⭐ Hot Leads':             '#d97706',
+  '🎯 Warm Unsurveyed':      '#2563eb',
+  '💤 Dormant with Signal':  '#ea580c',
+  '📋 Needs Qualification':  '#6b7280',
+  '👻 Ghost Accounts':       '#d1d5db',
 };
 
-export function EngagementChart({ rows }: { rows: UserRow[] }) {
-  const counts = {
-    power: rows.filter((r) => r.engagementLevel === 'power').length,
-    engaged: rows.filter((r) => r.engagementLevel === 'engaged').length,
-    casual: rows.filter((r) => r.engagementLevel === 'casual').length,
-    ghost: rows.filter((r) => r.engagementLevel === 'ghost').length,
-  };
-  const data = Object.entries(counts).map(([name, value]) => ({ name, value }));
+export function BehavioralBucketChart({ summary }: { summary: ReportSummary }) {
+  const data = summary.behavioralBuckets.map(({ bucket, count }) => ({
+    name: bucket.replace(/^[^\s]+\s/, ''), // strip emoji for axis label
+    fullName: bucket,
+    value: count,
+    color: BUCKET_COLORS[bucket as BehavioralBucket] ?? '#9ca3af',
+  }));
+
+  const total = data.reduce((s, d) => s + d.value, 0) || 1;
 
   return (
-    <ChartCard title="Engagement Level">
+    <ChartCard title="Behavioral Buckets">
       <ResponsiveContainer width="100%" height={220}>
-        <PieChart>
-          <Pie
-            data={data}
-            cx="50%"
-            cy="50%"
-            innerRadius={55}
-            outerRadius={80}
-            paddingAngle={3}
-            dataKey="value"
-            label={({ name, value }) => `${name}: ${value}`}
-            labelLine={false}
-          >
-            {data.map((entry) => (
-              <Cell key={entry.name} fill={ENGAGEMENT_COLORS[entry.name]} />
+        <BarChart layout="vertical" data={data} margin={{ top: 0, right: 50, left: 10, bottom: 0 }}>
+          <XAxis type="number" domain={[0, total]} hide />
+          <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 10 }} />
+          <Tooltip
+            formatter={(value: unknown, _name: unknown, props: { payload?: { fullName?: string } }) => [
+              `${Number(value)} (${Math.round((Number(value) / total) * 100)}%)`,
+              props.payload?.fullName ?? '',
+            ]}
+          />
+          <Bar dataKey="value" radius={[0, 4, 4, 0]} label={{ position: 'right', fontSize: 11, formatter: (v: unknown) => `${Math.round((Number(v) / total) * 100)}%` }}>
+            {data.map((entry, i) => (
+              <Cell key={i} fill={entry.color} />
             ))}
-          </Pie>
-          <Tooltip formatter={(value, name) => [value, name]} />
-          <Legend />
-        </PieChart>
+          </Bar>
+        </BarChart>
       </ResponsiveContainer>
     </ChartCard>
   );
 }
 
 // ──────────────────────────────────────────────
-// Activity Chart (Bar)
+// Outreach Segment Chart (replaces Adoption bar)
+// ──────────────────────────────────────────────
+
+const SEGMENT_COLORS: Record<OutreachSegment, string> = {
+  'Broker-Connected (Power User)':  '#7c3aed',
+  'High-Intent: Simplicity Seekers':'#2563eb',
+  'High-Intent: Time-Savers':       '#4f46e5',
+  'Risk-Conscious: Safety First':   '#ea580c',
+  'Education-Focused':              '#0d9488',
+  'Automation Hunters':             '#d97706',
+  'General Interest':               '#9ca3af',
+};
+
+export function OutreachSegmentChart({ summary }: { summary: ReportSummary }) {
+  const data = summary.outreachSegments.map(({ segment, count }) => ({
+    name: segment.length > 22 ? segment.slice(0, 22) + '…' : segment,
+    fullName: segment,
+    value: count,
+    color: SEGMENT_COLORS[segment as OutreachSegment] ?? '#9ca3af',
+  }));
+
+  const total = data.reduce((s, d) => s + d.value, 0) || 1;
+
+  return (
+    <ChartCard title="Outreach Segments">
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart layout="vertical" data={data} margin={{ top: 0, right: 50, left: 10, bottom: 0 }}>
+          <XAxis type="number" domain={[0, total]} hide />
+          <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 10 }} />
+          <Tooltip
+            formatter={(value: unknown, _name: unknown, props: { payload?: { fullName?: string } }) => [
+              `${Number(value)} (${Math.round((Number(value) / total) * 100)}%)`,
+              props.payload?.fullName ?? '',
+            ]}
+          />
+          <Bar dataKey="value" radius={[0, 4, 4, 0]} label={{ position: 'right', fontSize: 11, formatter: (v: unknown) => `${Math.round((Number(v) / total) * 100)}%` }}>
+            {data.map((entry, i) => (
+              <Cell key={i} fill={entry.color} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </ChartCard>
+  );
+}
+
+// ──────────────────────────────────────────────
+// Activity Chart (Bar) — kept
 // ──────────────────────────────────────────────
 
 const ACTIVITY_COLORS: Record<string, string> = {
@@ -114,37 +157,30 @@ export function ActivityChart({ rows }: { rows: UserRow[] }) {
 }
 
 // ──────────────────────────────────────────────
-// Platform Adoption Chart (Horizontal Bar)
+// Survey Drop-off Chart
 // ──────────────────────────────────────────────
 
-export function AdoptionChart({ rows }: { rows: UserRow[] }) {
-  const n = rows.length || 1;
-  const data = [
-    { name: 'Onboarded', value: rows.filter((r) => r.onboardingComplete === 'true').length },
-    { name: 'Broker', value: rows.filter((r) => r.brokerConnected === 'true').length },
-    { name: 'Has Trades', value: rows.filter((r) => parseInt(r.totalTrades) > 0).length },
-    { name: 'AI Chats', value: rows.filter((r) => parseInt(r.chatThreadCount) > 0).length },
-    { name: 'Lessons', value: rows.filter((r) => parseInt(r.lessonsCompleted) > 0).length },
-    { name: 'Telegram', value: rows.filter((r) => r.telegramConnected === 'true').length },
-  ].map((d) => ({ ...d, pct: Math.round((d.value / n) * 100) }));
+export function SurveyDropOffChart({ summary }: { summary: ReportSummary }) {
+  const labels = ['None', '1 Q', '2 Qs', '3 Qs', 'Complete'];
+  const colors = ['#d1d5db', '#fca5a5', '#fcd34d', '#86efac', '#16a34a'];
+  const data = summary.surveyDropOff.map((d, i) => ({
+    name: labels[i] ?? `Q${d.answeredCount}`,
+    value: d.userCount,
+    color: colors[i] ?? '#9ca3af',
+  }));
 
   return (
-    <ChartCard title="Platform Adoption">
+    <ChartCard title="Survey Completion Drop-off">
       <ResponsiveContainer width="100%" height={220}>
-        <BarChart
-          layout="vertical"
-          data={data}
-          margin={{ top: 0, right: 40, left: 10, bottom: 0 }}
-        >
-          <XAxis type="number" domain={[0, n]} hide />
-          <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 11 }} />
-          <Tooltip
-            formatter={(value, _name, props) => [
-              `${value} (${props.payload?.pct}%)`,
-              'Users',
-            ]}
-          />
-          <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} label={{ position: 'right', fontSize: 11, formatter: (v: unknown) => `${Math.round((Number(v) / n) * 100)}%` }} />
+        <BarChart data={data} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
+          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+          <YAxis tick={{ fontSize: 11 }} />
+          <Tooltip formatter={(v: unknown) => [Number(v), 'Users']} />
+          <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+            {data.map((entry, i) => (
+              <Cell key={i} fill={entry.color} />
+            ))}
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
     </ChartCard>
@@ -152,7 +188,39 @@ export function AdoptionChart({ rows }: { rows: UserRow[] }) {
 }
 
 // ──────────────────────────────────────────────
-// Country Chart (Horizontal Bar)
+// Broker Type Chart
+// ──────────────────────────────────────────────
+
+export function BrokerTypeChart({ summary }: { summary: ReportSummary }) {
+  const data = summary.brokerTypes.slice(0, 8).map(({ type, count }) => ({
+    name: type,
+    value: count,
+  }));
+
+  if (data.length === 0) {
+    return (
+      <ChartCard title="Broker Types">
+        <div className="h-[220px] flex items-center justify-center text-gray-400 text-sm">No broker data</div>
+      </ChartCard>
+    );
+  }
+
+  return (
+    <ChartCard title="Broker Types">
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart layout="vertical" data={data} margin={{ top: 0, right: 40, left: 10, bottom: 0 }}>
+          <XAxis type="number" hide />
+          <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 11 }} />
+          <Tooltip />
+          <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]} label={{ position: 'right', fontSize: 11 }} />
+        </BarChart>
+      </ResponsiveContainer>
+    </ChartCard>
+  );
+}
+
+// ──────────────────────────────────────────────
+// Country Chart — kept
 // ──────────────────────────────────────────────
 
 export function CountryChart({ topCountries }: { topCountries: ReportSummary['topCountries'] }) {
@@ -164,11 +232,7 @@ export function CountryChart({ topCountries }: { topCountries: ReportSummary['to
   return (
     <ChartCard title="Top Countries">
       <ResponsiveContainer width="100%" height={220}>
-        <BarChart
-          layout="vertical"
-          data={data}
-          margin={{ top: 0, right: 40, left: 10, bottom: 0 }}
-        >
+        <BarChart layout="vertical" data={data} margin={{ top: 0, right: 40, left: 10, bottom: 0 }}>
           <XAxis type="number" hide />
           <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 11 }} />
           <Tooltip />

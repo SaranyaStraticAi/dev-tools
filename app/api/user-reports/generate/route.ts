@@ -18,6 +18,10 @@ import {
   computeEngagementScore,
   computeOutreachSegment,
   computeBehavioralBucket,
+  computeFunnelStage,
+  computeFeatureBreadth,
+  computeOutreachPriority,
+  computeNextBestAction,
 } from '@/app/user-reports/lib/classify';
 import type {
   UserRow,
@@ -25,7 +29,20 @@ import type {
   OnboardingStateEntity,
   UserPreferencesEntity,
   TelegramEntity,
+  FunnelStage,
+  FunnelConversion,
+  SignupCohort,
+  SurveyDropOff,
 } from '@/app/user-reports/types';
+
+const FUNNEL_STAGES: FunnelStage[] = [
+  'signed-up',
+  'onboarded',
+  'surveyed',
+  'exploring',
+  'broker-connected',
+  'trading',
+];
 
 function sendEvent(
   writer: WritableStreamDefaultWriter<Uint8Array>,
@@ -35,6 +52,15 @@ function sendEvent(
   const encoder = new TextEncoder();
   const text = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   return writer.write(encoder.encode(text));
+}
+
+/** ISO week label, e.g. "2025-W03" */
+function isoWeek(dateStr: string): string {
+  if (!dateStr) return 'unknown';
+  const d = new Date(dateStr);
+  const jan4 = new Date(d.getFullYear(), 0, 4);
+  const week = Math.ceil(((d.getTime() - jan4.getTime()) / 86400000 + jan4.getDay() + 1) / 7);
+  return `${d.getFullYear()}-W${String(week).padStart(2, '0')}`;
 }
 
 export async function POST() {
@@ -54,7 +80,6 @@ export async function POST() {
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   const writer = writable.getWriter();
 
-  // Run the generation async, streaming progress to the client
   (async () => {
     try {
       const clerk = createClerkClient({ secretKey: clerkSecretKey });
@@ -65,7 +90,6 @@ export async function POST() {
       let offset = 0;
       const limit = 500;
 
-      // Get first page to know total
       const firstPage = await clerk.users.getUserList({ limit, offset });
       allUsers.push(...firstPage.data);
       const totalUsers = firstPage.totalCount;
@@ -134,12 +158,20 @@ export async function POST() {
             const surveyStatus: UserRow['surveyStatus'] =
               answeredCount === 4 ? 'complete' : answeredCount > 0 ? 'incomplete' : 'no-survey';
 
+            // Survey completion date (most recent answeredAt)
+            const surveyCompletionDate = [q1, q2, q3, q4]
+              .filter(Boolean)
+              .map((q) => q!.answeredAt)
+              .filter(Boolean)
+              .sort()
+              .at(-1) ?? '';
+
             // Geo from session
             const latestSession = sessionPage?.data?.[0];
             const country = latestSession?.latestActivity?.country || '';
             const city = latestSession?.latestActivity?.city || '';
 
-            // Watchlist counts
+            // Watchlist counts and pair names
             let favoritePairsCount = 0;
             let recentPairsCount = 0;
             if (watchlist?.favorites) {
@@ -156,6 +188,7 @@ export async function POST() {
             const brokerConnectedStr = brokerInfo.connected ? 'true' : 'false';
             const onboardingCompleteStr = onboardingState?.completedAt ? 'true' : 'false';
             const telegramConnectedStr = telegramEntity?.chatId ? 'true' : 'false';
+            const telegramVerifiedStr = telegramEntity?.verified ? 'true' : 'false';
             const chatThreadCountStr = threadCount.toString();
             const lessonsCompletedStr = lessonsCompleted.toString();
             const recentPairsCountStr = recentPairsCount.toString();
@@ -163,6 +196,7 @@ export async function POST() {
             const totalTradesStr = tradingMetrics.totalTrades.toString();
             const priority = q3?.answer || '';
             const barrier = q4?.answer || '';
+
             const engagementLevel = classifyEngagement({
               brokerConnected: brokerConnectedStr,
               totalTrades: totalTradesStr,
@@ -170,7 +204,7 @@ export async function POST() {
               onboardingComplete: onboardingCompleteStr,
             });
 
-            const partialRow: Omit<UserRow, 'bucket' | 'daysSinceSignup' | 'daysSinceActive' | 'engagementScore' | 'outreachSegment' | 'behavioralBucket'> = {
+            const partialRow: Omit<UserRow, 'bucket' | 'daysSinceSignup' | 'daysSinceActive' | 'engagementScore' | 'outreachSegment' | 'behavioralBucket' | 'funnelStage' | 'featureBreadthScore' | 'outreachPriority' | 'nextBestAction'> = {
               clerkId: userId,
               email: user.emailAddresses[0]?.emailAddress || '',
               firstName: user.firstName || '',
@@ -183,8 +217,10 @@ export async function POST() {
               activityStatus,
               onboardingComplete: onboardingCompleteStr,
               betaAgreed: onboardingState?.betaAgreementAccepted ? 'true' : 'false',
+              onboardingCurrentStep: onboardingState?.currentStep || '',
               brokerConnected: brokerConnectedStr,
               brokerType: brokerInfo.types.join('|'),
+              brokerConnectionDate: brokerInfo.firstConnectionDate || '',
               lastSymbol: prefs?.lastSymbol || '',
               lastTimeframe: prefs?.lastTimeframe || '',
               favoritePairsCount: favoritePairsCountStr,
@@ -194,6 +230,7 @@ export async function POST() {
               totalTradeDays: tradingMetrics.totalDays.toString(),
               totalTrades: totalTradesStr,
               telegramConnected: telegramConnectedStr,
+              telegramVerified: telegramVerifiedStr,
               engagementLevel,
               experienceLevel: q1?.answer || '',
               tradesPerWeek: q2?.answer || '',
@@ -201,6 +238,8 @@ export async function POST() {
               priority,
               barrier,
               surveyStatus,
+              surveyAnsweredCount: answeredCount,
+              surveyCompletionDate,
             };
 
             const bucket = buildBucket(partialRow);
@@ -214,8 +253,8 @@ export async function POST() {
               favoritePairsCount: favoritePairsCountStr,
               telegramConnected: telegramConnectedStr,
             };
-            const outreachSegment = computeOutreachSegment({ brokerConnected: brokerConnectedStr, priority, barrier, surveyStatus });
             const engagementScore = computeEngagementScore(scoreInput);
+            const outreachSegment = computeOutreachSegment({ brokerConnected: brokerConnectedStr, priority, barrier, surveyStatus });
             const behavioralBucket = computeBehavioralBucket({
               brokerConnected: brokerConnectedStr,
               engagementLevel,
@@ -226,14 +265,54 @@ export async function POST() {
               favoritePairsCount: favoritePairsCountStr,
             });
 
+            const funnelInput = {
+              totalTrades: totalTradesStr,
+              brokerConnected: brokerConnectedStr,
+              chatThreadCount: chatThreadCountStr,
+              lessonsCompleted: lessonsCompletedStr,
+              favoritePairsCount: favoritePairsCountStr,
+              surveyStatus,
+              onboardingComplete: onboardingCompleteStr,
+            };
+            const funnelStage = computeFunnelStage(funnelInput);
+            const featureBreadthScore = computeFeatureBreadth({
+              onboardingComplete: onboardingCompleteStr,
+              surveyStatus,
+              brokerConnected: brokerConnectedStr,
+              chatThreadCount: chatThreadCountStr,
+              lessonsCompleted: lessonsCompletedStr,
+              telegramConnected: telegramConnectedStr,
+            });
+            const outreachPriority = computeOutreachPriority({
+              engagementScore,
+              activityStatus,
+              surveyStatus,
+              brokerConnected: brokerConnectedStr,
+            });
+            const nextBestAction = computeNextBestAction({
+              engagementLevel,
+              onboardingComplete: onboardingCompleteStr,
+              surveyStatus,
+              brokerConnected: brokerConnectedStr,
+              totalTrades: totalTradesStr,
+              activityStatus,
+              chatThreadCount: chatThreadCountStr,
+              lessonsCompleted: lessonsCompletedStr,
+              favoritePairsCount: favoritePairsCountStr,
+            });
+
             return {
               ...partialRow,
               bucket,
               daysSinceSignup: daysSince(createdAtStr),
               daysSinceActive: daysSince(lastActiveAtStr),
               engagementScore,
+              featureBreadthScore,
               outreachSegment,
               behavioralBucket,
+              funnelStage,
+              outreachPriority,
+              nextBestAction,
             } as UserRow;
           })
         );
@@ -248,6 +327,65 @@ export async function POST() {
       }
 
       // ── Phase 3: Compute summary ──
+
+      // Funnel counts
+      const funnelCounts = Object.fromEntries(
+        FUNNEL_STAGES.map((s) => [s, 0])
+      ) as Record<FunnelStage, number>;
+      for (const row of rows) funnelCounts[row.funnelStage]++;
+
+      // Funnel conversions (sequential stage-over-stage rates)
+      const funnelConversions: FunnelConversion[] = [];
+      for (let i = 0; i < FUNNEL_STAGES.length - 1; i++) {
+        const from = FUNNEL_STAGES[i];
+        const to = FUNNEL_STAGES[i + 1];
+        // Users who reached "to" or beyond (cumulative from top down)
+        const fromCount = FUNNEL_STAGES.slice(i).reduce((sum, s) => sum + funnelCounts[s], 0);
+        const toCount = FUNNEL_STAGES.slice(i + 1).reduce((sum, s) => sum + funnelCounts[s], 0);
+        funnelConversions.push({
+          from,
+          to,
+          rate: fromCount > 0 ? toCount / fromCount : 0,
+        });
+      }
+
+      // Signup cohorts (last 12 weeks)
+      const cohortMap = new Map<string, { total: number; activated: number }>();
+      const ACTIVATED_STAGES: FunnelStage[] = ['exploring', 'broker-connected', 'trading'];
+      for (const row of rows) {
+        const week = isoWeek(row.createdAt);
+        const existing = cohortMap.get(week) ?? { total: 0, activated: 0 };
+        existing.total++;
+        if (ACTIVATED_STAGES.includes(row.funnelStage)) existing.activated++;
+        cohortMap.set(week, existing);
+      }
+      const signupCohorts: SignupCohort[] = Array.from(cohortMap.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .slice(-12)
+        .map(([week, { total, activated }]) => ({
+          week,
+          total,
+          activated,
+          rate: total > 0 ? activated / total : 0,
+        }));
+
+      // Avg time to broker connection
+      const brokerTimes = rows
+        .filter((r) => r.brokerConnected === 'true' && r.brokerConnectionDate && r.createdAt)
+        .map((r) => daysSince(r.createdAt) - daysSince(r.brokerConnectionDate));
+      const avgTimeToBroker =
+        brokerTimes.length > 0
+          ? Math.round(brokerTimes.reduce((a, b) => a + b, 0) / brokerTimes.length)
+          : null;
+
+      // Survey drop-off
+      const dropOffMap: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
+      for (const row of rows) dropOffMap[row.surveyAnsweredCount]++;
+      const surveyDropOff: SurveyDropOff[] = [0, 1, 2, 3, 4].map((n) => ({
+        answeredCount: n,
+        userCount: dropOffMap[n] ?? 0,
+      }));
+
       const summary: ReportSummary = {
         total: rows.length,
         engagement: {
@@ -322,6 +460,11 @@ export async function POST() {
         )
           .sort((a, b) => b[1] - a[1])
           .map(([bucket, count]) => ({ bucket: bucket as import('@/app/user-reports/types').BehavioralBucket, count })),
+        funnel: funnelCounts,
+        funnelConversions,
+        signupCohorts,
+        avgTimeToBroker,
+        surveyDropOff,
       };
 
       await sendEvent(writer, 'complete', { rows, summary });

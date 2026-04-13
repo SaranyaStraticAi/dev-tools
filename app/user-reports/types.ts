@@ -63,6 +63,14 @@ export type ActivityStatus = 'active' | 'recent' | 'lapsed' | 'dormant' | 'never
 export type EngagementLevel = 'power' | 'engaged' | 'casual' | 'ghost';
 export type SurveyStatus = 'complete' | 'incomplete' | 'no-survey';
 
+export type FunnelStage =
+  | 'signed-up'        // created account only
+  | 'onboarded'        // completed onboarding flow
+  | 'surveyed'         // completed 4-question survey
+  | 'exploring'        // has AI chat / lessons / watchlist activity
+  | 'broker-connected' // connected a broker via MetaAPI
+  | 'trading';         // has executed at least one trade
+
 export type OutreachSegment =
   | 'Broker-Connected (Power User)'
   | 'High-Intent: Simplicity Seekers'
@@ -98,9 +106,11 @@ export interface UserRow {
   // Onboarding
   onboardingComplete: string;
   betaAgreed: string;
+  onboardingCurrentStep: string;
   // Broker
   brokerConnected: string;
   brokerType: string;
+  brokerConnectionDate: string;
   // Preferences
   lastSymbol: string;
   lastTimeframe: string;
@@ -112,6 +122,7 @@ export interface UserRow {
   totalTradeDays: string;
   totalTrades: string;
   telegramConnected: string;
+  telegramVerified: string;
   engagementLevel: EngagementLevel;
   // Survey
   experienceLevel: string;
@@ -120,18 +131,42 @@ export interface UserRow {
   priority: string;
   barrier: string;
   surveyStatus: SurveyStatus;
+  surveyAnsweredCount: number;
+  surveyCompletionDate: string;
   bucket: string;
   // Computed enrichment fields
   daysSinceSignup: number;
   daysSinceActive: number;
   engagementScore: number;
+  featureBreadthScore: number;
   outreachSegment: OutreachSegment;
   behavioralBucket: BehavioralBucket;
+  funnelStage: FunnelStage;
+  outreachPriority: number;
+  nextBestAction: string;
 }
 
 // ──────────────────────────────────────────────
 // Report summary (pre-computed server-side)
 // ──────────────────────────────────────────────
+
+export interface FunnelConversion {
+  from: FunnelStage;
+  to: FunnelStage;
+  rate: number; // 0-1
+}
+
+export interface SignupCohort {
+  week: string;       // ISO week label e.g. "2025-W12"
+  total: number;
+  activated: number;  // reached 'exploring' or beyond
+  rate: number;       // activated / total (0-1)
+}
+
+export interface SurveyDropOff {
+  answeredCount: number; // 0, 1, 2, 3, or 4
+  userCount: number;
+}
 
 export interface ReportSummary {
   total: number;
@@ -151,6 +186,12 @@ export interface ReportSummary {
   buckets: Array<{ bucket: string; count: number }>;
   outreachSegments: Array<{ segment: OutreachSegment; count: number }>;
   behavioralBuckets: Array<{ bucket: BehavioralBucket; count: number }>;
+  // Action-oriented summary data
+  funnel: Record<FunnelStage, number>;
+  funnelConversions: FunnelConversion[];
+  signupCohorts: SignupCohort[];
+  avgTimeToBroker: number | null;
+  surveyDropOff: SurveyDropOff[];
 }
 
 // ──────────────────────────────────────────────

@@ -2,14 +2,17 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Download } from 'lucide-react';
+import { RefreshCw, Download, ChevronDown, ChevronUp } from 'lucide-react';
 import { useToast } from '@/app/components/ToastContext';
 import { SummaryCards } from './components/SummaryCards';
-import { EngagementChart, ActivityChart, AdoptionChart, CountryChart } from './components/Charts';
+import { ActivityChart, BehavioralBucketChart, OutreachSegmentChart, SurveyDropOffChart, BrokerTypeChart, CountryChart } from './components/Charts';
+import { ActivationFunnelChart } from './components/FunnelChart';
+import { OutreachQueue } from './components/OutreachQueue';
+import { CohortChart } from './components/CohortChart';
 import { ReportDataTable, FilterBar } from './components/ReportDataTable';
 import { columns } from './components/columns';
 import { downloadCSV } from './lib/csv';
-import type { UserRow, ReportSummary, ProgressEvent } from './types';
+import type { UserRow, ReportSummary, ProgressEvent, FunnelStage } from './types';
 
 type Filters = {
   engagement: string;
@@ -36,13 +39,13 @@ export default function UserReportsPage() {
   const [progress, setProgress] = useState<ProgressEvent | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [outreachTab, setOutreachTab] = useState('⭐ Hot Leads');
+  const [showDataExplorer, setShowDataExplorer] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const outreachRef = useRef<HTMLDivElement>(null);
 
-  // Cleanup on unmount
   useEffect(() => {
-    return () => {
-      abortRef.current?.abort();
-    };
+    return () => { abortRef.current?.abort(); };
   }, []);
 
   const filteredRows = rows
@@ -67,6 +70,7 @@ export default function UserReportsPage() {
     setSummary(null);
     setProgress(null);
     setFilters(DEFAULT_FILTERS);
+    setShowDataExplorer(false);
 
     try {
       const response = await fetch('/api/user-reports/generate', {
@@ -88,8 +92,6 @@ export default function UserReportsPage() {
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-
-        // Parse SSE events from buffer
         const eventBlocks = buffer.split('\n\n');
         buffer = eventBlocks.pop() ?? '';
 
@@ -113,8 +115,8 @@ export default function UserReportsPage() {
             } else if (eventType === 'error') {
               throw new Error(payload.message);
             }
-          } catch (parseErr) {
-            // Skip malformed events
+          } catch {
+            // skip malformed events
           }
         }
       }
@@ -132,8 +134,21 @@ export default function UserReportsPage() {
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
+  // Scroll outreach queue into view and set tab when a summary card is clicked
+  const scrollToQueue = (tab?: string) => {
+    if (tab) setOutreachTab(tab);
+    setTimeout(() => {
+      outreachRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
+
   const progressPct =
     progress && progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+
+  const ACTIVATED: FunnelStage[] = ['exploring', 'broker-connected', 'trading'];
+  const needsOutreachRows = filteredRows.filter(
+    (r) => r.outreachPriority > 70 && r.brokerConnected !== 'true'
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
@@ -142,7 +157,7 @@ export default function UserReportsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">User Reports</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Fetch all Clerk users enriched with behavioral data from Azure Tables
+            Sales &amp; marketing action dashboard — activation funnel, lead scoring, outreach queue
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -157,11 +172,7 @@ export default function UserReportsPage() {
               Export CSV{filteredRows.length !== rows.length ? ` (${filteredRows.length})` : ''}
             </Button>
           )}
-          <Button
-            onClick={generateReport}
-            disabled={isGenerating}
-            className="gap-2"
-          >
+          <Button onClick={generateReport} disabled={isGenerating} className="gap-2">
             <RefreshCw className={`h-4 w-4 ${isGenerating ? 'animate-spin' : ''}`} />
             {isGenerating ? 'Generating...' : rows ? 'Regenerate' : 'Generate Report'}
           </Button>
@@ -175,9 +186,7 @@ export default function UserReportsPage() {
             <span className="text-sm text-gray-600 dark:text-gray-400">
               {progress?.message ?? 'Starting...'}
             </span>
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              {progressPct}%
-            </span>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{progressPct}%</span>
           </div>
           <div className="w-full h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
             <div
@@ -210,38 +219,75 @@ export default function UserReportsPage() {
       {/* Dashboard */}
       {rows && summary && (
         <div className="space-y-6">
-          {/* Summary cards */}
+
+          {/* 1. KPI Cards (8, 2 rows of 4) */}
           <SummaryCards
             summary={summary}
             filteredRows={filteredRows}
             totalRows={rows.length}
+            onHotLeadsClick={() => scrollToQueue('⭐ Hot Leads')}
+            onNeedsOutreachClick={() => {
+              setFilters((f) => ({ ...f }));
+              scrollToQueue('all');
+            }}
+            onDormantClick={() => scrollToQueue('💤 Dormant with Signal')}
           />
 
-          {/* Charts grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <EngagementChart rows={filteredRows} />
-            <ActivityChart rows={filteredRows} />
-            <AdoptionChart rows={filteredRows} />
-            <CountryChart topCountries={summary.topCountries} />
-          </div>
+          {/* 2. Activation Funnel (full width) */}
+          <ActivationFunnelChart summary={summary} />
 
-          {/* Filter bar + table */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700 shadow-sm p-4">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-              All Users
-            </h3>
+          {/* 3. Global filter bar */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700 shadow-sm px-4">
             <FilterBar
               filters={filters}
               onChange={handleFilterChange}
               topCountries={summary.topCountries}
             />
-            <ReportDataTable
-              columns={columns}
-              data={rows}
-              filters={filters}
-              topCountries={summary.topCountries}
+          </div>
+
+          {/* 4. Outreach Queue (primary sales interaction) */}
+          <div ref={outreachRef}>
+            <OutreachQueue
+              rows={filteredRows}
+              activeTab={outreachTab}
+              onTabChange={setOutreachTab}
             />
           </div>
+
+          {/* 5. Charts grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <BehavioralBucketChart summary={summary} />
+            <OutreachSegmentChart summary={summary} />
+            <ActivityChart rows={filteredRows} />
+            <SurveyDropOffChart summary={summary} />
+            <CountryChart topCountries={summary.topCountries} />
+            <BrokerTypeChart summary={summary} />
+          </div>
+
+          {/* 6. Cohort heatmap (full width) */}
+          <CohortChart cohorts={summary.signupCohorts} />
+
+          {/* 7. Full Data Explorer (collapsible) */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700 shadow-sm">
+            <button
+              className="w-full flex items-center justify-between px-4 py-3 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-750 rounded-lg transition-colors"
+              onClick={() => setShowDataExplorer((v) => !v)}
+            >
+              <span>Full Data Explorer ({filteredRows.length} users)</span>
+              {showDataExplorer ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+            {showDataExplorer && (
+              <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-700">
+                <ReportDataTable
+                  columns={columns}
+                  data={rows}
+                  filters={filters}
+                  topCountries={summary.topCountries}
+                />
+              </div>
+            )}
+          </div>
+
         </div>
       )}
     </div>

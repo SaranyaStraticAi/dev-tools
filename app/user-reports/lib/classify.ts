@@ -1,4 +1,4 @@
-import type { ActivityStatus, EngagementLevel, OutreachSegment, BehavioralBucket, UserRow } from '../types';
+import type { ActivityStatus, EngagementLevel, OutreachSegment, BehavioralBucket, FunnelStage, UserRow } from '../types';
 
 export function formatDate(ts: number | null | undefined): string {
   if (!ts) return '';
@@ -38,7 +38,7 @@ export function classifyEngagement(row: {
   return 'ghost';
 }
 
-export function buildBucket(row: Omit<UserRow, 'bucket' | 'daysSinceSignup' | 'daysSinceActive' | 'engagementScore' | 'outreachSegment' | 'behavioralBucket'>): string {
+export function buildBucket(row: Omit<UserRow, 'bucket' | 'daysSinceSignup' | 'daysSinceActive' | 'engagementScore' | 'outreachSegment' | 'behavioralBucket' | 'funnelStage' | 'featureBreadthScore' | 'outreachPriority' | 'nextBestAction'>): string {
   if (row.surveyStatus === 'no-survey') return 'no-survey';
   if (row.surveyStatus === 'incomplete') return 'incomplete-survey';
   const parts = [row.experienceLevel, row.traderType, row.priority].filter(Boolean);
@@ -46,15 +46,14 @@ export function buildBucket(row: Omit<UserRow, 'bucket' | 'daysSinceSignup' | 'd
 }
 
 /**
- * Engagement score (0–55 max in practice).
- * Reverse-engineered from the Excel report v2:
+ * Engagement score (0–75 max).
  *   +5  onboarded
  *   +5  survey complete
  *   +10 broker connected
- *   +min(chats, 5) * 3
- *   +min(lessons, 5) * 3
- *   +min(recentPairs, 5) * 2
- *   +min(favPairs, 5) * 2
+ *   +min(chats, 5) * 3     (max 15)
+ *   +min(lessons, 5) * 3   (max 15)
+ *   +min(recentPairs, 5) * 2  (max 10)
+ *   +min(favPairs, 5) * 2     (max 10)
  *   +5  telegram connected
  */
 export function computeEngagementScore(row: {
@@ -136,4 +135,124 @@ export function computeBehavioralBucket(row: {
   }
 
   return '📋 Needs Qualification';
+}
+
+/**
+ * Funnel stage — 6-stage activation funnel.
+ * Assigns the HIGHEST stage the user has reached.
+ */
+export function computeFunnelStage(row: {
+  totalTrades: string;
+  brokerConnected: string;
+  chatThreadCount: string;
+  lessonsCompleted: string;
+  favoritePairsCount: string;
+  surveyStatus: string;
+  onboardingComplete: string;
+}): FunnelStage {
+  if (parseInt(row.totalTrades || '0', 10) > 0) return 'trading';
+  if (row.brokerConnected === 'true') return 'broker-connected';
+  const hasExplored =
+    parseInt(row.chatThreadCount || '0', 10) > 0 ||
+    parseInt(row.lessonsCompleted || '0', 10) > 0 ||
+    parseInt(row.favoritePairsCount || '0', 10) > 0;
+  if (hasExplored) return 'exploring';
+  if (row.surveyStatus === 'complete') return 'surveyed';
+  if (row.onboardingComplete === 'true') return 'onboarded';
+  return 'signed-up';
+}
+
+/**
+ * Feature breadth score — how many of 6 product features have been adopted.
+ * Returns 0-6.
+ */
+export function computeFeatureBreadth(row: {
+  onboardingComplete: string;
+  surveyStatus: string;
+  brokerConnected: string;
+  chatThreadCount: string;
+  lessonsCompleted: string;
+  telegramConnected: string;
+}): number {
+  return (
+    (row.onboardingComplete === 'true' ? 1 : 0) +
+    (row.surveyStatus === 'complete' ? 1 : 0) +
+    (row.brokerConnected === 'true' ? 1 : 0) +
+    (parseInt(row.chatThreadCount || '0', 10) > 0 ? 1 : 0) +
+    (parseInt(row.lessonsCompleted || '0', 10) > 0 ? 1 : 0) +
+    (row.telegramConnected === 'true' ? 1 : 0)
+  );
+}
+
+/**
+ * Outreach priority score — composite 1-100 score for sorting the outreach queue.
+ * Higher = contact sooner.
+ *
+ * Components:
+ *   - Engagement score (0-75) normalized to 0-40 points
+ *   - Recency: active=+25, recent=+15, lapsed=+5, dormant/never=0
+ *   - Survey: complete=+10, incomplete=+5
+ *   - Not yet broker-connected bonus: +10 (they need outreach)
+ * Total raw max ≈ 85, clamped and normalized to 1-100.
+ */
+export function computeOutreachPriority(row: {
+  engagementScore: number;
+  activityStatus: ActivityStatus;
+  surveyStatus: string;
+  brokerConnected: string;
+}): number {
+  const engagementPoints = Math.round((row.engagementScore / 75) * 40);
+
+  const recencyPoints =
+    row.activityStatus === 'active' ? 25 :
+    row.activityStatus === 'recent' ? 15 :
+    row.activityStatus === 'lapsed' ? 5 : 0;
+
+  const surveyPoints =
+    row.surveyStatus === 'complete' ? 10 :
+    row.surveyStatus === 'incomplete' ? 5 : 0;
+
+  const outreachBonus = row.brokerConnected !== 'true' ? 10 : 0;
+
+  const raw = engagementPoints + recencyPoints + surveyPoints + outreachBonus;
+  // Normalize to 1-100 (raw max ≈ 85)
+  return Math.max(1, Math.min(100, Math.round((raw / 85) * 100)));
+}
+
+/**
+ * Next best action — short recommendation string for the sales rep.
+ */
+export function computeNextBestAction(row: {
+  engagementLevel: EngagementLevel;
+  onboardingComplete: string;
+  surveyStatus: string;
+  brokerConnected: string;
+  totalTrades: string;
+  activityStatus: ActivityStatus;
+  chatThreadCount: string;
+  lessonsCompleted: string;
+  favoritePairsCount: string;
+}): string {
+  const hasBroker = row.brokerConnected === 'true';
+  const hasTrades = parseInt(row.totalTrades || '0', 10) > 0;
+  const hasSignal =
+    parseInt(row.chatThreadCount || '0', 10) > 0 ||
+    parseInt(row.lessonsCompleted || '0', 10) > 0 ||
+    parseInt(row.favoritePairsCount || '0', 10) > 0;
+
+  if (hasBroker && hasTrades && row.activityStatus === 'active') return 'Upsell / referral ask';
+  if (hasBroker && !hasTrades) return 'Send first trade guide';
+  if (hasBroker) return 'Re-engage — broker connected but dormant';
+
+  if (row.engagementLevel === 'ghost' && row.onboardingComplete !== 'true') return 'Send activation email';
+
+  if (row.surveyStatus === 'complete' && !hasBroker && row.activityStatus === 'active') return 'Schedule broker setup call';
+
+  if ((row.activityStatus === 'dormant' || row.activityStatus === 'lapsed') && hasSignal) return 'Re-engagement campaign';
+
+  if (row.onboardingComplete === 'true' && row.surveyStatus !== 'complete') return 'Request survey completion';
+
+  if (row.surveyStatus === 'complete' && !hasBroker) return 'Schedule broker setup call';
+
+  return 'Nurture — keep warm';
 }

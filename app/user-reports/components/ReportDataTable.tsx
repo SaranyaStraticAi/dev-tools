@@ -60,6 +60,7 @@ const DEFAULT_HIDDEN: VisibilityState = {
   bucket: false,
   experienceLevel: false,
   telegramConnected: false,
+  onboardingCurrentStep: false,
   clerkId: false,
 };
 

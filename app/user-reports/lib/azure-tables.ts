@@ -62,18 +62,27 @@ export async function fetchSurveyForUser(
 export async function fetchBrokerInfo(
   brokerTable: TableClient,
   userId: string
-): Promise<{ connected: boolean; types: string[] }> {
+): Promise<{ connected: boolean; types: string[]; firstConnectionDate: string | null }> {
   try {
     const connected: string[] = [];
+    let firstConnectionDate: string | null = null;
     const entities = brokerTable.listEntities<BrokerConnectionEntity>({
       queryOptions: { filter: `PartitionKey eq '${userId}'` },
     });
     for await (const entity of entities) {
-      if (entity.connected) connected.push(entity.rowKey);
+      if (entity.connected) {
+        connected.push(entity.rowKey);
+        // Track earliest connection date across all connected brokers
+        if (entity.lastUpdated) {
+          if (!firstConnectionDate || entity.lastUpdated < firstConnectionDate) {
+            firstConnectionDate = entity.lastUpdated;
+          }
+        }
+      }
     }
-    return { connected: connected.length > 0, types: connected };
+    return { connected: connected.length > 0, types: connected, firstConnectionDate };
   } catch {
-    return { connected: false, types: [] };
+    return { connected: false, types: [], firstConnectionDate: null };
   }
 }
 

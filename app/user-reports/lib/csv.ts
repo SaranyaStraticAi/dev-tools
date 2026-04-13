@@ -2,10 +2,12 @@ import type { UserRow } from '../types';
 
 const CSV_HEADER =
   'clerkId,email,firstName,lastName,country,city,createdAt,lastSignInAt,lastActiveAt,activityStatus,' +
-  'onboardingComplete,betaAgreed,brokerConnected,brokerType,lastSymbol,lastTimeframe,' +
-  'favoritePairsCount,recentPairsCount,chatThreadCount,lessonsCompleted,totalTradeDays,totalTrades,' +
-  'telegramConnected,engagementLevel,experienceLevel,tradesPerWeek,traderType,priority,barrier,surveyStatus,bucket,' +
-  'daysSinceSignup,daysSinceActive,engagementScore,outreachSegment,behavioralBucket';
+  'onboardingComplete,onboardingCurrentStep,betaAgreed,brokerConnected,brokerType,brokerConnectionDate,' +
+  'lastSymbol,lastTimeframe,favoritePairsCount,recentPairsCount,chatThreadCount,lessonsCompleted,' +
+  'totalTradeDays,totalTrades,telegramConnected,telegramVerified,engagementLevel,experienceLevel,' +
+  'tradesPerWeek,traderType,priority,barrier,surveyStatus,surveyAnsweredCount,surveyCompletionDate,bucket,' +
+  'daysSinceSignup,daysSinceActive,engagementScore,featureBreadthScore,funnelStage,outreachPriority,' +
+  'nextBestAction,outreachSegment,behavioralBucket';
 
 function escapeCSV(value: string): string {
   if (value.includes(',') || value.includes('"') || value.includes('\n')) {
@@ -27,9 +29,11 @@ function rowToCSV(row: UserRow): string {
     row.lastActiveAt,
     row.activityStatus,
     row.onboardingComplete,
+    row.onboardingCurrentStep,
     row.betaAgreed,
     row.brokerConnected,
     row.brokerType,
+    row.brokerConnectionDate,
     row.lastSymbol,
     row.lastTimeframe,
     row.favoritePairsCount,
@@ -39,6 +43,7 @@ function rowToCSV(row: UserRow): string {
     row.totalTradeDays,
     row.totalTrades,
     row.telegramConnected,
+    row.telegramVerified,
     row.engagementLevel,
     row.experienceLevel,
     row.tradesPerWeek,
@@ -46,10 +51,16 @@ function rowToCSV(row: UserRow): string {
     row.priority,
     row.barrier,
     row.surveyStatus,
+    row.surveyAnsweredCount.toString(),
+    row.surveyCompletionDate,
     row.bucket,
     row.daysSinceSignup.toString(),
     row.daysSinceActive.toString(),
     row.engagementScore.toString(),
+    row.featureBreadthScore.toString(),
+    row.funnelStage,
+    row.outreachPriority.toString(),
+    row.nextBestAction,
     row.outreachSegment,
     row.behavioralBucket,
   ]

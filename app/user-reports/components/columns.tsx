@@ -4,7 +4,7 @@ import { ColumnDef } from '@tanstack/react-table';
 import { ArrowUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import type { UserRow, ActivityStatus, EngagementLevel, SurveyStatus, OutreachSegment, BehavioralBucket } from '../types';
+import type { UserRow, ActivityStatus, EngagementLevel, SurveyStatus, OutreachSegment, BehavioralBucket, FunnelStage } from '../types';
 
 function ActivityBadge({ status }: { status: ActivityStatus }) {
   const variants: Record<ActivityStatus, string> = {
@@ -48,6 +48,34 @@ function SurveyBadge({ status }: { status: SurveyStatus }) {
   );
 }
 
+function FunnelBadge({ stage }: { stage: FunnelStage }) {
+  const map: Record<FunnelStage, { label: string; cls: string }> = {
+    'signed-up':        { label: 'Signed Up',  cls: 'bg-gray-100 text-gray-600' },
+    onboarded:          { label: 'Onboarded',  cls: 'bg-blue-50 text-blue-600' },
+    surveyed:           { label: 'Surveyed',   cls: 'bg-indigo-50 text-indigo-600' },
+    exploring:          { label: 'Exploring',  cls: 'bg-teal-50 text-teal-600' },
+    'broker-connected': { label: 'Broker',     cls: 'bg-purple-100 text-purple-700' },
+    trading:            { label: 'Trading',    cls: 'bg-green-100 text-green-700' },
+  };
+  const { label, cls } = map[stage];
+  return (
+    <Badge variant="outline" className={`text-[10px] px-2 py-0.5 ${cls}`}>{label}</Badge>
+  );
+}
+
+function FeatureBreadthBar({ score }: { score: number }) {
+  return (
+    <div className="flex gap-0.5">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div
+          key={i}
+          className={`h-2 w-3 rounded-sm ${i < score ? 'bg-blue-400' : 'bg-gray-200 dark:bg-gray-600'}`}
+        />
+      ))}
+    </div>
+  );
+}
+
 export const columns: ColumnDef<UserRow>[] = [
   {
     id: 'user',
@@ -87,6 +115,50 @@ export const columns: ColumnDef<UserRow>[] = [
     ),
   },
   {
+    accessorKey: 'funnelStage',
+    header: ({ column }) => (
+      <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>
+        Stage
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => <FunnelBadge stage={row.getValue('funnelStage')} />,
+  },
+  {
+    accessorKey: 'outreachPriority',
+    header: ({ column }) => (
+      <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>
+        Priority
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => {
+      const score = row.getValue('outreachPriority') as number;
+      const color = score >= 70 ? 'text-red-600 font-bold' : score >= 40 ? 'text-yellow-600 font-semibold' : 'text-green-600';
+      return <span className={`text-sm tabular-nums ${color}`}>{score}</span>;
+    },
+    sortingFn: (a, b) => (a.getValue('outreachPriority') as number) - (b.getValue('outreachPriority') as number),
+  },
+  {
+    accessorKey: 'nextBestAction',
+    header: 'Next Action',
+    cell: ({ row }) => {
+      const action = row.getValue('nextBestAction') as string;
+      const colorMap: Record<string, string> = {
+        'Upsell / referral ask': 'bg-purple-100 text-purple-700',
+        'Send first trade guide': 'bg-blue-100 text-blue-700',
+        'Re-engage — broker connected but dormant': 'bg-orange-100 text-orange-700',
+        'Send activation email': 'bg-gray-100 text-gray-600',
+        'Schedule broker setup call': 'bg-green-100 text-green-700',
+        'Re-engagement campaign': 'bg-yellow-100 text-yellow-700',
+        'Request survey completion': 'bg-teal-100 text-teal-700',
+        'Nurture — keep warm': 'bg-gray-100 text-gray-500',
+      };
+      const cls = colorMap[action] ?? 'bg-gray-100 text-gray-600';
+      return <span className={`text-[10px] rounded px-2 py-0.5 font-medium ${cls}`}>{action}</span>;
+    },
+  },
+  {
     accessorKey: 'activityStatus',
     header: ({ column }) => (
       <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>
@@ -105,6 +177,17 @@ export const columns: ColumnDef<UserRow>[] = [
       </Button>
     ),
     cell: ({ row }) => <EngagementBadge level={row.getValue('engagementLevel')} />,
+  },
+  {
+    accessorKey: 'featureBreadthScore',
+    header: ({ column }) => (
+      <Button variant="ghost" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}>
+        Features
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    ),
+    cell: ({ row }) => <FeatureBreadthBar score={row.getValue('featureBreadthScore')} />,
+    sortingFn: (a, b) => (a.getValue('featureBreadthScore') as number) - (b.getValue('featureBreadthScore') as number),
   },
   {
     accessorKey: 'brokerConnected',
@@ -250,7 +333,7 @@ export const columns: ColumnDef<UserRow>[] = [
     },
     sortingFn: (a, b) => (a.getValue('daysSinceActive') as number) - (b.getValue('daysSinceActive') as number),
   },
-  // Hidden by default — togglable via column visibility
+  // Hidden by default
   {
     accessorKey: 'bucket',
     header: 'Bucket',
@@ -278,6 +361,13 @@ export const columns: ColumnDef<UserRow>[] = [
         <span className="text-gray-400 text-xs">—</span>
       );
     },
+  },
+  {
+    accessorKey: 'onboardingCurrentStep',
+    header: 'Onboarding Step',
+    cell: ({ row }) => (
+      <span className="text-xs text-gray-500 font-mono">{row.getValue('onboardingCurrentStep') || '—'}</span>
+    ),
   },
   {
     accessorKey: 'clerkId',
