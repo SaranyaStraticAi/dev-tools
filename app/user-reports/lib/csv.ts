@@ -7,7 +7,7 @@ const CSV_HEADER =
   'totalTradeDays,totalTrades,telegramConnected,telegramVerified,engagementLevel,experienceLevel,' +
   'tradesPerWeek,traderType,priority,barrier,surveyStatus,surveyAnsweredCount,surveyCompletionDate,bucket,' +
   'daysSinceSignup,daysSinceActive,engagementScore,featureBreadthScore,funnelStage,outreachPriority,' +
-  'nextBestAction,outreachSegment,behavioralBucket';
+  'nextBestAction,outreachSegment,behavioralBucket,chatLastDate,chatUserMsgCount';
 
 function escapeCSV(value: string): string {
   if (value.includes(',') || value.includes('"') || value.includes('\n')) {
@@ -63,6 +63,8 @@ function rowToCSV(row: UserRow): string {
     row.nextBestAction,
     row.outreachSegment,
     row.behavioralBucket,
+    row.chatLastDate,
+    row.chatUserMsgCount.toString(),
   ]
     .map(escapeCSV)
     .join(',');

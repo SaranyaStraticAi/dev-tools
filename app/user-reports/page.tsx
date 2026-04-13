@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { RefreshCw, Download, ChevronDown, ChevronUp } from 'lucide-react';
 import { useToast } from '@/app/components/ToastContext';
 import { SummaryCards } from './components/SummaryCards';
-import { ActivityChart, BehavioralBucketChart, OutreachSegmentChart, SurveyDropOffChart, BrokerTypeChart, CountryChart } from './components/Charts';
+import { ActivityChart, BehavioralBucketChart, OutreachSegmentChart, SurveyDropOffChart, BrokerTypeChart, CountryChart, ChatActivityChart } from './components/Charts';
 import { ActivationFunnelChart } from './components/FunnelChart';
 import { OutreachQueue } from './components/OutreachQueue';
 import { CohortChart } from './components/CohortChart';
@@ -262,6 +262,7 @@ export default function UserReportsPage() {
             <SurveyDropOffChart summary={summary} />
             <CountryChart topCountries={summary.topCountries} />
             <BrokerTypeChart summary={summary} />
+            <ChatActivityChart rows={filteredRows} />
           </div>
 
           {/* 6. Cohort heatmap (full width) */}

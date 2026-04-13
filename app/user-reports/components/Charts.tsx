@@ -223,6 +223,40 @@ export function BrokerTypeChart({ summary }: { summary: ReportSummary }) {
 // Country Chart — kept
 // ──────────────────────────────────────────────
 
+// ──────────────────────────────────────────────
+// Chat Activity Distribution
+// ──────────────────────────────────────────────
+
+export function ChatActivityChart({ rows }: { rows: UserRow[] }) {
+  const data = [
+    { name: '0 chats',   value: rows.filter((r) => r.chatUserMsgCount === 0).length,                                      color: '#d1d5db' },
+    { name: '1–5 msgs',  value: rows.filter((r) => r.chatUserMsgCount >= 1 && r.chatUserMsgCount <= 5).length,             color: '#93c5fd' },
+    { name: '6–20 msgs', value: rows.filter((r) => r.chatUserMsgCount >= 6 && r.chatUserMsgCount <= 20).length,            color: '#3b82f6' },
+    { name: '20+ msgs',  value: rows.filter((r) => r.chatUserMsgCount > 20).length,                                        color: '#1d4ed8' },
+  ];
+
+  return (
+    <ChartCard title="Chat Activity Distribution">
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart data={data} margin={{ top: 0, right: 8, left: -20, bottom: 0 }}>
+          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+          <YAxis tick={{ fontSize: 11 }} />
+          <Tooltip formatter={(v: unknown) => [Number(v), 'Users']} />
+          <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+            {data.map((entry, i) => (
+              <Cell key={i} fill={entry.color} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </ChartCard>
+  );
+}
+
+// ──────────────────────────────────────────────
+// Country Chart — kept
+// ──────────────────────────────────────────────
+
 export function CountryChart({ topCountries }: { topCountries: ReportSummary['topCountries'] }) {
   const data = topCountries.slice(0, 10).map(({ country, count }) => ({
     name: country === '(unknown)' ? 'Unknown' : country,

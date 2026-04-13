@@ -62,6 +62,7 @@ const DEFAULT_HIDDEN: VisibilityState = {
   telegramConnected: false,
   onboardingCurrentStep: false,
   clerkId: false,
+  chatLastDate: false,
 };
 
 export function ReportDataTable({ columns, data, filters, topCountries }: ReportDataTableProps) {
