@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Lock, LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers } from 'lucide-react';
+import { Lock, LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart } from 'lucide-react';
 import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
 import { loginRequest } from "@/lib/authConfig";
 import {
@@ -44,6 +44,11 @@ const navItems = [
     name: 'Users',
     href: '/users',
     icon: Users,
+  },
+  {
+    name: 'User Reports',
+    href: '/user-reports',
+    icon: FileBarChart,
   },
   {
     name: 'JSON Converter',
