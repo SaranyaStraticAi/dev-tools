@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Lock, LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart } from 'lucide-react';
+import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare } from 'lucide-react';
 import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
 import { loginRequest } from "@/lib/authConfig";
 import {
@@ -60,6 +60,16 @@ const navItems = [
     href: '/monitoring',
     icon: BarChart3,
   },
+  {
+    name: 'Journal Dashboard',
+    href: '/journal-dashboard',
+    icon: TrendingUp,
+  },
+  {
+    name: 'Chat Analytics',
+    href: '/chat-analytics',
+    icon: MessageSquare,
+  },
 ];
 
 export default function AppSidebar() {
@@ -102,7 +112,7 @@ export default function AppSidebar() {
                       tooltip={item.name}
                     >
                       <Link href={item.href}>
-                        <item.icon />
+                        <item.icon/>
                         <span>{item.name}</span>
                       </Link>
                     </SidebarMenuButton>

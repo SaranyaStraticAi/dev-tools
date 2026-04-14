@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>VibeTrader ΓÇö Investor Analytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+<style>
+:root {
+  --bg:      #080c10;
+  --bg1:     #0d1117;
+  --bg2:     #111820;
+  --bg3:     #161d26;
+  --border:  #1e2a38;
+  --border2: #243040;
+  --text:    #e2eaf3;
+  --muted:   #5a7090;
+  --muted2:  #3d5570;
+  --blue:    #3b8ef3;
+  --green:   #2ea84a;
+  --yellow:  #d4a017;
+  --red:     #e8433a;
+  --purple:  #8b5cf6;
+  --teal:    #0891b2;
+  --accent:  #3b8ef3;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+  padding: 0;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(59,142,243,0.06), transparent),
+    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(139,92,246,0.04), transparent);
+}
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* ΓöÇΓöÇ HEADER ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
+header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 20px 32px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(8,12,16,0.8);
+  backdrop-filter: blur(12px);
+  position: sticky; top: 0; z-index: 100;
+}
+.brand { display: flex; align-items: center; gap: 14px; }
+.pulse {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+  box-shadow: 0 0 0 0 rgba(46,168,74,0.6);
+  animation: pulse 2s infinite;
+}
+.pulse.loading { background: var(--yellow); box-shadow: 0 0 0 0 rgba(212,160,23,0.6); }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(46,168,74,0.6); }
+  70% { box-shadow: 0 0 0 8px rgba(46,168,74,0); }
+  100% { box-shadow: 0 0 0 0 rgba(46,168,74,0); }
+}
+.brand-name { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+.brand-tag { font-size: 11px; color: var(--muted); margin-top: 1px; letter-spacing: 0.3px; }
+.header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.status-pill {
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: 20px; padding: 5px 14px;
+  font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace;
+}
+.status-pill b { color: var(--green); }
+.refresh-btn {
+  background: var(--bg2); border: 1px solid var(--border2);
+  border-radius: 8px; padding: 6px 14px;
+  font-size: 12px; color: var(--muted); cursor: pointer; transition: all .2s;
+  font-family: 'Inter', sans-serif;
+}
+.refresh-btn:hover { background: var(--bg3); color: var(--text); border-color: var(--accent); }
+
+/* ΓöÇΓöÇ TIME RANGE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
+.range-bar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 14px 32px 0;
+}
+.range-label { font-size: 10px; color: var(--muted2); text-transform: uppercase; letter-spacing: 1px; margin-right: 4px; }
+.range-btn {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 12px;
+  font-size: 11px; color: var(--muted); cursor: pointer; transition: all .18s;
+  font-family: 'JetBrains Mono', monospace; letter-spacing: 0.3px;
+}
+.range-btn:hover { background: var(--bg3); color: var(--text); }
+.range-btn.active { background: rgba(59,142,243,0.12); border-color: rgba(59,142,243,0.4); color: var(--blue); }
+
+/* ΓöÇΓöÇ LAYOUT ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
+main { padding: 20px 32px 40px; max-width: 1600px; margin: 0 auto; }
+.gap { display: flex; flex-direction: column; gap: 16px; }
+
+/* ΓöÇΓöÇ KPI GRID ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
+.kpi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+@media(max-width:1100px) { .kpi-grid { grid-template-columns: repeat(3,1fr); } }
+@media(max-width:700px)  { .kpi-grid { grid-template-columns: repeat(2,1fr); } }
+.kpi {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 18px 20px;
+  position: relative; overflow: hidden; transition: border-color .2s;
+}
+.kpi:hover { border-color: var(--border2); }
+.kpi::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0;
+  height: 2px; background: var(--kpi-color, var(--blue));
+  opacity: 0.8;
+}
+.kpi-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.9px; margin-bottom: 8px; }
+.kpi-value {
+  font-size: 30px; font-weight: 700; line-height: 1;
+  font-family: 'JetBrains Mono', monospace; letter-spacing: -1px;
+  color: #f0f6fc;
+}
+.kpi-sub { font-size: 11px; color: var(--muted); margin-top: 6px; }
+.up { color: var(--green); font-weight: 600; }
+.dn { color: var(--red); font-weight: 600; }
+.neu { color: var(--blue); }
+
+/* ΓöÇΓöÇ CARDS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
+.card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 22px 24px;
+  transition: border-color .2s;
+}
+.card:hover { border-color: var(--border2); }
+.card-title { font-size: 13px; font-weight: 600; color: #c9d1d9; margin-bottom: 3px; }
+.card-desc  { font-size: 11px; color: var(--muted2); margin-bottom: 16px; line-height: 1.5; }
+
+/* ΓöÇΓöÇ GRIDS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
+.g2 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+.g11 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+@media(max-width:1000px) { .g2,.g11,.g3 { grid-template-columns: 1fr; } }
+
+/* ΓöÇΓöÇ PERCENTILE ROW ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
+.pct-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 12px; }
+@media(max-width:900px) { .pct-grid { grid-template-columns: repeat(3,1fr); } }
+.pct-card {
+  background: linear-gradient(135deg, var(--bg1) 0%, var(--bg2) 100%);
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 16px; text-align: center;
+}
+.pct-tag { font-size: 9px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted2); margin-bottom: 6px; }
+.pct-val { font-size: 20px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+.pct-sub { font-size: 10px; color: var(--muted); margin-top: 4px; }
+
+/* ΓöÇΓöÇ TABLE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; padding: 10px 14px; color: var(--muted); font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: 0.7px; border-bottom: 1px solid var(--border); cursor: pointer; user-select: none; }
+th:hover { color: var(--text); }
+td { padding: 11px 14px; border-bottom: 1px solid rgba(30,42,56,0.5); color: #c9d1d9; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(22,29,38,0.6); }
+.pill { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.pg { background: rgba(46,168,74,0.15); color: var(--green); }
+.py { background: rgba(212,160,23,0.15); color: var(--yellow); }
+.pr { background: rgba(232,67,58,0.15); color: var(--red); }
+.pb { background: rgba(59,142,243,0.15); color: var(--blue); }
+
+/* ΓöÇΓöÇ ERROR ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
+#errBanner {
+  display: none; background: rgba(232,67,58,0.1); border: 1px solid rgba(232,67,58,0.3);
+  border-radius: 8px; padding: 12px 18px; margin-bottom: 16px;
+  font-size: 12px; color: var(--red);
+}
+
+/* ΓöÇΓöÇ FOOTER NOTE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
+.data-note { font-size: 11px; color: var(--muted2); padding: 12px 0 0; border-top: 1px solid var(--border); margin-top: 16px; }
+
+/* ── USER SLIDE PANEL ──────────────────────────────────── */
+.usr-wrap{display:flex;gap:8px;align-items:center;margin-bottom:16px}
+.usr-inp{flex:1;background:var(--bg1);border:1px solid var(--border2);border-radius:8px;padding:9px 14px;font-size:13px;color:var(--text);font-family:'Inter',sans-serif;outline:none;transition:border-color .2s}
+.usr-inp:focus{border-color:var(--blue)}
+.usr-inp::placeholder{color:var(--muted2)}
+.usr-btn{background:linear-gradient(135deg,#3b8ef3,#1d4ed8);border:none;border-radius:8px;padding:9px 22px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;box-shadow:0 2px 10px rgba(59,142,243,.4);transition:opacity .2s;white-space:nowrap}
+.usr-btn:hover{opacity:.88}
+.usr-btn:disabled{opacity:.4;cursor:not-allowed}
+#userSlide{position:fixed;top:0;right:-700px;width:680px;height:100vh;background:var(--bg1);border-left:1px solid var(--border);z-index:999;overflow-y:auto;transition:right .32s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column}
+#userSlide.open{right:0}
+.sl-hdr{display:flex;justify-content:space-between;align-items:flex-start;padding:20px 24px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg1);z-index:2}
+.sl-close{background:none;border:1px solid var(--border2);border-radius:6px;padding:6px 12px;color:var(--muted);cursor:pointer;font-size:14px;transition:all .18s}
+.sl-close:hover{background:var(--bg2);color:var(--text)}
+.sl-body{padding:20px 24px;flex:1;display:flex;flex-direction:column;gap:16px}
+.sl-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.sl-kpi{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.sl-kpi-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.9px;color:var(--muted2);margin-bottom:6px}
+.sl-kpi-val{font-size:22px;font-weight:700;font-family:'JetBrains Mono',monospace;letter-spacing:-.5px}
+.sl-sec{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+#slideOverlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:998;display:none;backdrop-filter:blur(3px)}
+#slideOverlay.open{display:block}
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="pulse" id="statusDot"></div>
+    <div>
+      <div class="brand-name">VibeTrader Analytics</div>
+      <div class="brand-tag">Investor Review ΓÇö Trading Journal Platform</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="status-pill" id="statusBadge"><b>ΓùÅ LoadingΓÇª</b></div>
+    <button class="refresh-btn" onclick="loadData()">Γå╗ Refresh</button>
+  </div>
+</header>
+
+<!-- Time Range Selector -->
+<div class="range-bar">
+  <span class="range-label">Range</span>
+  <button class="range-btn" data-range="7d"  onclick="setRange('7d')">7D</button>
+  <button class="range-btn" data-range="30d" onclick="setRange('30d')">30D</button>
+  <button class="range-btn" data-range="90d" onclick="setRange('90d')">90D</button>
+  <button class="range-btn active" data-range="all" onclick="setRange('all')">All</button>
+</div>
+
+<main>
+<div class="gap">
+  <div id="errBanner"></div>
+
+  <!-- Core KPIs -->
+  <div class="kpi-grid">
+    <div class="kpi" style="--kpi-color:var(--blue)">
+      <div class="kpi-label">Total Active Users</div>
+      <div class="kpi-value" id="kUsers">ΓÇö</div>
+      <div class="kpi-sub" id="kUsersSub">connected brokers</div>
+    </div>
+    <div class="kpi" style="--kpi-color:var(--green)">
+      <div class="kpi-label">Trades Journalled</div>
+      <div class="kpi-value" id="kTrades">ΓÇö</div>
+      <div class="kpi-sub" id="kTradesSub">all time</div>
+    </div>
+    <div class="kpi" style="--kpi-color:var(--yellow)">
+      <div class="kpi-label">Platform Win Rate</div>
+      <div class="kpi-value" id="kWinRate">ΓÇö</div>
+      <div class="kpi-sub" id="kWinRateSub">P90 across users</div>
+    </div>
+    <div class="kpi" style="--kpi-color:var(--purple)">
+      <div class="kpi-label">Profit Factor</div>
+      <div class="kpi-value" id="kPF">ΓÇö</div>
+      <div class="kpi-sub">gross profit ├╖ loss</div>
+    </div>
+    <div class="kpi" style="--kpi-color:var(--teal)">
+      <div class="kpi-label">Total P&amp;L (Platform)</div>
+      <div class="kpi-value" id="kPnL">ΓÇö</div>
+      <div class="kpi-sub" id="kPnLSub">all users combined</div>
+    </div>
+  </div>
+
+  <!-- Percentile KPIs -->
+  <div class="pct-grid">
+    <div class="pct-card"><div class="pct-tag">P5 Daily Γû╕ Worst 5%</div><div class="pct-val dn" id="pP5">ΓÇö</div><div class="pct-sub">tail loss exposure</div></div>
+    <div class="pct-card"><div class="pct-tag">P25 Daily Γû╕ 25th Pct</div><div class="pct-val" id="pP25">ΓÇö</div><div class="pct-sub">below-median day</div></div>
+    <div class="pct-card"><div class="pct-tag">P50 Daily Γû╕ Median</div><div class="pct-val" id="pP50">ΓÇö</div><div class="pct-sub">typical trading day</div></div>
+    <div class="pct-card"><div class="pct-tag">P95 Daily Γû╕ Best 5%</div><div class="pct-val up" id="pP95">ΓÇö</div><div class="pct-sub">upside tail</div></div>
+    <div class="pct-card"><div class="pct-tag">Max Drawdown</div><div class="pct-val dn" id="pMDD">ΓÇö</div><div class="pct-sub" id="pSigma">1╧â daily volatility</div></div>
+  </div>
+
+  <!-- Row 1: Equity + Pairs bar -->
+  <div class="g2">
+    <div class="card">
+      <div class="card-title">Platform Equity Curve</div>
+      <div class="card-desc">Cumulative P&amp;L across all production users. Bars = daily. Line = running total.</div>
+      <div id="chartEquity" style="height:260px"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Top Pairs by Volume</div>
+      <div class="card-desc">Most traded currency pairs. Green = profitable, red = net loss.</div>
+      <div id="chartPairsBar" style="height:260px"></div>
+    </div>
+  </div>
+
+  <!-- Row 2: Sankey + Heatmap -->
+  <div class="g11">
+    <div class="card">
+      <div class="card-title">Trade Flow ΓÇö Session ΓåÆ Pair ΓåÆ Outcome</div>
+      <div class="card-desc">Where trades originate, what's traded, and whether they win or lose. Width = volume.</div>
+      <div id="chartSankey" style="height:340px"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Peak Activity Heatmap ΓÇö UTC Hour ├ù Day</div>
+      <div class="card-desc">Trade volume by hour and weekday. Brighter = more trades. Source: JournalDeals.</div>
+      <div id="chartHeatmap" style="height:340px"></div>
+    </div>
+  </div>
+
+  <!-- Row 3: Distribution full width -->
+  <div class="card">
+    <div class="card-title">Daily P&amp;L Distribution</div>
+    <div class="card-desc">Histogram of all trading days. Dashed lines mark P5 (worst), P50 (median), P95 (best). ╧â = 1-day volatility.</div>
+    <div id="chartDist" style="height:220px"></div>
+  </div>
+
+  <!-- Row 4: Session + Treemap -->
+  <div class="g11">
+    <div class="card">
+      <div class="card-title">Session Radar ΓÇö Win Rate, Volume &amp; P&amp;L</div>
+      <div class="card-desc">Multi-axis session comparison across Asia, London, NY AM, NY PM.</div>
+      <div id="chartRadar" style="height:280px"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Pair P&amp;L Treemap</div>
+      <div class="card-desc">Box size = trade volume. Colour = net P&amp;L (green = profitable).</div>
+      <div id="chartTreemap" style="height:280px"></div>
+    </div>
+  </div>
+
+  <!-- Row 5: Pair table -->
+  <div class="card">
+    <div class="card-title">Pair Stats ΓÇö Live Data</div>
+    <div class="card-desc">Per-pair breakdown. Sortable columns. P&L/trade = net P&L ├╖ trades.</div>
+    <div id="tableContainer"></div>
+    <div class="data-note" id="dataNote"></div>
+  </div>
+
+    <!-- Per-user breakdown -->
+  <div class="card">
+    <div class="card-title">Per-User Breakdown — Individual Analysis</div>
+    <div class="card-desc">Search by email to open a detailed user profile. Or click any row below.</div>
+    <div class="usr-wrap">
+      <input class="usr-inp" id="userEmailInput" type="email" placeholder="Search by email address…" onkeydown="if(event.key==='Enter')doUserSearch()" />
+      <button class="usr-btn" id="userAnalyseBtn" onclick="doUserSearch()">🔍 Analyse User</button>
+    </div>
+    <div id="userTableContainer"></div>
+    <div class="data-note" id="dataNote"></div>
+  </div>
+
+</div>
+</main>
+
+<script>
+// ΓöÇΓöÇ CONFIG ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+const BASE_URL = '/api/journal-proxy';
+const CODE     = '';
+let   currentRange = 'all';
+let   lastData = null;
+let   tableSortKey = 'trades', tableSortDir = -1;
+
+const DARK = 'transparent', BD = '#1e2a38';
+const BL = '#3b8ef3', GR = '#2ea84a', YL = '#d4a017', RD = '#e8433a';
+const PU = '#8b5cf6', TE = '#0891b2';
+const TX = '#c9d1d9', MT = '#5a7090';
+const TIP = { backgroundColor:'#111820', borderColor:'#243040', textStyle:{color:TX} };
+
+// ΓöÇΓöÇ INIT CHARTS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+const charts = {};
+const IDS = ['chartEquity','chartPairsBar','chartSankey','chartHeatmap','chartDist','chartRadar','chartTreemap'];
+function initCharts() {
+  IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && !charts[id]) charts[id] = echarts.init(el, null, { renderer: 'svg' });
+  });
+}
+
+// ΓöÇΓöÇ HELPERS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+function pct(arr, p) {
+  if (!arr.length) return 0;
+  const s = [...arr].sort((a,b) => a-b);
+  const i = (p/100) * (s.length-1);
+  return +(s[Math.floor(i)] + (s[Math.ceil(i)] - s[Math.floor(i)]) * (i % 1)).toFixed(2);
+}
+function std(arr) {
+  if (arr.length < 2) return 0;
+  const m = arr.reduce((a,v) => a+v, 0) / arr.length;
+  return +Math.sqrt(arr.reduce((a,v) => a+(v-m)**2, 0) / arr.length).toFixed(2);
+}
+function mdd(cums) {
+  let peak = -Infinity, dd = 0;
+  for (const v of cums) { if (v > peak) peak = v; dd = Math.min(dd, v - peak); }
+  return +dd.toFixed(2);
+}
+function fmtK(v) {
+  const s = v >= 0 ? '+' : '-', a = Math.abs(v);
+  return s + '$' + (a >= 1000 ? (a/1000).toFixed(1)+'k' : a.toFixed(0));
+}
+function cls(v) { return v > 0 ? 'up' : v < 0 ? 'dn' : ''; }
+
+// ΓöÇΓöÇ RANGE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+function setRange(r) {
+  currentRange = r;
+  document.querySelectorAll('.range-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.range === r);
+  });
+  loadData();
+}
+
+// ΓöÇΓöÇ KPIs ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+function renderKPIs(d) {
+  const k = d.kpis;
+  document.getElementById('kUsers').textContent   = k.totalUsers;
+  document.getElementById('kTrades').textContent  = k.totalTrades.toLocaleString();
+  document.getElementById('kWinRate').textContent = k.winRate.toFixed(1) + '%';
+  document.getElementById('kWinRateSub').innerHTML = `P90 ┬╖ avg <b>${k.simpleWinRate?.toFixed(1) ?? 'ΓÇö'}%</b>`;
+  document.getElementById('kPF').textContent      = (k.profitFactor || 0).toFixed(2);
+  document.getElementById('kPnL').textContent     = fmtK(k.totalPnL);
+  document.getElementById('kPnL').className       = 'kpi-value mono ' + cls(k.totalPnL);
+  document.getElementById('kUsersSub').textContent = `production users ΓÇó ${d.timeRange?.label || 'all time'}`;
+  document.getElementById('kTradesSub').innerHTML  = `<span class="up">${k.winningTrades || 'ΓÇö'} W</span> / <span class="dn">${k.losingTrades || 'ΓÇö'} L</span>`;
+}
+
+function renderPercentiles(d) {
+  const vals = (d.dailyPnL || []).map(r => r.pnl);
+  const cums = (d.dailyPnL || []).map(r => r.cumulativePnl);
+  if (!vals.length) return;
+  const p5 = pct(vals,5), p25 = pct(vals,25), p50 = pct(vals,50), p95 = pct(vals,95);
+  const vol = std(vals), maxDD = mdd(cums);
+  const set = (id, v) => { const el = document.getElementById(id); el.textContent = fmtK(v); el.className = 'pct-val ' + cls(v); };
+  set('pP5', p5); set('pP25', p25); set('pP50', p50); set('pP95', p95);
+  document.getElementById('pMDD').textContent = '-$' + Math.abs(maxDD).toLocaleString();
+  document.getElementById('pSigma').textContent = '1╧â = $' + Math.abs(vol).toLocaleString() + ' / day';
+}
+
+// ΓöÇΓöÇ EQUITY CHART ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+function renderEquity(d) {
+  const rows = d.dailyPnL || [];
+  charts.chartEquity.setOption({
+    backgroundColor: DARK, tooltip: { trigger:'axis', ...TIP,
+      formatter: p => `${p[0].axisValue}<br/>Daily: <b>${fmtK(p[0].value)}</b><br/>Cumulative: <b>${fmtK(p[1]?.value||0)}</b>` },
+    legend: { data:['Daily P&L','Cumulative'], bottom:0, textStyle:{color:MT}, itemWidth:12 },
+    grid: { top:10, left:58, right:16, bottom:36 },
+    xAxis: { type:'category', data:rows.map(r=>r.date.slice(5)),
+      axisLabel:{color:MT,fontSize:9}, axisLine:{lineStyle:{color:BD}} },
+    yAxis: { type:'value', axisLabel:{color:MT,fontSize:9,formatter:v=>'$'+Math.round(v/1000)+'k'},
+      splitLine:{lineStyle:{color:BD,type:'dashed'}} },
+    series: [
+      { name:'Daily P&L', type:'bar', data:rows.map(r=>r.pnl),
+        itemStyle:{color:p=>p.value>=0?GR:RD, borderRadius:[2,2,0,0]} },
+      { name:'Cumulative', type:'line', data:rows.map(r=>r.cumulativePnl),
+        symbol:'none', smooth:true, lineStyle:{color:BL,width:2.5},
+        areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(59,142,243,0.18)'},{offset:1,color:'rgba(59,142,243,0)'}]}} }
+    ]
+  });
+}
+
+// ΓöÇΓöÇ PAIRS BAR ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+function renderPairsBar(d) {
+  const top = (d.pairStats || []).slice(0, 8);
+  charts.chartPairsBar.setOption({
+    backgroundColor: DARK, tooltip: { trigger:'axis', ...TIP,
+      formatter: p => `${p[0].name}: <b>${p[0].value} trades</b>` },
+    grid: { top:10, left:64, right:20, bottom:10 },
+    xAxis: { type:'value', axisLabel:{color:MT,fontSize:9}, splitLine:{lineStyle:{color:BD,type:'dashed'}} },
+    yAxis: { type:'category', data:top.map(p=>p.symbol).reverse(),
+      axisLabel:{color:TX,fontSize:12}, axisLine:{lineStyle:{color:BD}} },
+    series: [{ type:'bar', data:top.map(p=>p.trades).reverse(),
+      itemStyle:{color:p=>top.slice().reverse()[p.dataIndex].pnl>=0?GR:RD, borderRadius:[0,3,3,0]},
+      label:{show:true,position:'right',color:MT,fontSize:11,formatter:p=>p.value} }]
+  });
+}
+
+// ΓöÇΓöÇ SANKEY ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+function renderSankey(d) {
+  const sess = d.sessionStats || {};
+  const pairs = (d.pairStats || []).slice(0, 6);
+  const sessKeys = ['asia','london','nyam','nypm'];
+  const sessLabels = { asia:'Asia', london:'London', nyam:'NY AM', nypm:'NY PM' };
+  const totalTrades = pairs.reduce((s,p) => s+p.trades, 0) || 1;
+
+  const nodes = [
+    ...sessKeys.filter(k => sess[k]?.trades > 0).map(k => ({ name:sessLabels[k], itemStyle:{color:BL} })),
+    ...pairs.map(p => ({ name:p.symbol, itemStyle:{color:YL} })),
+    { name:'Win Γ£ô',  itemStyle:{color:GR} },
+    { name:'Loss Γ£ù', itemStyle:{color:RD} },
+  ];
+
+  const links = [];
+  sessKeys.forEach(sk => {
+    const sd = sess[sk]; if (!sd || sd.trades === 0) return;
+    pairs.forEach(p => {
+      const v = Math.round(sd.trades * (p.trades / totalTrades));
+      if (v > 0) links.push({ source:sessLabels[sk], target:p.symbol, value:v });
+    });
+  });
+  pairs.forEach(p => {
+    if (p.wins   > 0) links.push({ source:p.symbol, target:'Win Γ£ô',  value:p.wins });
+    if (p.losses > 0) links.push({ source:p.symbol, target:'Loss Γ£ù', value:p.losses });
+  });
+
+  charts.chartSankey.setOption({
+    backgroundColor: DARK,
+    tooltip: { trigger:'item', ...TIP,
+      formatter: p => p.dataType==='edge'
+        ? `${p.data.source} ΓåÆ ${p.data.target}: <b>${p.data.value} trades</b>`
+        : `<b>${p.name}</b>` },
+    series: [{ type:'sankey', layout:'none', emphasis:{focus:'adjacency'},
+      left:20, right:110, top:20, bottom:20,
+      data:nodes, links,
+      lineStyle:{ color:'gradient', opacity:0.38, curveness:0.5 },
+      label:{ color:TX, fontSize:12, fontWeight:600 },
+      nodeWidth:18, nodeGap:12 }]
+  });
+}
+
+// ΓöÇΓöÇ HEATMAP ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+function renderHeatmap(d) {
+  const hours = Array.from({length:24}, (_,i) => String(i).padStart(2,'0')+':00');
+  const days  = ['Mon','Tue','Wed','Thu','Fri'];
+  const raw   = d.heatmap || [];
+  const maxV  = Math.max(...raw.map(r => r[2]), 1);
+  charts.chartHeatmap.setOption({
+    backgroundColor: DARK,
+    tooltip: { position:'top', ...TIP,
+      formatter: p => `${days[p.data[1]]} ${hours[p.data[0]]}<br/><b>${p.data[2]} trades</b>` },
+    grid: { top:20, left:52, right:16, bottom:44 },
+    xAxis: { type:'category', data:hours,
+      axisLabel:{color:MT,fontSize:8,rotate:45}, axisLine:{lineStyle:{color:BD}},
+      splitArea:{show:true,areaStyle:{color:['#080c10','#0d1117']}} },
+    yAxis: { type:'category', data:days,
+      axisLabel:{color:TX,fontSize:11}, axisLine:{lineStyle:{color:BD}},
+      splitArea:{show:true,areaStyle:{color:['#080c10','#0d1117']}} },
+    visualMap: { min:0, max:maxV, show:false,
+      inRange:{color:['#080c10','#0d4429','#006d32','#26a641','#2ea84a']} },
+    series: [{ type:'heatmap', data:raw,
+      emphasis:{itemStyle:{shadowBlur:8,shadowColor:'rgba(46,168,74,0.4)'}} }]
+  });
+}
+
+// ΓöÇΓöÇ DISTRIBUTION ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+function renderDist(d) {
+  const vals = (d.dailyPnL||[]).map(r=>r.pnl);
+  if (vals.length < 3) { charts.chartDist.setOption({backgroundColor:DARK,graphic:[{type:'text',left:'center',top:'middle',style:{text:'Not enough data',fill:MT,fontSize:13}}]}); return; }
+  const p5=pct(vals,5),p50=pct(vals,50),p95=pct(vals,95),vol=std(vals);
+  const mn=Math.min(...vals),mx=Math.max(...vals);
+  const BINS=24,step=(mx-mn)/BINS||1;
+  const bins=Array.from({length:BINS},(_,i)=>({lo:mn+i*step,mid:mn+(i+0.5)*step,n:0}));
+  vals.forEach(v=>{ const i=Math.min(Math.floor((v-mn)/step),BINS-1); bins[i].n++; });
+  const bi=val=>Math.max(0,Math.min(BINS-1,Math.floor((val-mn)/step)));
+  charts.chartDist.setOption({
+    backgroundColor:DARK, tooltip:{trigger:'axis',...TIP,
+      formatter:p=>`~$${Math.round(bins[p[0].dataIndex].mid)}: <b>${p[0].value} days</b>`},
+    grid:{top:24,left:44,right:20,bottom:36},
+    xAxis:{type:'category',data:bins.map(b=>Math.round(b.mid)>0?'+'+Math.round(b.mid/1000)+'k':Math.round(b.mid/1000)+'k'),
+      axisLabel:{color:MT,fontSize:9,rotate:30},axisLine:{lineStyle:{color:BD}},splitLine:{show:false}},
+    yAxis:{type:'value',name:'Days',nameTextStyle:{color:MT,fontSize:9},axisLabel:{color:MT,fontSize:9},splitLine:{lineStyle:{color:BD,type:'dashed'}}},
+    series:[{type:'bar',data:bins.map(b=>({value:b.n,itemStyle:{color:b.mid>=0?'rgba(46,168,74,0.75)':'rgba(232,67,58,0.75)',borderRadius:[2,2,0,0]}})),
+      markLine:{symbol:'none',label:{position:'insideEndTop',fontSize:9,fontWeight:600},lineStyle:{width:1.5,type:'dashed'},data:[
+        {xAxis:bi(p5), name:'P5', lineStyle:{color:RD},label:{formatter:'P5',color:RD}},
+        {xAxis:bi(p50),name:'P50',lineStyle:{color:YL},label:{formatter:'P50',color:YL}},
+        {xAxis:bi(p95),name:'P95',lineStyle:{color:GR},label:{formatter:'P95',color:GR}},
+      ]}}],
+    graphic:[{type:'text',right:20,top:4,style:{text:'╧â=$'+Math.round(vol)+'/day',fill:MT,fontSize:10}}]
+  });
+}
+
+// ΓöÇΓöÇ RADAR ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+function renderRadar(d) {
+  const s = d.sessionStats || {};
+  const keys = ['asia','london','nyam','nypm'];
+  const labels = {asia:'Asia',london:'London',nyam:'NY AM',nypm:'NY PM'};
+  const colors = [TE, GR, YL, RD];
+  const maxTrades = Math.max(...keys.map(k => s[k]?.trades||0), 1);
+  const maxPnL    = Math.max(...keys.map(k => Math.abs(s[k]?.pnl||0)), 1);
+  const normalize = (v, max) => +((Math.abs(v) / max) * 100).toFixed(1);
+
+  charts.chartRadar.setOption({
+    backgroundColor: DARK,
+    tooltip: { ...TIP },
+    legend: { data:keys.map(k=>labels[k]), bottom:0, textStyle:{color:MT}, itemWidth:12 },
+    radar: {
+      indicator:[
+        {name:'Win Rate',max:100},{name:'Trade Vol',max:100},
+        {name:'|P&L|',max:100},{name:'Profit\nFactor',max:100}
+      ],
+      shape:'polygon', center:['50%','48%'], radius:'58%',
+      axisName:{color:TX,fontSize:10},
+      splitLine:{lineStyle:{color:BD}},
+      splitArea:{areaStyle:{color:['#080c10','#0d1117']}},
+      axisLine:{lineStyle:{color:BD}}
+    },
+    series:[{ type:'radar', data: keys.map((k,i) => {
+      const sd = s[k]||{};
+      return {
+        name: labels[k],
+        value: [sd.winRate||0, normalize(sd.trades||0,maxTrades), normalize(sd.pnl||0,maxPnL), Math.min((sd.profitFactor||0)*50,100)],
+        lineStyle:{color:colors[i],width:2},
+        areaStyle:{color:colors[i].replace(/[^,]+\)/, '0.08)')},
+        symbol:'circle', symbolSize:4, itemStyle:{color:colors[i]}
+      };
+    })}]
+  });
+}
+
+// ΓöÇΓöÇ TREEMAP ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+function renderTreemap(d) {
+  const pairs = d.pairStats || [];
+  charts.chartTreemap.setOption({
+    backgroundColor: DARK,
+    tooltip: { ...TIP, formatter:p=>`<b>${p.name}</b><br/>Trades: ${p.data.trades}<br/>Net P&L: ${fmtK(p.data.pnl)}` },
+    series:[{ type:'treemap', roam:false, nodeClick:false, width:'100%', height:'100%',
+      breadcrumb:{show:false},
+      label:{fontSize:13,fontWeight:700,color:'#fff',formatter:p=>`${p.name}\n${fmtK(p.data.pnl)}`},
+      itemStyle:{borderColor:'#080c10',borderWidth:2,gapWidth:2},
+      data:pairs.map(p=>({
+        name:p.symbol, value:p.trades, trades:p.trades, pnl:p.pnl,
+        itemStyle:{color:p.pnl>500?'#1a7f37':p.pnl>0?GR:p.pnl>-200?YL:RD}
+      }))
+    }]
+  });
+}
+
+// ΓöÇΓöÇ USER TABLE ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+function renderUserTable(d) {
+  const users = d.userBreakdown || [];
+  if (!users.length) {
+    document.getElementById('userTableContainer').innerHTML = '<p style="color:var(--muted);font-size:12px;padding:8px">No user data available.</p>';
+    return;
+  }
+  let html = `<table><thead><tr>
+    <th>#</th>
+    <th>User ID</th>
+    <th style="text-align:right">Trades</th>
+    <th style="text-align:right">Wins</th>
+    <th style="text-align:right">Losses</th>
+    <th style="text-align:right">Win Rate</th>
+    <th style="text-align:right">Net P&L</th>
+    <th style="text-align:right">Last Seen</th>
+  </tr></thead><tbody>`;
+  users.forEach((u, i) => {
+    const pillCls = u.winRate >= 55 ? 'pg' : u.winRate >= 45 ? 'py' : 'pr';
+    html += `<tr style="cursor:pointer" onclick="openSlide(null,'${u.userId}')" title="Click to analyse">
+      <td style="color:var(--muted);font-size:11px">${i+1}</td>
+      <td><code style="font-size:11px;color:#58a6ff">${u.userId.slice(0,26)}...</code></td>
+      <td style="text-align:right">${u.trades.toLocaleString()}</td>
+      <td style="text-align:right"><span class="up">${u.wins}</span></td>
+      <td style="text-align:right"><span class="dn">${u.losses}</span></td>
+      <td style="text-align:right"><span class="pill ${pillCls}">${u.winRate}%</span></td>
+      <td style="text-align:right"><span class="${cls(u.pnl)}">${fmtK(u.pnl)}</span></td>
+      <td style="text-align:right;font-size:11px;color:var(--muted)">${u.lastSeen}</td>
+      <td style="color:var(--blue)">→</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('userTableContainer').innerHTML = html;
+}
+
+function renderTable(d) {
+  const pairs = [...(d.pairStats||[])].sort((a,b) => tableSortDir*(b[tableSortKey]-a[tableSortKey]));
+  const th = (key,lbl) => `<th onclick="sortTable('${key}')">${lbl}${tableSortKey===key?(tableSortDir>0?' Γåæ':' Γåô'):''}</th>`;
+  let html = '<table><thead><tr>'
+    + th('symbol','Pair') + th('trades','Trades') + th('wins','Wins')
+    + th('losses','Losses') + th('winRate','Win Rate') + th('pnl','Net P&L') + '<th>P&L/Trade</th>'
+    + '</tr></thead><tbody>';
+  pairs.forEach(p => {
+    const pillCls = p.winRate>=55?'pg':p.winRate>=50?'py':'pr';
+    const ppt = p.trades > 0 ? p.pnl / p.trades : 0;
+    html += `<tr>
+      <td><b>${p.symbol}</b></td>
+      <td>${p.trades.toLocaleString()}</td>
+      <td><span class="up">${p.wins}</span></td>
+      <td><span class="dn">${p.losses}</span></td>
+      <td><span class="pill ${pillCls}">${p.winRate.toFixed(1)}%</span></td>
+      <td><span class="${cls(p.pnl)}">${fmtK(p.pnl)}</span></td>
+      <td><span class="${cls(ppt)}">${fmtK(ppt)}</span></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('tableContainer').innerHTML = html;
+}
+function sortTable(key) {
+  if (tableSortKey === key) tableSortDir *= -1; else { tableSortKey = key; tableSortDir = -1; }
+  renderTable(lastData);
+}
+
+// ΓöÇΓöÇ LOAD DATA ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+async function loadData() {
+  const dot   = document.getElementById('statusDot');
+  const badge = document.getElementById('statusBadge');
+  dot.className = 'pulse loading';
+  badge.innerHTML = '<b>ΓùÅ LoadingΓÇª</b>';
+
+  const url = `${BASE_URL}?code=${CODE}&range=${currentRange}`;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    lastData = data;
+
+    initCharts();
+    renderKPIs(data);
+    renderPercentiles(data);
+    renderEquity(data);
+    renderPairsBar(data);
+    renderSankey(data);
+    renderHeatmap(data);
+    renderDist(data);
+    renderRadar(data);
+    renderTreemap(data);
+    renderTable(data);
+    renderUserTable(data);
+
+    const ts = new Date(data.generatedAt).toLocaleTimeString();
+    dot.className = 'pulse';
+    badge.innerHTML = `<b>ΓùÅ Live</b> &nbsp;┬╖&nbsp; ${ts} &nbsp;┬╖&nbsp; ${data.timeRange?.label||'all time'}`;
+    document.getElementById('errBanner').style.display = 'none';
+    document.getElementById('dataNote').textContent =
+      `Data: ${data.dailyPnL?.length||0} trading days ┬╖ ${data.kpis?.totalUsers||0} active users ┬╖ ${data.kpis?.totalTrades?.toLocaleString()||0} trades journalled ┬╖ generated ${new Date(data.generatedAt).toLocaleString()}`;
+  } catch(e) {
+    dot.className = 'pulse'; dot.style.background = 'var(--red)';
+    badge.innerHTML = '<b>ΓùÅ Error</b>';
+    const err = document.getElementById('errBanner');
+    err.style.display = 'block';
+    err.textContent = 'Failed to load data: ' + e.message;
+  }
+}
+
+// ΓöÇΓöÇ INIT ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+loadData();
+setInterval(loadData, 5 * 60 * 1000); // auto-refresh every 5 min
+window.addEventListener('resize', () => Object.values(charts).forEach(c => c && c.resize()));
+
+// ── USER SEARCH & SLIDE PANEL ────────────────────────────────────────────────
+const U_URL  = '/api/journal-user-proxy';
+const U_CODE = '';
+
+async function doUserSearch() {
+  const email = document.getElementById('userEmailInput').value.trim();
+  if (!email) return;
+  await openSlide(email, null);
+}
+
+async function openSlide(email, userId) {
+  const slide = document.getElementById('userSlide');
+  const body  = document.getElementById('slBody');
+  document.getElementById('slName').textContent  = email || userId || '...';
+  document.getElementById('slEmail').textContent = email || 'Loading...';
+  document.getElementById('slId').textContent    = userId || '';
+  body.innerHTML = '<div style="padding:60px;text-align:center;color:var(--muted)">⏳ Fetching data…</div>';
+  slide.classList.add('open');
+  document.getElementById('slideOverlay').classList.add('open');
+  const btn = document.getElementById('userAnalyseBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const param = email ? 'email=' + encodeURIComponent(email) : 'userId=' + encodeURIComponent(userId);
+    const res = await fetch(U_URL + '?code=' + U_CODE + '&' + param, { signal: AbortSignal.timeout(30000) });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'HTTP ' + res.status); }
+    renderSlide(await res.json());
+  } catch(e) {
+    body.innerHTML = '<div style="padding:24px;color:var(--red);font-size:13px">⚠ ' + e.message + '</div>';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function closeSlide() {
+  document.getElementById('userSlide').classList.remove('open');
+  document.getElementById('slideOverlay').classList.remove('open');
+}
+
+function fU(v) { const s=v>=0?'+$':'-$',a=Math.abs(v); return s+(a>=1000?(a/1000).toFixed(1)+'k':a.toFixed(0)); }
+function cU(v) { return v>0?'up':v<0?'dn':''; }
+
+function renderSlide(d) {
+  const s = d.summary;
+  document.getElementById('slName').textContent  = s.name || s.email || s.userId;
+  document.getElementById('slEmail').textContent = s.email || '—';
+  document.getElementById('slId').textContent    = s.userId;
+  const wr = s.avgWinRate;
+  let h = '<div class="sl-kpis">'
+    + '<div class="sl-kpi"><div class="sl-kpi-lbl">Total Trades</div><div class="sl-kpi-val">' + s.totalTrades.toLocaleString() + '</div></div>'
+    + '<div class="sl-kpi"><div class="sl-kpi-lbl">Win Rate</div><div class="sl-kpi-val ' + (wr>=55?'up':wr<45?'dn':'') + '">' + wr + '%</div></div>'
+    + '<div class="sl-kpi"><div class="sl-kpi-lbl">Net P&L</div><div class="sl-kpi-val ' + cU(s.totalPnl) + '">' + fU(s.totalPnl) + '</div></div>'
+    + '<div class="sl-kpi"><div class="sl-kpi-lbl">Last Active</div><div class="sl-kpi-val" style="font-size:15px">' + (s.lastSeen||'—') + '</div></div>'
+    + '</div>';
+  const pairs = d.pairBreakdown || [];
+  if (pairs.length) {
+    h += '<div><div class="sl-sec">Pair Breakdown</div><table><thead><tr><th>Pair</th><th style="text-align:right">Trades</th><th style="text-align:right">Win Rate</th><th style="text-align:right">Net P&L</th></tr></thead><tbody>';
+    pairs.forEach(p => {
+      const pc = p.winRate>=55?'pg':p.winRate>=50?'py':'pr';
+      h += '<tr><td><b>' + p.symbol + '</b></td><td style="text-align:right">' + p.trades + '</td><td style="text-align:right"><span class="pill ' + pc + '">' + p.winRate + '%</span></td><td style="text-align:right"><span class="' + cU(p.pnl) + '">' + fU(p.pnl) + '</span></td></tr>';
+    });
+    h += '</tbody></table></div>';
+  }
+  const sess = d.sessionBreakdown || {};
+  const sLbl = {asia:'Asia',london:'London',nyam:'NY AM',nypm:'NY PM'};
+  const aS = ['asia','london','nyam','nypm'].filter(k => sess[k]);
+  if (aS.length) {
+    h += '<div><div class="sl-sec">Session Breakdown</div><table><thead><tr><th>Session</th><th style="text-align:right">Trades</th><th style="text-align:right">Win Rate</th><th style="text-align:right">Net P&L</th></tr></thead><tbody>';
+    aS.forEach(k => {
+      const sd=sess[k], sc=sd.winRate>=55?'pg':sd.winRate>=50?'py':'pr';
+      h += '<tr><td>' + sLbl[k] + '</td><td style="text-align:right">' + sd.trades + '</td><td style="text-align:right"><span class="pill ' + sc + '">' + sd.winRate + '%</span></td><td style="text-align:right"><span class="' + cU(sd.pnl) + '">' + fU(sd.pnl) + '</span></td></tr>';
+    });
+    h += '</tbody></table></div>';
+  }
+  const recent = (s.recentTrades || []).slice(0,15);
+  if (recent.length) {
+    h += '<div><div class="sl-sec">Recent Trades (last ' + recent.length + ')</div><table><thead><tr><th>Date</th><th>Symbol</th><th style="text-align:right">Profit</th></tr></thead><tbody>';
+    recent.forEach(t => {
+      h += '<tr><td style="font-size:11px;color:var(--muted)">' + (t.time||'').slice(0,10) + '</td><td><b>' + t.symbol + '</b></td><td style="text-align:right"><span class="' + cU(t.profit) + '">' + (t.profit>=0?'+':'') + '$' + Math.abs(t.profit).toFixed(2) + '</span></td></tr>';
+    });
+    h += '</tbody></table></div>';
+  }
+  document.getElementById('slBody').innerHTML = h;
+}
+
+</script>
+
+<div id="slideOverlay" onclick="closeSlide()"></div>
+<div id="userSlide">
+  <div class="sl-hdr">
+    <div>
+      <div style="font-size:16px;font-weight:700;color:var(--text)" id="slName">—</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px" id="slEmail">—</div>
+      <div style="font-size:10px;color:var(--muted2);margin-top:2px;font-family:'JetBrains Mono',monospace" id="slId">—</div>
+    </div>
+    <button class="sl-close" onclick="closeSlide()">✕ Close</button>
+  </div>
+  <div class="sl-body" id="slBody">
+    <div style="padding:60px;text-align:center;color:var(--muted)">⏳ Loading...</div>
+  </div>
+</div>
+</body>
+</html>

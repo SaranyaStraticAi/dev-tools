@@ -4,7 +4,7 @@ import "./globals.css";
 import AppShell from "./components/AppShell";
 import { AuthProvider } from "./components/AuthProvider";
 import { ToastProvider } from "./components/ToastContext";
-import { ClerkProvider } from "@clerk/nextjs";
+import { ThemeProvider } from "./components/ThemeProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,17 +21,19 @@ export const metadata: Metadata = {
   description: "PostgreSQL Database Viewer and Clerk User Search Tools",
 };
 
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
-      <html lang="en">
-        <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        >
+    <html lang="en" suppressHydrationWarning>
+      <head />
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        <ThemeProvider>
           <AuthProvider>
             <ToastProvider>
               <AppShell>
@@ -39,8 +41,8 @@ export default function RootLayout({
               </AppShell>
             </ToastProvider>
           </AuthProvider>
-        </body>
-      </html>
-    </ClerkProvider>
+        </ThemeProvider>
+      </body>
+    </html>
   );
 }
