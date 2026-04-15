@@ -14,6 +14,7 @@ interface MessageEntity {
   role?: string;
   content?: string;
   timestamp?: string;
+  metadata?: string; // JSON string: { agentKey, agentName, ... }
 }
 
 function getTableClients() {
@@ -30,14 +31,20 @@ function getAzureModel() {
   const resourceName = process.env.AZURE_OPENAI_RESOURCE_NAME;
   const deployment = process.env.AZURE_OPENAI_DEPLOYMENT || 'gpt-4.1';
   const apiVersion = process.env.AZURE_OPENAI_API_VERSION || '2025-01-01-preview';
-
   if (!apiKey || !resourceName) throw new Error('Azure OpenAI credentials not configured');
-
-  // In AI SDK 6, azure() uses the Responses API by default.
-  // Must use .chat() to target the Chat Completions API which all Azure deployments support.
   const baseURL = `https://${resourceName}.cognitiveservices.azure.com/openai`;
   const azure = createAzure({ baseURL, apiKey, apiVersion, useDeploymentBasedUrls: true });
   return azure.chat(deployment);
+}
+
+function parseAgentKey(metadata?: string): string {
+  if (!metadata) return 'unknown';
+  try {
+    const parsed = JSON.parse(metadata) as { agentKey?: string; agentName?: string };
+    return parsed.agentKey || parsed.agentName || 'unknown';
+  } catch {
+    return 'unknown';
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -73,20 +80,48 @@ export async function POST(req: NextRequest) {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, 10);
 
-    // Fetch user messages from each thread
-    const allUserMessages: Array<{ threadTitle: string; date: string; content: string }> = [];
+    // Fetch all messages (user + assistant) to capture agentKey from assistant messages
+    const allUserMessages: Array<{
+      threadTitle: string;
+      date: string;
+      content: string;
+      agentKey: string;
+    }> = [];
 
     await Promise.all(
       recentThreads.map(async (thread) => {
         const msgEntities = tables.messages.listEntities<MessageEntity>({
           queryOptions: { filter: `PartitionKey eq '${thread.threadId}'` },
         });
+
+        // Track current agent within this thread (set by assistant messages)
+        let currentAgent = 'unknown';
+        const threadMsgs: Array<{ role: string; content: string; date: string; metadata?: string }> = [];
+
         for await (const msg of msgEntities) {
-          if (msg.role === 'user' && msg.content) {
+          if (msg.role && msg.content) {
+            threadMsgs.push({
+              role: msg.role,
+              content: msg.content,
+              date: msg.timestamp || thread.createdAt,
+              metadata: msg.metadata,
+            });
+          }
+        }
+
+        // Sort by timestamp to correctly pair agent with user message
+        threadMsgs.sort((a, b) => a.date.localeCompare(b.date));
+
+        for (const msg of threadMsgs) {
+          if (msg.role === 'assistant' && msg.metadata) {
+            currentAgent = parseAgentKey(msg.metadata);
+          }
+          if (msg.role === 'user') {
             allUserMessages.push({
               threadTitle: thread.title,
-              date: msg.timestamp || thread.createdAt,
+              date: msg.date,
               content: msg.content,
+              agentKey: currentAgent,
             });
           }
         }
@@ -97,38 +132,70 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'no-chats' });
     }
 
-    // Sort by date, cap at 50 messages
+    // Sort by date, cap at 50 most recent
     const sortedMessages = allUserMessages
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(-50);
 
+    // Collect unique agents used
+    const agentsUsed = [...new Set(sortedMessages.map((m) => m.agentKey).filter((a) => a !== 'unknown'))];
+
     const messagesText = sortedMessages
       .map((m) => {
         const dateStr = m.date ? new Date(m.date).toLocaleDateString() : '';
-        return `[${m.threadTitle}${dateStr ? ` · ${dateStr}` : ''}] ${m.content}`;
+        const agentTag = m.agentKey !== 'unknown' ? ` | agent:${m.agentKey}` : '';
+        return `[${m.threadTitle}${dateStr ? ` · ${dateStr}` : ''}${agentTag}] ${m.content}`;
       })
       .join('\n');
 
-    const prompt = `Analyze these AI trading assistant chat messages from a single user.
-Return ONLY a valid JSON object with exactly these fields:
+    const agentContext = agentsUsed.length > 0
+      ? `Agents this user has interacted with: ${agentsUsed.join(', ')}.`
+      : '';
+
+    const prompt = `You are a sales analyst for VibeTrader — an AI-powered forex trading assistant.
+Analyze these user chat messages and return ONLY valid JSON with no markdown or extra text.
+
+Context: VibeTrader has multiple AI agents — "fundamental" (macro/news analysis), "news" (live news feed),
+"chart" (technical analysis), "strategy" (strategy builder), and others. Users ask about forex pair
+analysis (EUR/USD, XAU/USD etc.), ICT/SMC/RSI strategies, broker setup (MetaAPI, MT4/MT5),
+risk management, and platform features. Each message is tagged with [threadTitle · date | agent:agentKey].
+${agentContext}
+
+Return this exact JSON:
 {
   "topTopics": ["topic1", "topic2"],
-  "painPoints": ["pain1", "pain2"],
-  "featureRequests": ["req1", "req2"],
-  "tradingInterests": ["pair1", "pair2"],
+  "topicCategories": {
+    "marketAnalysis": 40,
+    "strategyLearning": 30,
+    "platformHelp": 20,
+    "riskManagement": 5,
+    "newsAndFundamentals": 5
+  },
+  "painPoints": ["pain1"],
+  "featureRequests": ["req1"],
+  "tradingInterests": ["XAUUSD", "EURUSD"],
+  "agentsUsed": ["news", "fundamental"],
   "engagementPattern": "power",
   "sophisticationLevel": "intermediate",
+  "sentimentSignal": "positive",
+  "churnRisk": "low",
+  "brokerReadiness": "exploring",
   "summary": "2-3 sentence summary"
 }
 
-Rules:
-- topTopics: max 5 main topics they asked about (e.g. "EUR/USD analysis", "risk management", "broker setup")
-- painPoints: frustrations, confusion, or barriers mentioned (empty array if none)
-- featureRequests: features they wanted or wished existed (empty array if none)
-- tradingInterests: instruments, pairs, or markets they discussed (empty array if none)
-- engagementPattern: one of "power" (10+ msgs, recurring), "moderate" (5-10 msgs), "minimal" (2-4 msgs), "one-shot" (1 session)
-- sophisticationLevel: one of "beginner", "intermediate", "advanced" based on terminology and questions
-- summary: 2-3 sentences about what this user wants from the platform and their journey
+Field rules:
+- topTopics: max 5, be specific — "XAU/USD breakout analysis" not "gold"
+- topicCategories: % breakdown summing to ~100, newsAndFundamentals covers news agent + macro questions
+- painPoints: specific frustrations, errors, confusion signals — [] if none found
+- featureRequests: things they wished existed or asked "can you do X" — [] if none
+- tradingInterests: instruments/pairs/markets mentioned (use standard symbols)
+- agentsUsed: which VibeTrader agents this user actually used (from agent: tags in messages)
+- engagementPattern: "power" (10+ msgs recurring) | "moderate" (5-10) | "minimal" (2-4) | "one-shot" (1 session)
+- sophisticationLevel: "beginner" | "intermediate" | "advanced" — based on terminology used
+- sentimentSignal: "positive" | "neutral" | "frustrated" | "confused" — overall tone
+- churnRisk: "low" | "medium" | "high" — high if frustration/long gaps/dropoff pattern
+- brokerReadiness: "not-started" | "exploring" | "ready" | "connected" — how close to live trading
+- summary: what this user wants, where they are stuck, what would convert them
 
 User messages (chronological):
 ---
@@ -137,20 +204,24 @@ ${messagesText}`;
     const model = getAzureModel();
     const { text } = await generateText({
       model,
-      system: 'You are an analyst summarizing user chat behavior for a sales team. Return only valid JSON.',
+      system: 'You are a sales analyst. Return only valid JSON, no markdown code blocks.',
       prompt,
       temperature: 0.2,
       maxOutputTokens: 1000,
     });
 
-    // Extract JSON from response (handle markdown code blocks)
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       return NextResponse.json({ error: 'analysis-failed', message: 'Invalid LLM response format' }, { status: 500 });
     }
 
-    const analysis = JSON.parse(jsonMatch[0]) as ChatAnalysis;
-    return NextResponse.json(analysis);
+    const parsed = JSON.parse(jsonMatch[0]) as ChatAnalysis;
+
+    // Merge server-detected agentsUsed with LLM-detected (LLM may catch agent names from message content too)
+    const mergedAgents = [...new Set([...agentsUsed, ...(parsed.agentsUsed ?? [])])];
+    parsed.agentsUsed = mergedAgents;
+
+    return NextResponse.json(parsed);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ error: 'analysis-failed', message }, { status: 500 });

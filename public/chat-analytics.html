@@ -579,9 +579,28 @@ async function openSlide(email, userId) {
 
   try {
     const param = email ? 'email=' + encodeURIComponent(email) : 'userId=' + encodeURIComponent(userId);
-    const res = await fetch(U_URL + '?code=' + U_CODE + '&' + param, { signal: AbortSignal.timeout(30000) });
-    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.error || 'HTTP ' + res.status); }
-    renderSlide(await res.json());
+
+    // Load stats first — need resolved userId for AI call
+    const statsRes = await fetch(U_URL + '?code=' + U_CODE + '&' + param, { signal: AbortSignal.timeout(30000) });
+    if (!statsRes.ok) { const e = await statsRes.json().catch(()=>({})); throw new Error(e.error || 'HTTP ' + statsRes.status); }
+    const statsData = await statsRes.json();
+
+    // Use resolved userId from stats for AI analysis
+    const resolvedId = statsData?.summary?.userId || userId;
+    let aiData = null;
+    if (resolvedId) {
+      try {
+        const aiRes = await fetch('/api/user-reports/chat-analysis', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: resolvedId }),
+          signal: AbortSignal.timeout(40000)
+        });
+        if (aiRes.ok) aiData = await aiRes.json().catch(() => null);
+      } catch(_) { /* AI analysis is optional — don't block the slide */ }
+    }
+
+    renderSlide(statsData, aiData);
   } catch(e) {
     body.innerHTML = `<div style="padding:24px;color:var(--red);font-size:13px">⚠ ${e.message}</div>`;
   } finally {
@@ -594,7 +613,7 @@ function closeSlide() {
   document.getElementById('slideOverlay').classList.remove('open');
 }
 
-function renderSlide(d) {
+function renderSlide(d, ai) {
   const s = d.summary;
   document.getElementById('slName').textContent  = s.name || s.email || s.userId;
   document.getElementById('slEmail').textContent = s.email || '—';
@@ -608,6 +627,90 @@ function renderSlide(d) {
     <div class="sl-kpi"><div class="sl-kpi-lbl">Total Messages</div><div class="sl-kpi-val">${s.totalMsgs}</div></div>
     <div class="sl-kpi"><div class="sl-kpi-lbl">Last Active</div><div class="sl-kpi-val" style="font-size:14px">${s.lastSeen||'—'}</div></div>
   </div>`;
+
+  // ── AI ANALYSIS SECTION ───────────────────────────────────────────────────
+  if (ai && !ai.error) {
+    const sentColor = {positive:'#3fb950',neutral:'#8b949e',frustrated:'#f85149',confused:'#d29922'}[ai.sentimentSignal]||'#8b949e';
+    const churnColor = {low:'#3fb950',medium:'#d29922',high:'#f85149'}[ai.churnRisk]||'#8b949e';
+    const brokerColor = {'not-started':'#8b949e',exploring:'#58a6ff',ready:'#d29922',connected:'#3fb950'}[ai.brokerReadiness]||'#8b949e';
+
+    h += `<div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-top:4px">
+      <div class="sl-sec" style="margin-top:0">🤖 AI Analysis</div>
+      <p style="font-size:13px;color:#c9d1d9;line-height:1.6;margin:0 0 14px">${ai.summary}</p>
+
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+        <div style="text-align:center">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Sentiment</div>
+          <span style="background:${sentColor}22;color:${sentColor};border:1px solid ${sentColor}44;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;text-transform:capitalize">${ai.sentimentSignal||'—'}</span>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Churn Risk</div>
+          <span style="background:${churnColor}22;color:${churnColor};border:1px solid ${churnColor}44;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;text-transform:capitalize">${ai.churnRisk||'—'}</span>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Broker Readiness</div>
+          <span style="background:${brokerColor}22;color:${brokerColor};border:1px solid ${brokerColor}44;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;text-transform:capitalize">${(ai.brokerReadiness||'—').replace('-',' ')}</span>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Sophistication</div>
+          <span style="background:#8b5cf622;color:#8b5cf6;border:1px solid #8b5cf644;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;text-transform:capitalize">${ai.sophisticationLevel||'—'}</span>
+        </div>
+      </div>`;
+
+    // Topic breakdown bars
+    if (ai.topicCategories) {
+      const cats = Object.entries(ai.topicCategories).filter(([,v])=>v>0).sort(([,a],[,b])=>b-a);
+      if (cats.length) {
+        h += `<div style="margin-bottom:14px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Topic Breakdown</div>`;
+        cats.forEach(([key, val]) => {
+          const label = key.replace(/([A-Z])/g,' $1').trim();
+          h += `<div style="margin-bottom:6px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:#8b949e;margin-bottom:3px">
+              <span style="text-transform:capitalize">${label}</span><span>${val}%</span>
+            </div>
+            <div style="background:#21262d;border-radius:3px;height:5px">
+              <div style="background:#58a6ff;border-radius:3px;height:5px;width:${val}%"></div>
+            </div>
+          </div>`;
+        });
+        h += '</div>';
+      }
+    }
+
+    // Agents used
+    if (ai.agentsUsed && ai.agentsUsed.length) {
+      const agColors = {news:'#58a6ff',fundamental:'#8b5cf6',chart:'#3fb950',strategy:'#f0883e'};
+      h += `<div style="margin-bottom:14px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Agents Used</div><div style="display:flex;flex-wrap:wrap;gap:6px">`;
+      ai.agentsUsed.forEach(ag => {
+        const c = agColors[ag] || '#8b949e';
+        h += `<span style="background:${c}22;color:${c};border:1px solid ${c}44;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600">${ag}</span>`;
+      });
+      h += '</div></div>';
+    }
+
+    // Top topics pills
+    if (ai.topTopics && ai.topTopics.length) {
+      h += `<div style="margin-bottom:14px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Top Topics</div><div style="display:flex;flex-wrap:wrap;gap:6px">`;
+      ai.topTopics.forEach(t => { h += `<span class="pill pb" style="font-size:11px">${t}</span>`; });
+      h += '</div></div>';
+    }
+
+    // Pain points
+    if (ai.painPoints && ai.painPoints.length) {
+      h += `<div style="margin-bottom:14px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">⚠ Pain Points</div><div style="display:flex;flex-wrap:wrap;gap:6px">`;
+      ai.painPoints.forEach(p => { h += `<span style="background:#f8514922;color:#f85149;border:1px solid #f8514944;border-radius:20px;padding:3px 10px;font-size:11px">${p}</span>`; });
+      h += '</div></div>';
+    }
+
+    // Feature requests
+    if (ai.featureRequests && ai.featureRequests.length) {
+      h += `<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">💡 Feature Requests</div><div style="display:flex;flex-wrap:wrap;gap:6px">`;
+      ai.featureRequests.forEach(f => { h += `<span style="background:#8b5cf622;color:#8b5cf6;border:1px solid #8b5cf644;border-radius:20px;padding:3px 10px;font-size:11px">${f}</span>`; });
+      h += '</div></div>';
+    }
+
+    h += '</div>'; // close AI section
+  }
 
   // Agent breakdown
   const agents = d.agentBreakdown || [];

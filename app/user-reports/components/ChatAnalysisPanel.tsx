@@ -34,9 +34,9 @@ function Section({ title, items, color }: { title: string; items: string[]; colo
 }
 
 const ENGAGEMENT_COLORS: Record<string, string> = {
-  power:    'bg-purple-100 text-purple-700',
-  moderate: 'bg-blue-100 text-blue-700',
-  minimal:  'bg-gray-100 text-gray-600',
+  power:      'bg-purple-100 text-purple-700',
+  moderate:   'bg-blue-100 text-blue-700',
+  minimal:    'bg-gray-100 text-gray-600',
   'one-shot': 'bg-yellow-50 text-yellow-700',
 };
 
@@ -44,6 +44,33 @@ const SOPHISTICATION_COLORS: Record<string, string> = {
   beginner:     'bg-orange-50 text-orange-700',
   intermediate: 'bg-teal-50 text-teal-700',
   advanced:     'bg-green-100 text-green-700',
+};
+
+const SENTIMENT_COLORS: Record<string, string> = {
+  positive:   'bg-green-50 text-green-700',
+  neutral:    'bg-gray-100 text-gray-600',
+  frustrated: 'bg-red-100 text-red-700',
+  confused:   'bg-yellow-50 text-yellow-700',
+};
+
+const CHURN_COLORS: Record<string, string> = {
+  low:    'bg-green-50 text-green-700',
+  medium: 'bg-yellow-50 text-yellow-700',
+  high:   'bg-red-100 text-red-700',
+};
+
+const BROKER_READINESS_COLORS: Record<string, string> = {
+  'not-started': 'bg-gray-100 text-gray-500',
+  exploring:     'bg-blue-50 text-blue-600',
+  ready:         'bg-orange-50 text-orange-700',
+  connected:     'bg-green-100 text-green-700',
+};
+
+const AGENT_COLORS: Record<string, string> = {
+  news:        'bg-sky-50 text-sky-700',
+  fundamental: 'bg-indigo-50 text-indigo-700',
+  chart:       'bg-violet-50 text-violet-700',
+  strategy:    'bg-pink-50 text-pink-700',
 };
 
 export function ChatAnalysisPanel({ userId, userName, onClose }: Props) {
@@ -124,8 +151,8 @@ export function ChatAnalysisPanel({ userId, userName, onClose }: Props) {
                 <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{analysis.summary}</p>
               </div>
 
-              {/* Badges */}
-              <div className="flex flex-wrap gap-2">
+              {/* Status badges row 1 */}
+              <div className="flex flex-wrap gap-3">
                 <div>
                   <span className="text-[10px] text-gray-400 uppercase tracking-wide block mb-1">Engagement</span>
                   <TagChip
@@ -140,28 +167,76 @@ export function ChatAnalysisPanel({ userId, userName, onClose }: Props) {
                     color={SOPHISTICATION_COLORS[analysis.sophisticationLevel] ?? 'bg-gray-100 text-gray-600'}
                   />
                 </div>
+                <div>
+                  <span className="text-[10px] text-gray-400 uppercase tracking-wide block mb-1">Sentiment</span>
+                  <TagChip
+                    label={analysis.sentimentSignal ?? 'neutral'}
+                    color={SENTIMENT_COLORS[analysis.sentimentSignal ?? 'neutral'] ?? 'bg-gray-100 text-gray-600'}
+                  />
+                </div>
               </div>
 
-              <Section
-                title="Top Topics"
-                items={analysis.topTopics}
-                color="bg-blue-50 text-blue-700"
-              />
-              <Section
-                title="Pain Points"
-                items={analysis.painPoints}
-                color="bg-red-50 text-red-700"
-              />
-              <Section
-                title="Feature Requests"
-                items={analysis.featureRequests}
-                color="bg-purple-50 text-purple-700"
-              />
-              <Section
-                title="Trading Interests"
-                items={analysis.tradingInterests}
-                color="bg-green-50 text-green-700"
-              />
+              {/* Status badges row 2 */}
+              <div className="flex flex-wrap gap-3">
+                <div>
+                  <span className="text-[10px] text-gray-400 uppercase tracking-wide block mb-1">Churn Risk</span>
+                  <TagChip
+                    label={analysis.churnRisk ?? 'low'}
+                    color={CHURN_COLORS[analysis.churnRisk ?? 'low'] ?? 'bg-gray-100 text-gray-600'}
+                  />
+                </div>
+                <div>
+                  <span className="text-[10px] text-gray-400 uppercase tracking-wide block mb-1">Broker Readiness</span>
+                  <TagChip
+                    label={(analysis.brokerReadiness ?? 'not-started').replace('-', ' ')}
+                    color={BROKER_READINESS_COLORS[analysis.brokerReadiness ?? 'not-started'] ?? 'bg-gray-100 text-gray-600'}
+                  />
+                </div>
+              </div>
+
+              {/* Agents Used */}
+              {analysis.agentsUsed && analysis.agentsUsed.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Agents Used</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {analysis.agentsUsed.map((agent, i) => (
+                      <TagChip
+                        key={i}
+                        label={agent}
+                        color={AGENT_COLORS[agent] ?? 'bg-gray-100 text-gray-600'}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Topic breakdown */}
+              {analysis.topicCategories && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Topic Breakdown</p>
+                  <div className="space-y-1.5">
+                    {(Object.entries(analysis.topicCategories) as [string, number][])
+                      .filter(([, v]) => v > 0)
+                      .sort(([, a], [, b]) => b - a)
+                      .map(([key, value]) => (
+                        <div key={key}>
+                          <div className="flex justify-between text-xs text-gray-500 mb-0.5">
+                            <span className="capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                            <span>{value}%</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-blue-400 rounded-full" style={{ width: `${value}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              <Section title="Top Topics" items={analysis.topTopics} color="bg-blue-50 text-blue-700" />
+              <Section title="Pain Points" items={analysis.painPoints} color="bg-red-50 text-red-700" />
+              <Section title="Feature Requests" items={analysis.featureRequests} color="bg-purple-50 text-purple-700" />
+              <Section title="Trading Interests" items={analysis.tradingInterests} color="bg-green-50 text-green-700" />
             </div>
           )}
         </div>

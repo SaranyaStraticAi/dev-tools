@@ -203,11 +203,22 @@ export interface ReportSummary {
 
 export interface ChatAnalysis {
   topTopics: string[];
+  topicCategories: {
+    marketAnalysis: number;
+    strategyLearning: number;
+    platformHelp: number;
+    riskManagement: number;
+    newsAndFundamentals: number;
+  };
   painPoints: string[];
   featureRequests: string[];
   tradingInterests: string[];
+  agentsUsed: string[];                // e.g. ["news", "fundamental", "chart"]
   engagementPattern: 'power' | 'moderate' | 'minimal' | 'one-shot';
   sophisticationLevel: 'beginner' | 'intermediate' | 'advanced';
+  sentimentSignal: 'positive' | 'neutral' | 'frustrated' | 'confused';
+  churnRisk: 'low' | 'medium' | 'high';
+  brokerReadiness: 'not-started' | 'exploring' | 'ready' | 'connected';
   summary: string;
 }
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { ColumnDef } from '@tanstack/react-table';
-import { ArrowUpDown } from 'lucide-react';
+import { ArrowUpDown, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { UserRow, ActivityStatus, EngagementLevel, SurveyStatus, OutreachSegment, BehavioralBucket, FunnelStage } from '../types';
@@ -76,7 +76,8 @@ function FeatureBreadthBar({ score }: { score: number }) {
   );
 }
 
-export const columns: ColumnDef<UserRow>[] = [
+
+const baseColumns: ColumnDef<UserRow>[] = [
   {
     id: 'user',
     accessorFn: (row) => `${row.firstName} ${row.lastName} ${row.email}`,
@@ -403,3 +404,34 @@ export const columns: ColumnDef<UserRow>[] = [
     ),
   },
 ];
+
+export function makeColumns(onAnalyse: (userId: string, userName: string) => void): ColumnDef<UserRow>[] {
+  return [
+    ...baseColumns,
+    {
+      id: 'analyse',
+      header: 'Chat AI',
+      cell: ({ row }) => {
+        const { clerkId, firstName, lastName, email, chatUserMsgCount } = row.original;
+        const hasChats = (chatUserMsgCount ?? 0) > 0;
+        const name = [firstName, lastName].filter(Boolean).join(' ') || email;
+        return (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!hasChats}
+            onClick={() => onAnalyse(clerkId, name)}
+            className={`h-7 gap-1.5 text-xs px-2 ${hasChats ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-50' : 'text-gray-300 cursor-not-allowed'}`}
+            title={hasChats ? 'View AI chat analysis' : 'No chat messages'}
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+            Analyse
+          </Button>
+        );
+      },
+    },
+  ];
+}
+
+// Default export for backward compat — not wired to onAnalyse
+export const columns: ColumnDef<UserRow>[] = makeColumns(() => {});

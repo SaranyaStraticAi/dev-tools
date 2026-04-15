@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Download, ChevronDown, ChevronUp } from 'lucide-react';
 import { useToast } from '@/app/components/ToastContext';
@@ -10,7 +10,8 @@ import { ActivationFunnelChart } from './components/FunnelChart';
 import { OutreachQueue } from './components/OutreachQueue';
 import { CohortChart } from './components/CohortChart';
 import { ReportDataTable, FilterBar } from './components/ReportDataTable';
-import { columns } from './components/columns';
+import { columns, makeColumns } from './components/columns';
+import { ChatAnalysisPanel } from './components/ChatAnalysisPanel';
 import { downloadCSV } from './lib/csv';
 import type { UserRow, ReportSummary, ProgressEvent, FunnelStage } from './types';
 
@@ -41,6 +42,7 @@ export default function UserReportsPage() {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [outreachTab, setOutreachTab] = useState('⭐ Hot Leads');
   const [showDataExplorer, setShowDataExplorer] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<{ id: string; name: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const outreachRef = useRef<HTMLDivElement>(null);
 
@@ -148,6 +150,11 @@ export default function UserReportsPage() {
   const ACTIVATED: FunnelStage[] = ['exploring', 'broker-connected', 'trading'];
   const needsOutreachRows = filteredRows.filter(
     (r) => r.outreachPriority > 70 && r.brokerConnected !== 'true'
+  );
+
+  const chatColumns = useMemo(
+    () => makeColumns((userId, userName) => setSelectedUser({ id: userId, name: userName })),
+    []
   );
 
   return (
@@ -280,7 +287,7 @@ export default function UserReportsPage() {
             {showDataExplorer && (
               <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-700">
                 <ReportDataTable
-                  columns={columns}
+                  columns={chatColumns}
                   data={rows}
                   filters={filters}
                   topCountries={summary.topCountries}
@@ -290,6 +297,15 @@ export default function UserReportsPage() {
           </div>
 
         </div>
+      )}
+
+      {/* Chat Analysis slide-over */}
+      {selectedUser && (
+        <ChatAnalysisPanel
+          userId={selectedUser.id}
+          userName={selectedUser.name}
+          onClose={() => setSelectedUser(null)}
+        />
       )}
     </div>
   );
