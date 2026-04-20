@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare } from 'lucide-react';
+import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart } from 'lucide-react';
 import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
 import { loginRequest } from "@/lib/authConfig";
 import {
@@ -69,6 +69,11 @@ const navItems = [
     name: 'Chat Analytics',
     href: '/chat-analytics',
     icon: MessageSquare,
+  },
+  {
+    name: 'Strategy Dashboard',
+    href: '/strategy-dashboard',
+    icon: LineChart,
   },
 ];
 
