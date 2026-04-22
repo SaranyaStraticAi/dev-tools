@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Lock, LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers } from 'lucide-react';
+import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart } from 'lucide-react';
 import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
 import { loginRequest } from "@/lib/authConfig";
 import {
@@ -46,6 +46,11 @@ const navItems = [
     icon: Users,
   },
   {
+    name: 'User Reports',
+    href: '/user-reports',
+    icon: FileBarChart,
+  },
+  {
     name: 'JSON Converter',
     href: '/json-converter',
     icon: Code,
@@ -54,6 +59,21 @@ const navItems = [
     name: 'Monitoring',
     href: '/monitoring',
     icon: BarChart3,
+  },
+  {
+    name: 'Journal Dashboard',
+    href: '/journal-dashboard',
+    icon: TrendingUp,
+  },
+  {
+    name: 'Chat Analytics',
+    href: '/chat-analytics',
+    icon: MessageSquare,
+  },
+  {
+    name: 'Strategy Dashboard',
+    href: '/strategy-dashboard',
+    icon: LineChart,
   },
 ];
 
@@ -97,7 +117,7 @@ export default function AppSidebar() {
                       tooltip={item.name}
                     >
                       <Link href={item.href}>
-                        <item.icon />
+                        <item.icon/>
                         <span>{item.name}</span>
                       </Link>
                     </SidebarMenuButton>

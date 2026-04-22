@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Strategy Dashboard</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f0f11;--bg2:#18181b;--bg3:#27272a;--bg4:#3f3f46;
+  --border:#3f3f46;--border2:#52525b;
+  --text:#fafafa;--muted:#a1a1aa;--dim:#71717a;
+  --green:#22c55e;--green-bg:#14291f;
+  --red:#ef4444;--red-bg:#3f1515;
+  --amber:#f59e0b;--amber-bg:#2d1f08;
+  --blue:#60a5fa;--blue-bg:#1e2a3a;
+  --purple:#a78bfa;--purple-bg:#1e1a2e;
+  --radius:8px;--radius-lg:12px;
+}
+body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
+.app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+
+/* nav */
+.nav{display:flex;gap:2px;padding:10px 16px 0;border-bottom:1px solid var(--border);background:var(--bg2);flex-shrink:0}
+.tab{padding:7px 14px;font-size:13px;border-radius:6px 6px 0 0;cursor:pointer;color:var(--muted);
+  border:1px solid transparent;border-bottom:none;background:transparent;transition:all .15s}
+.tab.active{background:var(--bg);color:var(--text);font-weight:500;border-color:var(--border)}
+.tab:hover:not(.active){color:var(--text);background:var(--bg3)}
+
+/* panels */
+.panel{display:none;padding:18px 20px;overflow-y:auto;flex:1}
+.panel.active{display:block}
+
+/* metric cards */
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px}
+.metric{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px}
+.metric-label{font-size:11px;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em}
+.metric-val{font-size:21px;font-weight:600}
+.metric-sub{font-size:11px;color:var(--dim);margin-top:2px}
+.green{color:var(--green)} .red{color:var(--red)} .amber{color:var(--amber)} .blue{color:var(--blue)} .purple{color:var(--purple)}
+
+/* section */
+.section-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:14px}
+
+/* table */
+.table-wrap{overflow-x:auto}
+.dt{width:100%;border-collapse:collapse;font-size:13px}
+.dt th{text-align:left;padding:7px 10px;font-size:11px;font-weight:600;color:var(--muted);
+  border-bottom:1px solid var(--border);white-space:nowrap}
+.dt td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
+.dt tr:last-child td{border-bottom:none}
+.dt tr:hover td{background:var(--bg3);cursor:pointer}
+.dt td.no-hover{cursor:default}
+
+/* badges */
+.badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:20px;font-weight:500;white-space:nowrap}
+.b-green{background:var(--green-bg);color:var(--green)}
+.b-red{background:var(--red-bg);color:var(--red)}
+.b-amber{background:var(--amber-bg);color:var(--amber)}
+.b-blue{background:var(--blue-bg);color:var(--blue)}
+.b-purple{background:var(--purple-bg);color:var(--purple)}
+.b-gray{background:var(--bg3);color:var(--muted);border:1px solid var(--border)}
+
+/* toolbar */
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.toolbar input,.toolbar select{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);
+  padding:6px 10px;color:var(--text);font-size:13px}
+.toolbar input{flex:1;min-width:160px}
+.btn{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);
+  padding:6px 14px;color:var(--text);font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--bg3)}
+.btn.active-btn{background:var(--blue-bg);border-color:var(--blue);color:var(--blue)}
+
+/* sparkline bars */
+.spark{display:flex;align-items:flex-end;gap:2px;height:24px;margin-top:2px}
+.spark-bar{width:5px;border-radius:2px 2px 0 0;min-height:2px}
+
+/* drilldown */
+.drilldown{display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-lg);
+  padding:16px;margin-top:10px}
+.drilldown.open{display:block}
+.back-btn{font-size:12px;color:var(--blue);cursor:pointer;margin-bottom:12px;display:inline-flex;align-items:center;gap:4px}
+.back-btn:hover{text-decoration:underline}
+.pill-code{font-family:monospace;font-size:11px;background:var(--bg3);border:1px solid var(--border);
+  padding:1px 6px;border-radius:4px;color:var(--muted)}
+
+.empty{text-align:center;color:var(--muted);padding:20px!important}
+.pnl-pos{color:var(--green);font-weight:600}
+.pnl-neg{color:var(--red);font-weight:600}
+.star{color:var(--amber)}
+</style>
+</head>
+<body>
+<div class="app">
+
+<nav class="nav">
+  <button class="tab active" onclick="switchTab('overview')">Platform overview</button>
+  <button class="tab" onclick="switchTab('strategies')">Strategies</button>
+  <button class="tab" onclick="switchTab('users')">Users</button>
+  <button class="tab" onclick="switchTab('funnel')">Adoption funnel</button>
+  <button class="tab" onclick="switchTab('exclusions')">Exclusion groups</button>
+</nav>
+
+<!-- ══ OVERVIEW ══════════════════════════════════════════════════════════ -->
+<div id="tab-overview" class="panel active">
+  <div class="metrics" id="overview-metrics">
+    <div class="metric"><div class="metric-label">Strategies in library</div><div class="metric-val" id="m-total">—</div></div>
+    <div class="metric"><div class="metric-label">Live deployed</div><div class="metric-val green" id="m-live">—</div></div>
+    <div class="metric"><div class="metric-label">Real trades (all time)</div><div class="metric-val blue" id="m-trades">—</div></div>
+    <div class="metric"><div class="metric-label">P90 win rate</div><div class="metric-val green" id="m-p90wr">—</div></div>
+    <div class="metric"><div class="metric-label">Total platform PnL</div><div class="metric-val" id="m-pnl">—</div></div>
+    <div class="metric"><div class="metric-label">Real deployers</div><div class="metric-val blue" id="m-deployers">—</div></div>
+    <div class="metric"><div class="metric-label">Excluded users</div><div class="metric-val amber" id="m-excl">—</div></div>
+    <div class="metric"><div class="metric-label">Silent strategies</div><div class="metric-val amber" id="m-silent">—<div class="metric-sub">deployed, 0 trades</div></div></div>
+  </div>
+
+  <div class="section-label">Category breakdown</div>
+  <div class="card">
+    <table class="dt" id="cat-table">
+      <thead><tr><th>Category</th><th>Strategies</th><th>Total trades</th><th>P90 win rate</th><th>Total PnL</th><th>Top symbol</th></tr></thead>
+      <tbody id="cat-tbody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="section-label">Top symbols traded across all strategies</div>
+  <div class="card">
+    <table class="dt" id="sym-table">
+      <thead><tr><th>Symbol</th><th>Strategies using it</th><th>Total trades</th><th>P90 win rate</th><th>Total PnL</th></tr></thead>
+      <tbody id="sym-tbody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══ STRATEGIES ════════════════════════════════════════════════════════ -->
+<div id="tab-strategies" class="panel">
+  <div class="toolbar">
+    <input type="text" id="s-search" placeholder="Search by name, symbol…" oninput="filterStrategies()"/>
+    <select id="s-cat" onchange="filterStrategies()">
+      <option value="">All categories</option>
+      <option>momentum</option><option>breakout</option><option>trend</option>
+      <option>meanReversion</option><option>volatility</option>
+    </select>
+    <select id="s-sym" onchange="filterStrategies()"><option value="">All symbols</option></select>
+    <button class="btn" onclick="loadStrategies()">↻ Refresh</button>
+  </div>
+  <div class="card">
+    <table class="dt">
+      <thead><tr>
+        <th>Strategy</th><th>Symbol · TF</th><th>Category</th>
+        <th>Real deployers</th><th>Trades</th><th>Win rate (P90)</th>
+        <th>PnL</th><th>PnL / trade (P90)</th><th>Last trade</th>
+      </tr></thead>
+      <tbody id="s-tbody"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+  <!-- Strategy drilldown -->
+  <div class="drilldown" id="s-drilldown">
+    <div class="back-btn" onclick="closeDrilldown('s-drilldown')">← Back to strategies</div>
+    <div id="s-detail"></div>
+  </div>
+</div>
+
+<!-- ══ USERS ═════════════════════════════════════════════════════════════ -->
+<div id="tab-users" class="panel">
+  <div class="toolbar">
+    <input type="text" id="u-search" placeholder="Search by user ID…" oninput="filterUsers()"/>
+    <select id="u-sort" onchange="filterUsers()">
+      <option value="trades">Sort by trades</option>
+      <option value="pnl">Sort by PnL</option>
+      <option value="winrate">Sort by win rate</option>
+    </select>
+    <button class="btn" onclick="loadUsers()">↻ Refresh</button>
+  </div>
+  <div class="card">
+    <table class="dt">
+      <thead><tr>
+        <th>User</th><th>Strategies deployed</th><th>Best strategy (PnL)</th>
+        <th>Best strategy (win rate)</th><th>Total trades</th>
+        <th>Win rate (P90)</th><th>Total PnL</th><th>Last active</th>
+      </tr></thead>
+      <tbody id="u-tbody"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+  <!-- User drilldown -->
+  <div class="drilldown" id="u-drilldown">
+    <div class="back-btn" onclick="closeDrilldown('u-drilldown')">← Back to users</div>
+    <div id="u-detail"></div>
+  </div>
+</div>
+
+<!-- ══ FUNNEL ════════════════════════════════════════════════════════════ -->
+<div id="tab-funnel" class="panel">
+  <div class="metrics">
+    <div class="metric"><div class="metric-label">Backtested</div><div class="metric-val" id="f-backtested">—</div></div>
+    <div class="metric"><div class="metric-label">Ever deployed</div><div class="metric-val blue" id="f-deployed">—</div></div>
+    <div class="metric"><div class="metric-label">Had real trades</div><div class="metric-val green" id="f-traded">—</div></div>
+    <div class="metric"><div class="metric-label">Active now (30d)</div><div class="metric-val green" id="f-active">—</div></div>
+    <div class="metric"><div class="metric-label">Avg days to 1st trade</div><div class="metric-val amber" id="f-ttft">—</div></div>
+  </div>
+  <div class="card">
+    <table class="dt">
+      <thead><tr>
+        <th>Strategy</th><th>Symbol</th><th>Category</th>
+        <th>Deploy count</th><th>Active deployers</th>
+        <th>Trading days</th><th>Days to 1st trade</th><th>Status</th>
+      </tr></thead>
+      <tbody id="f-tbody"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══ EXCLUSIONS ════════════════════════════════════════════════════════ -->
+<div id="tab-exclusions" class="panel">
+  <div class="metrics">
+    <div class="metric"><div class="metric-label">internal_team</div><div class="metric-val amber" id="ex-internal">—</div></div>
+    <div class="metric"><div class="metric-label">QA team</div><div class="metric-val amber" id="ex-qa">—</div></div>
+    <div class="metric"><div class="metric-label">Founders</div><div class="metric-val amber" id="ex-founders">—</div></div>
+    <div class="metric"><div class="metric-label">Total excluded</div><div class="metric-val red" id="ex-total">—</div></div>
+  </div>
+  <div class="card">
+    <table class="dt">
+      <thead><tr><th>User ID</th><th>Email</th><th>Group</th><th>Added by</th><th>Added at</th></tr></thead>
+      <tbody id="ex-tbody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+</div><!-- .app -->
+
+<script>
+const CODE = '';
+const U_CODE = '';
+const BASE_URL = '/api/strategy-proxy';
+const U_URL = '/api/strategy-user-proxy';
+
+// ── state ─────────────────────────────────────────────────────────────────────
+let allStrategies = [], allUsers = [], allFunnel = [];
+let strategyNameMap = {}; // uid → name
+
+// ── tab ───────────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`[onclick="switchTab('${name}')"]`).classList.add('active');
+  document.getElementById(`tab-${name}`).classList.add('active');
+  if (name === 'strategies') loadStrategies();
+  if (name === 'users')      loadUsers();
+  if (name === 'funnel')     loadFunnel();
+  if (name === 'exclusions') loadExclusions();
+}
+
+// ── api ───────────────────────────────────────────────────────────────────────
+async function api(type, extra = '') {
+  const res = await fetch(`${BASE_URL}?code=${encodeURIComponent(CODE)}&type=${type}${extra}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function userApi(userId) {
+  const res = await fetch(`${U_URL}?code=${encodeURIComponent(U_CODE)}&userId=${encodeURIComponent(userId)}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+function fmt(n, prefix = '') {
+  const v = Number(n) || 0;
+  return prefix + (v >= 0 ? '' : '-') + '$' + Math.abs(v).toLocaleString(undefined, {maximumFractionDigits:2});
+}
+function pnlClass(n) { return Number(n) >= 0 ? 'pnl-pos' : 'pnl-neg'; }
+function pct(n) { return (+Number(n).toFixed(1)) + '%'; }
+function fmtDate(s) { return s ? s.slice(0,10) : '—'; }
+function catBadge(c) {
+  const map = {momentum:'b-purple',breakout:'b-blue',trend:'b-green',meanReversion:'b-amber',volatility:'b-red',other:'b-gray'};
+  return `<span class="badge ${map[c]||'b-gray'}">${c||'other'}</span>`;
+}
+function spark(vals) {
+  if (!vals || !vals.length) return '';
+  const max = Math.max(...vals.map(Math.abs), 0.01);
+  return '<div class="spark">' + vals.slice(-14).map(v => {
+    const h = Math.max(2, Math.round(Math.abs(v)/max*22));
+    const col = v >= 0 ? 'var(--green)' : 'var(--red)';
+    return `<div class="spark-bar" style="height:${h}px;background:${col}"></div>`;
+  }).join('') + '</div>';
+}
+function p90(arr) {
+  if (!arr.length) return 0;
+  const s = [...arr].sort((a,b)=>a-b);
+  return s[Math.min(Math.floor(s.length*0.9), s.length-1)];
+}
+
+// ── OVERVIEW ──────────────────────────────────────────────────────────────────
+async function loadOverview() {
+  try {
+    const [overviewData, libData, exData] = await Promise.all([
+      api('overview'), api('library'), api('excluded_users')
+    ]);
+    const strats  = libData.strategies || [];
+    allStrategies = strats;
+    strats.forEach(s => { strategyNameMap[s.uid] = s.name || s.uid; });
+
+    // Compute P90 win rate across strategies with trades
+    const winRates = strats.filter(s => s.totalTrades > 0)
+                           .map(s => s.winCount / s.totalTrades * 100);
+    const p90wr    = p90(winRates);
+    const totalPnl = strats.reduce((sum, s) => sum + Number(s.totalPnl||0), 0);
+    const silentCount = strats.filter(s => (s.deployCount||0) > 0 && (s.totalTrades||0) === 0).length;
+
+    document.getElementById('m-total').textContent    = strats.length;
+    document.getElementById('m-live').textContent     = overviewData.liveDeployed ?? '—';
+    document.getElementById('m-trades').textContent   = (overviewData.totalTrades||0).toLocaleString();
+    document.getElementById('m-p90wr').textContent    = pct(p90wr);
+    document.getElementById('m-pnl').textContent      = (totalPnl>=0?'+':'-')+'$'+Math.abs(totalPnl).toLocaleString(undefined,{maximumFractionDigits:2});
+    document.getElementById('m-pnl').className        = 'metric-val ' + (totalPnl>=0?'green':'red');
+    document.getElementById('m-deployers').textContent = overviewData.totalStrategies ?? '—';
+    document.getElementById('m-excl').textContent     = (exData.users||[]).length;
+    document.getElementById('m-silent').textContent   = silentCount;
+
+    renderCategoryBreakdown(strats);
+    renderSymbolBreakdown(strats);
+    populateSymbolFilter(strats);
+  } catch(e) { console.error('overview error', e); }
+}
+
+function renderCategoryBreakdown(strats) {
+  const bycat = new Map();
+  for (const s of strats) {
+    const c = s.category || 'other';
+    if (!bycat.has(c)) bycat.set(c, {count:0, trades:0, winRates:[], pnl:0, symbols:{}});
+    const d = bycat.get(c);
+    d.count++; d.trades += Number(s.totalTrades||0); d.pnl += Number(s.totalPnl||0);
+    if (s.totalTrades > 0) d.winRates.push(s.winCount/s.totalTrades*100);
+    if (s.symbol) d.symbols[s.symbol] = (d.symbols[s.symbol]||0) + (s.totalTrades||0);
+  }
+  document.getElementById('cat-tbody').innerHTML = [...bycat.entries()]
+    .sort((a,b)=>b[1].trades-a[1].trades).map(([cat,d]) => {
+      const topSym = Object.entries(d.symbols).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—';
+      return `<tr class="no-hover"><td>${catBadge(cat)}</td><td>${d.count}</td>
+      <td>${d.trades.toLocaleString()}</td><td>${pct(p90(d.winRates))}</td>
+      <td class="${pnlClass(d.pnl)}">${fmt(d.pnl)}</td><td>${topSym}</td></tr>`;
+    }).join('') || '<tr><td colspan="6" class="empty">No data</td></tr>';
+}
+
+function renderSymbolBreakdown(strats) {
+  const bysym = new Map();
+  for (const s of strats) {
+    if (!s.symbol) continue;
+    if (!bysym.has(s.symbol)) bysym.set(s.symbol, {count:0, trades:0, winRates:[], pnl:0});
+    const d = bysym.get(s.symbol);
+    d.count++; d.trades += Number(s.totalTrades||0); d.pnl += Number(s.totalPnl||0);
+    if (s.totalTrades > 0) d.winRates.push(s.winCount/s.totalTrades*100);
+  }
+  document.getElementById('sym-tbody').innerHTML = [...bysym.entries()]
+    .sort((a,b)=>b[1].trades-a[1].trades).slice(0,10).map(([sym,d]) =>
+      `<tr class="no-hover"><td><strong>${sym}</strong></td><td>${d.count}</td>
+      <td>${d.trades.toLocaleString()}</td><td>${pct(p90(d.winRates))}</td>
+      <td class="${pnlClass(d.pnl)}">${fmt(d.pnl)}</td></tr>`
+    ).join('') || '<tr><td colspan="5" class="empty">No data</td></tr>';
+}
+
+function populateSymbolFilter(strats) {
+  const syms = [...new Set(strats.map(s=>s.symbol).filter(Boolean))].sort();
+  const sel = document.getElementById('s-sym');
+  sel.innerHTML = '<option value="">All symbols</option>' +
+    syms.map(s=>`<option>${s}</option>`).join('');
+}
+
+// ── STRATEGIES ────────────────────────────────────────────────────────────────
+async function loadStrategies() {
+  document.getElementById('s-tbody').innerHTML = '<tr><td colspan="9" class="empty">Loading…</td></tr>';
+  try {
+    const data = await api('library');
+    allStrategies = data.strategies || [];
+    allStrategies.forEach(s => { strategyNameMap[s.uid] = s.name || s.uid; });
+    populateSymbolFilter(allStrategies);
+    renderStrategies();
+  } catch(e) {
+    document.getElementById('s-tbody').innerHTML =
+      `<tr><td colspan="9" class="empty" style="color:var(--red)">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function filterStrategies() { renderStrategies(); }
+
+function renderStrategies() {
+  const q    = document.getElementById('s-search').value.toLowerCase();
+  const cat  = document.getElementById('s-cat').value;
+  const sym  = document.getElementById('s-sym').value;
+  const rows = allStrategies.filter(s =>
+    (!q   || (s.name||'').toLowerCase().includes(q) || (s.symbol||'').toLowerCase().includes(q)) &&
+    (!cat || s.category === cat) &&
+    (!sym || s.symbol === sym)
+  ).sort((a,b) => (b.totalTrades||0) - (a.totalTrades||0));
+
+  document.getElementById('s-tbody').innerHTML = rows.length ? rows.map(s => {
+    const wr = s.totalTrades > 0 ? pct(s.winCount/s.totalTrades*100) : '—';
+    const pnlPerTrade = s.totalTrades > 0 ? Number(s.totalPnl)/Number(s.totalTrades) : 0;
+    const depReal = (s.deployerTotal||0) - (s.deployerExcluded||0);
+    return `<tr onclick="openStrategyDrilldown('${s.uid}')">
+      <td><strong>${s.name||s.uid}</strong></td>
+      <td><strong>${s.symbol||'—'}</strong> <span style="color:var(--dim)">${s.timeframe||''}</span></td>
+      <td>${catBadge(s.category)}</td>
+      <td>${depReal}${s.deployerExcluded?` <span style="font-size:11px;color:var(--amber)">(${s.deployerExcluded} excl.)</span>`:''}</td>
+      <td>${(s.totalTrades||0).toLocaleString()}</td>
+      <td>${wr}</td>
+      <td class="${pnlClass(s.totalPnl)}">${fmt(s.totalPnl)}</td>
+      <td class="${pnlClass(pnlPerTrade)}">${pnlPerTrade ? fmt(pnlPerTrade) : '—'}</td>
+      <td style="color:var(--dim)">${fmtDate(s.lastTradeAt)}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="9" class="empty">No strategies found</td></tr>';
+}
+
+async function openStrategyDrilldown(uid) {
+  const dd = document.getElementById('s-drilldown');
+  const detail = document.getElementById('s-detail');
+  dd.classList.add('open'); dd.scrollIntoView({behavior:'smooth',block:'nearest'});
+  detail.innerHTML = '<div class="empty">Loading strategy detail…</div>';
+  try {
+    const [depData, dailyData] = await Promise.all([
+      api('deployers', `&strategyId=${uid}`),
+      api('daily_summary', `&strategyId=${uid}`)
+    ]);
+    const s = allStrategies.find(x => x.uid === uid) || {};
+    const rows = dailyData.rows || [];
+    const dailyPnls = rows.map(r => Number(r.totalPnl||0));
+    const p90pnl = p90(dailyPnls);
+    const realDeps = (depData.deployers||[]).filter(d=>!d.isExcluded);
+
+    detail.innerHTML = `
+      <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+        <strong style="font-size:16px">${s.name||uid}</strong>
+        ${catBadge(s.category)}
+        <span style="color:var(--dim)">${s.symbol||''} · ${s.timeframe||''}</span>
+      </div>
+      <div class="metrics" style="margin-bottom:14px">
+        <div class="metric"><div class="metric-label">Total trades</div><div class="metric-val">${(s.totalTrades||0).toLocaleString()}</div></div>
+        <div class="metric"><div class="metric-label">Win rate</div><div class="metric-val green">${s.totalTrades>0?pct(s.winCount/s.totalTrades*100):'—'}</div></div>
+        <div class="metric"><div class="metric-label">P90 daily PnL</div><div class="metric-val ${pnlClass(p90pnl)}">${fmt(p90pnl)}</div></div>
+        <div class="metric"><div class="metric-label">Total PnL</div><div class="metric-val ${pnlClass(s.totalPnl)}">${fmt(s.totalPnl)}</div></div>
+        <div class="metric"><div class="metric-label">Real deployers</div><div class="metric-val blue">${realDeps.length}</div></div>
+        <div class="metric"><div class="metric-label">Trading days</div><div class="metric-val">${rows.filter(r=>r.totalTrades>0).length}</div></div>
+      </div>
+      <div class="section-label">Daily PnL — last 30 days</div>
+      <div style="display:flex;align-items:flex-end;gap:3px;height:40px;margin-bottom:14px">
+        ${rows.slice(-30).map(r => {
+          const v = Number(r.totalPnl||0);
+          const max = Math.max(...dailyPnls.map(Math.abs),0.01);
+          const h = Math.max(3, Math.round(Math.abs(v)/max*38));
+          return `<div title="${r.date}: ${fmt(v)}" style="flex:1;height:${h}px;border-radius:2px 2px 0 0;background:${v>=0?'var(--green)':'var(--red)'}"></div>`;
+        }).join('')}
+      </div>
+      <div class="section-label">Real deployers</div>
+      <table class="dt"><thead><tr><th>User ID</th><th>Deployed</th><th>Last deployed</th><th>Deploy count</th></tr></thead><tbody>
+        ${realDeps.length ? realDeps.map(d=>`<tr onclick="openUserDrilldown('${d.userId}')">
+          <td><span class="pill-code">${d.userId}</span></td>
+          <td style="color:var(--dim)">${fmtDate(d.deployedAt)}</td>
+          <td style="color:var(--dim)">${fmtDate(d.lastDeployedAt)}</td>
+          <td>${d.deployCount||1}</td>
+        </tr>`).join('') : '<tr><td colspan="4" class="empty">No real deployers</td></tr>'}
+      </tbody></table>`;
+  } catch(e) {
+    detail.innerHTML = `<div class="empty" style="color:var(--red)">Error: ${e.message}</div>`;
+  }
+}
+
+// ── USERS ─────────────────────────────────────────────────────────────────────
+async function loadUsers() {
+  document.getElementById('u-tbody').innerHTML = '<tr><td colspan="8" class="empty">Loading…</td></tr>';
+  try {
+    const data = await api('library');
+    const strats = data.strategies || [];
+    allStrategies = strats;
+    strats.forEach(s => { strategyNameMap[s.uid] = s.name || s.uid; });
+
+    // Build per-user data from deployer info across all strategies
+    const userMap = new Map();
+    for (const s of strats) {
+      const depReal = s.deployerTotal - (s.deployerExcluded||0);
+      // We only have aggregate counts here; real per-user breakdown needs deployers endpoint
+      // Load deployers for each strategy and aggregate
+    }
+
+    // Fetch deployers for all strategies — batched 3 at a time to avoid flooding
+    const depResults = [];
+    for (let i = 0; i < strats.length; i += 3) {
+      const batch = strats.slice(i, i + 3);
+      const batchResults = await Promise.all(
+        batch.map(s => api('deployers', `&strategyId=${s.uid}`)
+          .then(d => ({ uid: s.uid, deployers: d.deployers || [] }))
+          .catch(() => ({ uid: s.uid, deployers: [] })))
+      );
+      depResults.push(...batchResults);
+    }
+
+    for (const { uid, deployers } of depResults) {
+      const s = strats.find(x => x.uid === uid);
+      if (!s) continue;
+      const tradesPerDep = s.totalTrades > 0 && deployers.length > 0
+        ? Math.round(s.totalTrades / deployers.filter(d=>!d.isExcluded).length) : 0;
+      for (const d of deployers) {
+        if (d.isExcluded) continue;
+        if (!userMap.has(d.userId)) userMap.set(d.userId, {
+          userId: d.userId, strategies: [], totalTrades: 0,
+          totalWins: 0, totalPnl: 0, lastActive: '', deployCount: 0,
+        });
+        const u = userMap.get(d.userId);
+        u.strategies.push({ uid, name: s.name||uid, category: s.category, symbol: s.symbol,
+          trades: tradesPerDep, winRate: s.totalTrades>0?s.winCount/s.totalTrades*100:0,
+          pnl: s.totalTrades>0?Number(s.totalPnl)/strats.find(x=>x.uid===uid)?.deployerTotal||1:0 });
+        u.totalTrades += tradesPerDep;
+        u.deployCount += d.deployCount || 1;
+        if (!u.lastActive || d.lastDeployedAt > u.lastActive) u.lastActive = d.lastDeployedAt;
+      }
+    }
+
+    allUsers = [...userMap.values()].map(u => {
+      const bestPnl = u.strategies.reduce((a,b)=>b.pnl>a.pnl?b:a, {pnl:-Infinity,name:'—'});
+      const bestWr  = u.strategies.reduce((a,b)=>b.winRate>a.winRate?b:a, {winRate:-1,name:'—'});
+      const winRates = u.strategies.filter(s=>s.trades>0).map(s=>s.winRate);
+      return { ...u, bestPnl, bestWr, p90WinRate: p90(winRates) };
+    });
+
+    renderUsers();
+  } catch(e) {
+    document.getElementById('u-tbody').innerHTML = `<tr><td colspan="8" class="empty" style="color:var(--red)">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function filterUsers() { renderUsers(); }
+
+function renderUsers() {
+  const q    = document.getElementById('u-search').value.toLowerCase();
+  const sort = document.getElementById('u-sort').value;
+  let rows = allUsers.filter(u => !q || u.userId.toLowerCase().includes(q));
+  rows.sort((a,b) => {
+    if (sort === 'pnl')     return b.totalPnl - a.totalPnl;
+    if (sort === 'winrate') return b.p90WinRate - a.p90WinRate;
+    return b.totalTrades - a.totalTrades;
+  });
+  document.getElementById('u-tbody').innerHTML = rows.length ? rows.map(u =>
+    `<tr onclick="openUserDrilldown('${u.userId}')">
+      <td><span class="pill-code">${u.userId.slice(0,20)}…</span></td>
+      <td>${u.strategies.length} <span style="color:var(--dim);font-size:11px">(${u.deployCount} deploys)</span></td>
+      <td>${u.bestPnl.name !== '—' ? `<span class="star">★</span> ${u.bestPnl.name}<br><span style="font-size:11px;color:var(--dim)">${u.bestPnl.symbol||''}</span>` : '—'}</td>
+      <td>${u.bestWr.name !== '—' ? `<span class="star">★</span> ${u.bestWr.name}` : '—'}</td>
+      <td>${u.totalTrades.toLocaleString()}</td>
+      <td>${u.p90WinRate ? pct(u.p90WinRate) : '—'}</td>
+      <td class="${pnlClass(u.totalPnl)}">${u.totalPnl ? fmt(u.totalPnl) : '—'}</td>
+      <td style="color:var(--dim)">${fmtDate(u.lastActive)}</td>
+    </tr>`
+  ).join('') : '<tr><td colspan="8" class="empty">No users found</td></tr>';
+}
+
+async function openUserDrilldown(userId) {
+  // Switch to users tab if not there
+  if (!document.getElementById('tab-users').classList.contains('active')) switchTab('users');
+  const dd = document.getElementById('u-drilldown');
+  const detail = document.getElementById('u-detail');
+  dd.classList.add('open'); dd.scrollIntoView({behavior:'smooth',block:'nearest'});
+  detail.innerHTML = '<div class="empty">Loading user detail…</div>';
+  try {
+    const user = allUsers.find(u => u.userId === userId);
+    if (!user && !allStrategies.length) await loadUsers();
+    const u = allUsers.find(x => x.userId === userId) || { userId, strategies: [], deployCount:0, p90WinRate:0, totalPnl:0, totalTrades:0 };
+
+    const sortedByPnl = [...(u.strategies||[])].sort((a,b)=>b.pnl-a.pnl);
+    const sortedByWr  = [...(u.strategies||[])].sort((a,b)=>b.winRate-a.winRate);
+
+    detail.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+        <strong style="font-size:15px">${userId}</strong>
+        <span style="color:var(--dim);font-size:12px">${u.strategies.length} strategies · ${u.deployCount} total deploys</span>
+      </div>
+      <div class="metrics" style="margin-bottom:14px">
+        <div class="metric"><div class="metric-label">Strategies used</div><div class="metric-val">${u.strategies.length}</div></div>
+        <div class="metric"><div class="metric-label">Total trades</div><div class="metric-val">${u.totalTrades.toLocaleString()}</div></div>
+        <div class="metric"><div class="metric-label">P90 win rate</div><div class="metric-val green">${u.p90WinRate?pct(u.p90WinRate):'—'}</div></div>
+        <div class="metric"><div class="metric-label">Best strategy (PnL)</div><div class="metric-val blue" style="font-size:14px">${u.bestPnl?.name||'—'}</div></div>
+      </div>
+      <div class="section-label">All strategies — ranked by PnL</div>
+      <table class="dt" style="margin-bottom:14px">
+        <thead><tr><th>Strategy</th><th>Symbol</th><th>Category</th><th>Trades</th><th>Win rate</th><th>PnL</th><th>Best?</th></tr></thead>
+        <tbody>${sortedByPnl.map((s,i) => `
+          <tr onclick="openStrategyDrilldown('${s.uid}')">
+            <td><strong>${s.name}</strong></td>
+            <td><strong>${s.symbol||'—'}</strong></td>
+            <td>${catBadge(s.category)}</td>
+            <td>${s.trades.toLocaleString()}</td>
+            <td>${s.winRate?pct(s.winRate):'—'}</td>
+            <td class="${pnlClass(s.pnl)}">${s.pnl?fmt(s.pnl):'—'}</td>
+            <td>${i===0?'<span class="star" title="Best PnL">★ PnL</span>':''}
+                ${s.uid===u.bestWr?.uid?'<span class="star" title="Best win rate"> ★ WR</span>':''}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch(e) {
+    detail.innerHTML = `<div class="empty" style="color:var(--red)">Error: ${e.message}</div>`;
+  }
+}
+
+function closeDrilldown(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+// ── FUNNEL ────────────────────────────────────────────────────────────────────
+async function loadFunnel() {
+  document.getElementById('f-tbody').innerHTML = '<tr><td colspan="8" class="empty">Loading…</td></tr>';
+  try {
+    const data = await api('library');
+    const strats = data.strategies || [];
+    allFunnel = strats;
+
+    const backtested  = strats.length;
+    const deployed    = strats.filter(s => (s.deployCount||0) > 0).length;
+    const traded      = strats.filter(s => (s.totalTrades||0) > 0).length;
+    const active      = strats.filter(s => {
+      if (!s.lastTradeAt) return false;
+      return new Date(s.lastTradeAt) > new Date(Date.now() - 30*24*60*60*1000);
+    }).length;
+
+    document.getElementById('f-backtested').textContent = backtested;
+    document.getElementById('f-deployed').textContent   = deployed;
+    document.getElementById('f-traded').textContent     = traded;
+    document.getElementById('f-active').textContent     = active;
+    document.getElementById('f-ttft').textContent       = '—'; // needs funnel table data
+
+    document.getElementById('f-tbody').innerHTML = strats
+      .sort((a,b) => (b.deployCount||0) - (a.deployCount||0))
+      .map(s => {
+        const hasDeployed = (s.deployCount||0) > 0;
+        const hasTraded   = (s.totalTrades||0) > 0;
+        const isActive    = hasTraded && s.lastTradeAt &&
+          new Date(s.lastTradeAt) > new Date(Date.now() - 30*24*60*60*1000);
+        const realDeps    = (s.deployerTotal||0) - (s.deployerExcluded||0);
+
+        let statusBadge;
+        if (isActive)        statusBadge = '<span class="badge b-green">Active</span>';
+        else if (hasTraded)  statusBadge = '<span class="badge b-amber">Stale</span>';
+        else if (hasDeployed)statusBadge = '<span class="badge b-red">Silent</span>';
+        else                 statusBadge = '<span class="badge b-gray">Library only</span>';
+
+        return `<tr onclick="openStrategyDrilldown('${s.uid}')">
+          <td><strong>${s.name||s.uid}</strong></td>
+          <td><strong>${s.symbol||'—'}</strong></td>
+          <td>${catBadge(s.category)}</td>
+          <td>${s.deployCount||0}</td>
+          <td>${realDeps}</td>
+          <td>${hasTraded ? (s.totalTrades||0).toLocaleString() + ' trades' : '—'}</td>
+          <td>—</td>
+          <td>${statusBadge}</td>
+        </tr>`;
+      }).join('');
+  } catch(e) {
+    document.getElementById('f-tbody').innerHTML =
+      `<tr><td colspan="8" class="empty" style="color:var(--red)">Error: ${e.message}</td></tr>`;
+  }
+}
+
+// ── EXCLUSIONS ────────────────────────────────────────────────────────────────
+async function loadExclusions() {
+  document.getElementById('ex-tbody').innerHTML =
+    '<tr><td colspan="5" class="empty">Loading…</td></tr>';
+  try {
+    const data  = await api('excluded_users');
+    const users = data.users || [];
+    const counts = {};
+    users.forEach(u => { counts[u.group] = (counts[u.group]||0) + 1; });
+    document.getElementById('ex-internal').textContent = counts['vibetraderorgtraders'] || 0;
+    document.getElementById('ex-qa').textContent       = counts['strategyqateam'] || 0;
+    document.getElementById('ex-founders').textContent = counts['strategyfounders'] || 0;
+    document.getElementById('ex-total').textContent    = users.length;
+
+    document.getElementById('ex-tbody').innerHTML = users.length
+      ? users.map(u => `<tr class="no-hover">
+          <td><span class="pill-code">${u.userId}</span></td>
+          <td style="color:var(--muted)">${u.email||'—'}</td>
+          <td><span class="badge b-red">${u.group}</span></td>
+          <td style="color:var(--dim)">${u.addedBy||'—'}</td>
+          <td style="color:var(--dim)">${fmtDate(u.addedAt)}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="5" class="empty">No excluded users</td></tr>';
+  } catch(e) {
+    document.getElementById('ex-tbody').innerHTML =
+      `<tr><td colspan="5" class="empty" style="color:var(--red)">Error: ${e.message}</td></tr>`;
+  }
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => { loadOverview(); });
+</script>
+</body>
+</html>
