@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart } from 'lucide-react';
+import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image } from 'lucide-react';
 import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
 import { loginRequest } from "@/lib/authConfig";
 import {
@@ -75,7 +75,13 @@ const navItems = [
     href: '/strategy-dashboard',
     icon: LineChart,
   },
+  {
+    name: 'Image Generator',
+    href: '/image-generator',
+    icon: Image,
+  },
 ];
+
 
 export default function AppSidebar() {
   const pathname = usePathname();
@@ -117,7 +123,7 @@ export default function AppSidebar() {
                       tooltip={item.name}
                     >
                       <Link href={item.href}>
-                        <item.icon/>
+                        <item.icon />
                         <span>{item.name}</span>
                       </Link>
                     </SidebarMenuButton>
