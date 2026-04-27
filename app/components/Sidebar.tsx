@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+
+import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image } from 'lucide-react';
+import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
 import { useState, useEffect } from 'react';
-import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart } from 'lucide-react';
-import { useMsal } from "@azure/msal-react";
+
 import { loginRequest } from "@/lib/authConfig";
 import {
   Sidebar,
@@ -81,7 +83,13 @@ const navItems = [
     href: '/strategy-dashboard',
     icon: LineChart,
   },
+  {
+    name: 'Image Generator',
+    href: '/image-generator',
+    icon: Image,
+  },
 ];
+
 
 export default function AppSidebar() {
   const pathname = usePathname();
