@@ -33,7 +33,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         e.preventDefault();
         setError(null);
 
-        if (email === 'gowtham@vibetradingai.com' && password === 'Gowtham@video') {
+        const allowedEmployees = [
+            { email: 'gowtham@vibetradingai.com', password: 'Gowtham@video' },
+            { email: 'kalyani@vibetradingai.com', password: 'kalyani@video' }
+        ];
+
+        const match = allowedEmployees.find(emp => emp.email === email && emp.password === password);
+
+        if (match) {
             setEmployeeAccount(email);
             localStorage.setItem('employee_session', email);
         } else {
