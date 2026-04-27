@@ -61,6 +61,11 @@ const navItems = [
     icon: BarChart3,
   },
   {
+    name: 'Prompt Tester',
+    href: '/prompt',
+    icon: Code,
+  },
+  {
     name: 'Journal Dashboard',
     href: '/journal-dashboard',
     icon: TrendingUp,
@@ -117,7 +122,7 @@ export default function AppSidebar() {
                       tooltip={item.name}
                     >
                       <Link href={item.href}>
-                        <item.icon/>
+                        <item.icon />
                         <span>{item.name}</span>
                       </Link>
                     </SidebarMenuButton>
