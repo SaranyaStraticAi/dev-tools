@@ -21,11 +21,7 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/api/grafana') ||
     pathname.startsWith('/api/query') ||
     pathname.startsWith('/api/metaapi-lookup') ||
-<<<<<<< HEAD
     pathname.startsWith('/api/metaapi-connections') ||
-    pathname.startsWith('/api/user-reports') ||
-    pathname.startsWith('/api/auth');
-=======
     pathname.startsWith('/api/metaapi-health') ||
     pathname.startsWith('/api/user-reports') ||
     pathname.startsWith('/api/generate-image') ||
@@ -33,7 +29,6 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/api/marketing-links') ||
     pathname.startsWith('/api/news-source') ||
     pathname.startsWith('/api/auth'); // Standard next-auth path just in case
->>>>>>> 676f1d844f88aa503522092dae1da97f4d75cb2a
 
   const isGrafanaApi = pathname.startsWith('/api/') && !isLocalApi;
 
