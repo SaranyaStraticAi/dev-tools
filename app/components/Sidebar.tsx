@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image, Link2, Network } from 'lucide-react';
+import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image, Link2, Network, LayoutGrid } from 'lucide-react';
 import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
 import { useState, useEffect } from 'react';
 
@@ -52,6 +52,11 @@ const navItems = [
     name: 'Users',
     href: '/users',
     icon: Users,
+  },
+  {
+    name: 'User Directory',
+    href: '/user-directory',
+    icon: LayoutGrid,
   },
   {
     name: 'User Reports',
