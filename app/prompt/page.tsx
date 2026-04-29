@@ -2,14 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import { Send, Sparkles } from 'lucide-react';
-import { DEFAULT_SYSTEM_PROMPT, DEFAULT_USER_TEMPLATE, STATIC_NEWS, NewsItem } from './constants';
+import { DEFAULT_SYSTEM_PROMPT, DEFAULT_USER_TEMPLATE, STATS_SYSTEM_PROMPT, STATS_USER_TEMPLATE, STATIC_NEWS, NewsItem } from './constants';
 import NewsCarousel from './components/NewsCarousel';
 import ContentControls from './components/ContentControls';
 import PromptConfig from './components/PromptConfig';
 import ResultPanel from './components/ResultPanel';
 
+type Mode = 'cinematic' | 'stats';
+
 export default function PromptTesterPage() {
-    // 1. Core State Management
+    const [mode, setMode] = useState<Mode>('cinematic');
     const [systemPrompt, setSystemPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
     const [userTemplate, setUserTemplate] = useState(DEFAULT_USER_TEMPLATE);
     const [headline, setHeadline] = useState(STATIC_NEWS[0].headline);
@@ -125,6 +127,8 @@ export default function PromptTesterPage() {
                         setSystemPrompt={setSystemPrompt}
                         userTemplate={userTemplate}
                         setUserTemplate={setUserTemplate}
+                        mode={mode}
+                        setMode={setMode}
                     />
                 </div>
 
