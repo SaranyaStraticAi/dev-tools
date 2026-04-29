@@ -2,8 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+<<<<<<< HEAD
 import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Network } from 'lucide-react';
+=======
+
+import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image, Link2 } from 'lucide-react';
+>>>>>>> 676f1d844f88aa503522092dae1da97f4d75cb2a
 import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
+import { useState, useEffect } from 'react';
+
 import { loginRequest } from "@/lib/authConfig";
 import {
   Sidebar,
@@ -66,6 +73,11 @@ const navItems = [
     icon: BarChart3,
   },
   {
+    name: 'Prompt Tester',
+    href: '/prompt',
+    icon: Code,
+  },
+  {
     name: 'Journal Dashboard',
     href: '/journal-dashboard',
     icon: TrendingUp,
@@ -80,11 +92,28 @@ const navItems = [
     href: '/strategy-dashboard',
     icon: LineChart,
   },
+  {
+    name: 'Image Generator',
+    href: '/image-generator',
+    icon: Image,
+  },
+  {
+    name: 'Link Tracker',
+    href: '/link-tracker',
+    icon: Link2,
+  },
 ];
+
 
 export default function AppSidebar() {
   const pathname = usePathname();
   const { instance, accounts } = useMsal();
+  const [employeeAccount, setEmployeeAccount] = useState<string | null>(null);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('employee_session');
+    if (saved) setEmployeeAccount(saved);
+  }, []);
 
   const handleLogin = () => {
     instance.loginPopup(loginRequest).catch(e => {
@@ -93,8 +122,15 @@ export default function AppSidebar() {
   };
 
   const handleLogout = () => {
-    instance.logoutPopup();
+    if (employeeAccount) {
+      localStorage.removeItem('employee_session');
+      window.location.reload();
+    } else {
+      instance.logoutPopup();
+    }
   };
+
+  const currentAccount = accounts[0]?.username || employeeAccount;
 
   return (
     <Sidebar>
@@ -122,7 +158,7 @@ export default function AppSidebar() {
                       tooltip={item.name}
                     >
                       <Link href={item.href}>
-                        <item.icon/>
+                        <item.icon />
                         <span>{item.name}</span>
                       </Link>
                     </SidebarMenuButton>
@@ -135,21 +171,20 @@ export default function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border">
-        <AuthenticatedTemplate>
+        {currentAccount ? (
           <div className="flex flex-col gap-2 px-2 py-2">
-            <div className="text-sm text-muted-foreground truncate">
-              {accounts[0]?.username}
+            <div className="text-sm text-muted-foreground truncate font-medium">
+              {currentAccount}
             </div>
             <button
               onClick={handleLogout}
-              className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+              className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors group"
             >
-              <LogOut size={16} />
+              <LogOut size={16} className="group-hover:-translate-x-0.5 transition-transform" />
               Logout
             </button>
           </div>
-        </AuthenticatedTemplate>
-        <UnauthenticatedTemplate>
+        ) : (
           <div className="px-2 py-2">
             <button
               onClick={handleLogin}
@@ -159,7 +194,7 @@ export default function AppSidebar() {
               Login
             </button>
           </div>
-        </UnauthenticatedTemplate>
+        )}
       </SidebarFooter>
 
       <SidebarRail />
