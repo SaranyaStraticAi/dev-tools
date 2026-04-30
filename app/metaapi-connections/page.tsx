@@ -1,7 +1,21 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Users, Wifi, WifiOff, Copy, ExternalLink } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { RefreshCw, Copy, ExternalLink, Activity, X, Search as SearchIcon } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
+
+interface SummaryCounts {
+    total: number;
+    connected: number;
+    disconnected: number;
+}
+
+type SearchKind = 'userId' | 'email' | 'name' | 'none';
 
 interface ConnectionRow {
     userId: string;
@@ -12,47 +26,234 @@ interface ConnectionRow {
     server: string | null;
     platform: string | null;
     region: string | null;
+}
+
+interface ClerkUserSummary {
     email: string | null;
     firstName: string | null;
     lastName: string | null;
-    clerkInstance: string | null;
+    instance: 'Live' | 'Dev';
 }
 
-interface Summary {
-    total: number;
-    connected: number;
-    disconnected: number;
-    metaApiLiveData: boolean;
+interface PageInfo {
+    size: number;
+    requestedSize: number;
+    nextContinuationToken: string | null;
 }
 
 type FilterStatus = 'all' | 'connected' | 'disconnected';
 
+type HealthStatus = 'Healthy' | 'Inactive' | 'Degraded' | 'Down' | 'Unknown';
+
+interface HealthBundle {
+    status: HealthStatus;
+    reason: string;
+    checkedAt: string;
+    provisioning: {
+        state: string | null;
+        connectionStatus: string | null;
+        region: string | null;
+        reliability: string | null;
+        resourceSlots: number | null;
+        copyFactoryResourceSlots: number | null;
+        connections: Array<{ region?: string; zone?: string; application?: string }>;
+        platform: string | null;
+        server: string | null;
+        login: string | number | null;
+    } | null;
+    accountInfo: {
+        tradeAllowed: boolean | null;
+        balance: number | null;
+        equity: number | null;
+        marginLevel: number | null;
+        currency: string | null;
+        leverage: number | null;
+    } | null;
+    errors: string[];
+}
+
+type HealthCellState =
+    | { kind: 'idle' }
+    | { kind: 'loading' }
+    | { kind: 'ok'; bundle: HealthBundle }
+    | { kind: 'error'; message: string };
+
+// Neutral palette: a single colored dot communicates status; chip stays outline.
+const HEALTH_DOT: Record<HealthStatus, string> = {
+    Healthy: 'bg-emerald-500',
+    Inactive: 'bg-sky-400',
+    Degraded: 'bg-amber-500',
+    Down: 'bg-red-500',
+    Unknown: 'bg-muted-foreground',
+};
+
 export default function MetaApiConnectionsPage() {
     const [connections, setConnections] = useState<ConnectionRow[]>([]);
-    const [summary, setSummary] = useState<Summary | null>(null);
+    const [pageInfo, setPageInfo] = useState<PageInfo | null>(null);
+    const [metaApiLiveData, setMetaApiLiveData] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [filter, setFilter] = useState<FilterStatus>('all');
     const [search, setSearch] = useState('');
     const [copied, setCopied] = useState<string | null>(null);
+    const [healthByAccount, setHealthByAccount] = useState<Record<string, HealthCellState>>({});
+    const [openDetail, setOpenDetail] = useState<{ row: ConnectionRow; bundle: HealthBundle } | null>(null);
+    const [clerkByUser, setClerkByUser] = useState<Record<string, ClerkUserSummary | null>>({});
+    const [summary, setSummary] = useState<SummaryCounts | null>(null);
 
-    const fetchConnections = useCallback(async () => {
-        setLoading(true);
-        setError(null);
+    // Search-mode state. When `searchActive` is true we display searchResults
+    // instead of the paginated `connections` list.
+    const [searchActive, setSearchActive] = useState(false);
+    const [searching, setSearching] = useState(false);
+    const [searchResults, setSearchResults] = useState<ConnectionRow[]>([]);
+    const [searchKind, setSearchKind] = useState<SearchKind>('none');
+    const searchSeq = useRef(0); // guard against stale responses from older queries
+
+    const fetchClerkForUserIds = useCallback(async (userIds: string[]) => {
+        if (userIds.length === 0) return;
         try {
-            const res = await fetch('/api/metaapi-connections');
+            const res = await fetch('/api/clerk-users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userIds }),
+            });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Failed to fetch');
-            setConnections(data.connections ?? []);
-            setSummary(data.summary ?? null);
-        } catch (e: any) {
-            setError(e.message);
-        } finally {
-            setLoading(false);
+            const users: Record<string, ClerkUserSummary> = data?.users ?? {};
+            setClerkByUser(prev => {
+                const next = { ...prev };
+                // Mark every requested ID — null means "looked up, not found".
+                for (const id of userIds) next[id] = users[id] ?? null;
+                return next;
+            });
+        } catch (e) {
+            console.error('Clerk batch fetch failed:', (e as Error).message);
         }
     }, []);
 
-    useEffect(() => { fetchConnections(); }, [fetchConnections]);
+    const fetchConnections = useCallback(async (continuationToken?: string) => {
+        const isFirstPage = !continuationToken;
+        if (isFirstPage) setLoading(true);
+        else setLoadingMore(true);
+        setError(null);
+        try {
+            const url = new URL('/api/metaapi-connections', window.location.origin);
+            url.searchParams.set('pageSize', '50');
+            if (continuationToken) url.searchParams.set('continuationToken', continuationToken);
+
+            const res = await fetch(url.toString());
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to fetch');
+
+            const newRows: ConnectionRow[] = data.connections ?? [];
+            setConnections(prev => isFirstPage ? newRows : [...prev, ...newRows]);
+            setPageInfo(data.page ?? null);
+            setMetaApiLiveData(!!data.metaApiLiveData);
+
+            // Lazy-load Clerk for the new rows (don't block the table render)
+            const userIdsNeedingClerk = newRows
+                .map(r => r.userId)
+                .filter(id => clerkByUser[id] === undefined);
+            if (userIdsNeedingClerk.length > 0) {
+                void fetchClerkForUserIds(userIdsNeedingClerk);
+            }
+        } catch (e) {
+            setError((e as Error).message);
+        } finally {
+            setLoading(false);
+            setLoadingMore(false);
+        }
+    }, [clerkByUser, fetchClerkForUserIds]);
+
+    // First-page load on mount only — fetchConnections changes when clerkByUser
+    // updates, but we don't want to refetch the table every time Clerk data lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => { fetchConnections(); }, []);
+
+    const fetchSummary = useCallback(async () => {
+        try {
+            const res = await fetch('/api/metaapi-connections/summary');
+            if (!res.ok) return;
+            const data = await res.json();
+            setSummary({
+                total: data.total ?? 0,
+                connected: data.connected ?? 0,
+                disconnected: data.disconnected ?? 0,
+            });
+        } catch (e) {
+            console.error('Summary fetch failed:', (e as Error).message);
+        }
+    }, []);
+
+    useEffect(() => { fetchSummary(); }, [fetchSummary]);
+
+    // Debounced server-side search.
+    useEffect(() => {
+        const q = search.trim();
+        if (!q) {
+            setSearchActive(false);
+            setSearchResults([]);
+            setSearchKind('none');
+            return;
+        }
+        const seq = ++searchSeq.current;
+        setSearchActive(true);
+        setSearching(true);
+        const handle = setTimeout(async () => {
+            try {
+                const url = new URL('/api/metaapi-connections/search', window.location.origin);
+                url.searchParams.set('q', q);
+                const res = await fetch(url.toString());
+                if (seq !== searchSeq.current) return; // a newer search has superseded us
+                const data = await res.json();
+                if (!res.ok) {
+                    setSearchResults([]);
+                    setSearchKind('none');
+                    setError(data.error ?? 'Search failed');
+                    return;
+                }
+                const rows: ConnectionRow[] = data.connections ?? [];
+                setSearchResults(rows);
+                setSearchKind((data.searchKind as SearchKind) ?? 'none');
+                // Lazy Clerk for any matched userIds we don't already have.
+                const need = rows.map(r => r.userId).filter(id => clerkByUser[id] === undefined);
+                if (need.length > 0) void fetchClerkForUserIds(need);
+            } catch (e) {
+                if (seq === searchSeq.current) {
+                    setSearchResults([]);
+                    setError((e as Error).message);
+                }
+            } finally {
+                if (seq === searchSeq.current) setSearching(false);
+            }
+        }, 300);
+        return () => clearTimeout(handle);
+    }, [search, clerkByUser, fetchClerkForUserIds]);
+
+    const checkHealth = useCallback(async (accountId: string) => {
+        setHealthByAccount(prev => ({ ...prev, [accountId]: { kind: 'loading' } }));
+        try {
+            const res = await fetch('/api/metaapi-connections/health', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ accountId }),
+            });
+            const data = await res.json();
+            if (data?.health) {
+                setHealthByAccount(prev => ({ ...prev, [accountId]: { kind: 'ok', bundle: data.health } }));
+            } else {
+                setHealthByAccount(prev => ({
+                    ...prev,
+                    [accountId]: { kind: 'error', message: data?.error ?? 'Unknown error' },
+                }));
+            }
+        } catch (e) {
+            setHealthByAccount(prev => ({
+                ...prev,
+                [accountId]: { kind: 'error', message: (e as Error).message },
+            }));
+        }
+    }, []);
 
     const copyToClipboard = (text: string, key: string) => {
         navigator.clipboard.writeText(text);
@@ -66,247 +267,484 @@ export default function MetaApiConnectionsPage() {
     };
 
     const displayName = (row: ConnectionRow) => {
-        const name = [row.firstName, row.lastName].filter(Boolean).join(' ');
-        return name || row.email || row.userId;
+        const clerk = clerkByUser[row.userId];
+        if (clerk) {
+            const name = [clerk.firstName, clerk.lastName].filter(Boolean).join(' ');
+            return name || clerk.email || row.userId;
+        }
+        // Clerk lookup hasn't returned yet (or returned null) — fall back to userId.
+        return row.userId;
     };
 
-    const filtered = connections.filter(c => {
+    // Search results replace the paginated dataset; status filter still applies.
+    const sourceRows = searchActive ? searchResults : connections;
+    const filtered = sourceRows.filter(c => {
         if (filter === 'connected' && !c.connected) return false;
         if (filter === 'disconnected' && c.connected) return false;
-        if (search.trim()) {
-            const q = search.toLowerCase();
-            return (
-                c.email?.toLowerCase().includes(q) ||
-                c.userId.toLowerCase().includes(q) ||
-                c.accountId?.toLowerCase().includes(q) ||
-                c.brokerName?.toLowerCase().includes(q) ||
-                c.firstName?.toLowerCase().includes(q) ||
-                c.lastName?.toLowerCase().includes(q)
-            );
-        }
         return true;
     });
 
+    const refreshAll = () => {
+        setConnections([]);
+        setPageInfo(null);
+        setHealthByAccount({});
+        fetchConnections();
+        fetchSummary();
+    };
+
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4 md:p-8 pt-16 md:pt-8">
-            <div className="max-w-7xl mx-auto space-y-6">
+        <div className="space-y-4">
+            <div className="space-y-4">
 
                 {/* Header */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6">
-                    <div className="flex items-center justify-between flex-wrap gap-4">
-                        <div>
-                            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                                MetaAPI Broker Connections
-                            </h1>
-                            <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-                                All users connected via MetaAPI — for billing &amp; budget tracking
-                                {summary?.metaApiLiveData && (
-                                    <span className="ml-2 text-green-600 dark:text-green-400 font-medium">
-                                        ✓ Live MetaAPI data
-                                    </span>
-                                )}
-                            </p>
-                        </div>
-                        <button
-                            onClick={fetchConnections}
-                            disabled={loading}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium rounded-lg transition-colors"
-                        >
-                            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-                            {loading ? 'Loading…' : 'Refresh'}
-                        </button>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-0.5 min-w-0">
+                        <h1 className="text-xl font-semibold">MetaAPI Broker Connections</h1>
+                        <p className="text-sm text-muted-foreground">
+                            All users connected via MetaAPI — for billing &amp; budget tracking
+                            {metaApiLiveData && <span className="ml-2 text-foreground">· live data</span>}
+                        </p>
                     </div>
+                    <Button onClick={refreshAll} disabled={loading} variant="outline" size="sm">
+                        <RefreshCw className={loading ? 'animate-spin' : ''} />
+                        {loading ? 'Loading…' : 'Refresh'}
+                    </Button>
                 </div>
 
                 {/* Summary cards */}
                 {summary && (
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-5 flex items-center gap-4">
-                            <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-full">
-                                <Users size={22} className="text-blue-600 dark:text-blue-400" />
-                            </div>
-                            <div>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Total Users</p>
-                                <p className="text-3xl font-bold text-gray-900 dark:text-white">{summary.total}</p>
-                            </div>
-                        </div>
-                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-5 flex items-center gap-4 cursor-pointer hover:ring-2 hover:ring-green-400 transition-all"
-                            onClick={() => setFilter(filter === 'connected' ? 'all' : 'connected')}>
-                            <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full">
-                                <Wifi size={22} className="text-green-600 dark:text-green-400" />
-                            </div>
-                            <div>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Connected</p>
-                                <p className="text-3xl font-bold text-green-600 dark:text-green-400">{summary.connected}</p>
-                            </div>
-                        </div>
-                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-5 flex items-center gap-4 cursor-pointer hover:ring-2 hover:ring-red-400 transition-all"
-                            onClick={() => setFilter(filter === 'disconnected' ? 'all' : 'disconnected')}>
-                            <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full">
-                                <WifiOff size={22} className="text-red-500 dark:text-red-400" />
-                            </div>
-                            <div>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Disconnected</p>
-                                <p className="text-3xl font-bold text-red-500 dark:text-red-400">{summary.disconnected}</p>
-                            </div>
-                        </div>
+                        <SummaryStat label="Total" value={summary.total} />
+                        <SummaryStat
+                            label="Connected"
+                            value={summary.connected}
+                            active={filter === 'connected'}
+                            onClick={() => setFilter(filter === 'connected' ? 'all' : 'connected')}
+                            dot="bg-emerald-500"
+                        />
+                        <SummaryStat
+                            label="Disconnected"
+                            value={summary.disconnected}
+                            active={filter === 'disconnected'}
+                            onClick={() => setFilter(filter === 'disconnected' ? 'all' : 'disconnected')}
+                            dot="bg-muted-foreground"
+                        />
                     </div>
                 )}
 
                 {/* Error */}
                 {error && (
-                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-                        <p className="text-red-800 dark:text-red-400 font-medium">Error: {error}</p>
-                    </div>
+                    <Card className="border-destructive">
+                        <CardContent className="pt-6">
+                            <p className="text-sm text-destructive">{error}</p>
+                        </CardContent>
+                    </Card>
                 )}
 
-                {/* Filter + Search */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 flex flex-wrap gap-3 items-center">
-                    <div className="flex gap-2">
-                        {(['all', 'connected', 'disconnected'] as FilterStatus[]).map(f => (
-                            <button key={f}
-                                onClick={() => setFilter(f)}
-                                className={`px-4 py-1.5 rounded-full text-sm font-medium capitalize transition-colors ${
-                                    filter === f
-                                        ? 'bg-blue-600 text-white'
-                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                                }`}
-                            >
-                                {f}
-                            </button>
-                        ))}
-                    </div>
-                    <input
-                        type="text"
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        placeholder="Search by email, user ID, account ID, broker…"
-                        className="flex-1 min-w-[200px] px-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                    />
-                    <span className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                        {filtered.length} of {connections.length} rows
-                    </span>
-                </div>
+                {/* Filters + Search */}
+                <Card>
+                    <CardContent className="pt-6 flex flex-wrap items-center gap-3">
+                        <div className="flex gap-1">
+                            {(['all', 'connected', 'disconnected'] as FilterStatus[]).map(f => (
+                                <Button
+                                    key={f}
+                                    variant={filter === f ? 'default' : 'outline'}
+                                    size="sm"
+                                    className="capitalize"
+                                    onClick={() => setFilter(f)}
+                                >
+                                    {f}
+                                </Button>
+                            ))}
+                        </div>
+                        <div className="relative flex-1 min-w-[240px]">
+                            {searching ? (
+                                <RefreshCw className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground animate-spin pointer-events-none" />
+                            ) : (
+                                <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+                            )}
+                            <Input
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                                placeholder="Search by user ID, email, or name…"
+                                className="pl-8 pr-8"
+                            />
+                            {search && (
+                                <button
+                                    onClick={() => setSearch('')}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                    title="Clear"
+                                >
+                                    <X className="size-4" />
+                                </button>
+                            )}
+                        </div>
+                        {searchActive && searchKind !== 'none' && (
+                            <Badge variant="outline">
+                                matched by {searchKind === 'userId' ? 'user ID' : searchKind}
+                            </Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                            {searchActive
+                                ? `${filtered.length} match${filtered.length === 1 ? '' : 'es'}`
+                                : `${filtered.length} of ${summary?.total ?? connections.length} rows loaded`}
+                        </span>
+                    </CardContent>
+                </Card>
 
                 {/* Table */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl overflow-hidden">
+                <Card className="overflow-hidden">
                     {loading && connections.length === 0 ? (
-                        <div className="p-16 text-center text-gray-500 dark:text-gray-400">
-                            <RefreshCw size={32} className="animate-spin mx-auto mb-3 opacity-50" />
+                        <div className="p-16 text-center text-sm text-muted-foreground">
+                            <RefreshCw className="animate-spin mx-auto mb-3 size-6" />
                             Loading connections…
                         </div>
                     ) : filtered.length === 0 ? (
-                        <div className="p-16 text-center text-gray-500 dark:text-gray-400">
+                        <div className="p-16 text-center text-sm text-muted-foreground">
                             No connections found.
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                                <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0">
-                                    <tr>
-                                        {['Status', 'User', 'Email', 'MetaAPI Account ID', 'Broker', 'Server', 'Platform', 'Region', 'Last Updated'].map(h => (
-                                            <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap">
-                                                {h}
-                                            </th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                                    {filtered.map((row, i) => (
-                                        <tr key={row.userId + i} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                                            {/* Status */}
-                                            <td className="px-4 py-3 whitespace-nowrap">
-                                                {row.connected ? (
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                                                        Connected
-                                                    </span>
-                                                ) : (
-                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400">
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
-                                                        Disconnected
-                                                    </span>
-                                                )}
-                                            </td>
-
-                                            {/* User */}
-                                            <td className="px-4 py-3">
-                                                <div className="text-sm font-medium text-gray-900 dark:text-white">{displayName(row)}</div>
-                                                <div className="flex items-center gap-1 mt-0.5">
-                                                    <span className="text-xs text-gray-400 font-mono truncate max-w-[140px]">{row.userId}</span>
-                                                    <button onClick={() => copyToClipboard(row.userId, `uid-${i}`)}
-                                                        className="opacity-0 hover:opacity-100 group-hover:opacity-100 text-gray-400 hover:text-gray-600 transition-opacity"
-                                                        title="Copy user ID">
-                                                        <Copy size={11} />
-                                                    </button>
-                                                </div>
-                                                {row.clerkInstance && (
-                                                    <span className="text-xs text-indigo-500 dark:text-indigo-400">{row.clerkInstance}</span>
-                                                )}
-                                            </td>
-
-                                            {/* Email */}
-                                            <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                                                {row.email ?? <span className="text-gray-400 italic">—</span>}
-                                            </td>
-
-                                            {/* Account ID */}
-                                            <td className="px-4 py-3">
-                                                {row.accountId ? (
-                                                    <div className="flex items-center gap-1.5">
-                                                        <span className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate max-w-[160px]">
-                                                            {row.accountId}
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead>Health</TableHead>
+                                        <TableHead>User</TableHead>
+                                        <TableHead>Email</TableHead>
+                                        <TableHead>MetaAPI Account ID</TableHead>
+                                        <TableHead>Broker</TableHead>
+                                        <TableHead>Server</TableHead>
+                                        <TableHead>Platform</TableHead>
+                                        <TableHead>Region</TableHead>
+                                        <TableHead>Last Updated</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {filtered.map((row, i) => {
+                                        const clerk = clerkByUser[row.userId];
+                                        const clerkPending = clerk === undefined;
+                                        const name = clerk ? [clerk.firstName, clerk.lastName].filter(Boolean).join(' ') : '';
+                                        return (
+                                            <TableRow key={row.userId + i}>
+                                                {/* Status */}
+                                                <TableCell>
+                                                    <span className="inline-flex items-center gap-2 text-sm">
+                                                        <span className={`size-1.5 rounded-full ${row.connected ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+                                                        <span className={row.connected ? 'text-foreground' : 'text-muted-foreground'}>
+                                                            {row.connected ? 'Connected' : 'Disconnected'}
                                                         </span>
-                                                        <button
-                                                            onClick={() => copyToClipboard(row.accountId!, `acc-${i}`)}
-                                                            className="text-gray-400 hover:text-blue-500 transition-colors flex-shrink-0"
-                                                            title="Copy account ID"
-                                                        >
-                                                            {copied === `acc-${i}` ? <span className="text-green-500 text-xs">✓</span> : <Copy size={12} />}
-                                                        </button>
-                                                        <a
-                                                            href={`/metaapi-lookup?accountId=${row.accountId}`}
-                                                            className="text-gray-400 hover:text-blue-500 transition-colors flex-shrink-0"
-                                                            title="Open in MetaAPI Lookup"
-                                                        >
-                                                            <ExternalLink size={12} />
-                                                        </a>
+                                                    </span>
+                                                </TableCell>
+
+                                                {/* Health */}
+                                                <TableCell>
+                                                    <HealthCell
+                                                        accountId={row.accountId}
+                                                        state={row.accountId ? healthByAccount[row.accountId] ?? { kind: 'idle' } : { kind: 'idle' }}
+                                                        onCheck={() => row.accountId && checkHealth(row.accountId)}
+                                                        onOpenDetail={(bundle) => setOpenDetail({ row, bundle })}
+                                                    />
+                                                </TableCell>
+
+                                                {/* User */}
+                                                <TableCell className="min-w-[180px]">
+                                                    <div className="text-sm font-medium">
+                                                        {clerkPending ? <Skeleton className="h-3 w-24" /> : (name || clerk?.email || row.userId)}
                                                     </div>
-                                                ) : <span className="text-gray-400 italic text-sm">—</span>}
-                                            </td>
+                                                    <div className="flex items-center gap-1 mt-0.5">
+                                                        <span className="text-xs font-mono text-muted-foreground truncate max-w-[160px]">{row.userId}</span>
+                                                        <button
+                                                            onClick={() => copyToClipboard(row.userId, `uid-${i}`)}
+                                                            className="text-muted-foreground hover:text-foreground"
+                                                            title="Copy user ID"
+                                                        >
+                                                            <Copy className="size-3" />
+                                                        </button>
+                                                    </div>
+                                                    {clerk?.instance && (
+                                                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{clerk.instance}</span>
+                                                    )}
+                                                </TableCell>
 
-                                            {/* Broker */}
-                                            <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                                                {row.brokerName ?? <span className="text-gray-400">—</span>}
-                                            </td>
+                                                {/* Email */}
+                                                <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                                                    {clerkPending ? (
+                                                        <Skeleton className="h-3 w-32" />
+                                                    ) : (clerk?.email ?? '—')}
+                                                </TableCell>
 
-                                            {/* Server */}
-                                            <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                                                {row.server ?? <span className="text-gray-400">—</span>}
-                                            </td>
+                                                {/* Account ID */}
+                                                <TableCell>
+                                                    {row.accountId ? (
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="text-xs font-mono truncate max-w-[160px]">{row.accountId}</span>
+                                                            <button
+                                                                onClick={() => copyToClipboard(row.accountId!, `acc-${i}`)}
+                                                                className="text-muted-foreground hover:text-foreground shrink-0"
+                                                                title="Copy account ID"
+                                                            >
+                                                                {copied === `acc-${i}` ? <span className="text-emerald-500 text-xs">✓</span> : <Copy className="size-3" />}
+                                                            </button>
+                                                            <a
+                                                                href={`/metaapi-lookup?accountId=${row.accountId}`}
+                                                                className="text-muted-foreground hover:text-foreground shrink-0"
+                                                                title="Open in MetaAPI Lookup"
+                                                            >
+                                                                <ExternalLink className="size-3" />
+                                                            </a>
+                                                        </div>
+                                                    ) : <span className="text-sm text-muted-foreground">—</span>}
+                                                </TableCell>
 
-                                            {/* Platform */}
-                                            <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                                                {row.platform ?? <span className="text-gray-400">—</span>}
-                                            </td>
-
-                                            {/* Region */}
-                                            <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                                                {row.region ?? <span className="text-gray-400">—</span>}
-                                            </td>
-
-                                            {/* Last Updated */}
-                                            <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
-                                                {formatDate(row.lastUpdated)}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                                <TableCell className="text-sm whitespace-nowrap">{row.brokerName ?? <span className="text-muted-foreground">—</span>}</TableCell>
+                                                <TableCell className="text-sm whitespace-nowrap">{row.server ?? <span className="text-muted-foreground">—</span>}</TableCell>
+                                                <TableCell className="text-sm whitespace-nowrap">{row.platform ?? <span className="text-muted-foreground">—</span>}</TableCell>
+                                                <TableCell className="text-sm whitespace-nowrap">{row.region ?? <span className="text-muted-foreground">—</span>}</TableCell>
+                                                <TableCell className="text-sm text-muted-foreground whitespace-nowrap">{formatDate(row.lastUpdated)}</TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
+                                </TableBody>
+                            </Table>
                         </div>
                     )}
+                </Card>
+
+                {/* Load More — browsing mode only */}
+                {!searchActive && pageInfo?.nextContinuationToken && (
+                    <div className="flex justify-center">
+                        <Button
+                            variant="outline"
+                            onClick={() => fetchConnections(pageInfo.nextContinuationToken ?? undefined)}
+                            disabled={loadingMore}
+                        >
+                            {loadingMore && <RefreshCw className="animate-spin" />}
+                            {loadingMore ? 'Loading…' : `Load more (${connections.length} of ${summary?.total ?? '?'} loaded)`}
+                        </Button>
+                    </div>
+                )}
+
+            </div>
+
+            {openDetail && (
+                <HealthDetailPanel
+                    row={openDetail.row}
+                    bundle={openDetail.bundle}
+                    clerk={clerkByUser[openDetail.row.userId]}
+                    onClose={() => setOpenDetail(null)}
+                    onRecheck={() => {
+                        if (openDetail.row.accountId) checkHealth(openDetail.row.accountId);
+                        setOpenDetail(null);
+                    }}
+                />
+            )}
+        </div>
+    );
+}
+
+function HealthCell({
+    accountId,
+    state,
+    onCheck,
+    onOpenDetail,
+}: {
+    accountId: string | null;
+    state: HealthCellState;
+    onCheck: () => void;
+    onOpenDetail: (bundle: HealthBundle) => void;
+}) {
+    if (!accountId) return <span className="text-xs text-muted-foreground">—</span>;
+
+    if (state.kind === 'idle') {
+        return (
+            <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={onCheck}>
+                <Activity className="size-3" /> Check
+            </Button>
+        );
+    }
+
+    if (state.kind === 'loading') {
+        return (
+            <Badge variant="outline" className="text-xs">
+                <RefreshCw className="animate-spin" /> Checking…
+            </Badge>
+        );
+    }
+
+    if (state.kind === 'error') {
+        return (
+            <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs text-destructive border-destructive/40" onClick={onCheck} title={state.message}>
+                Failed — retry
+            </Button>
+        );
+    }
+
+    const { bundle } = state;
+    return (
+        <div className="flex items-center gap-1.5">
+            <button
+                onClick={() => onOpenDetail(bundle)}
+                title={`${bundle.reason} — click for details`}
+                className="inline-flex"
+            >
+                <Badge variant="outline" className="text-xs gap-1.5 hover:bg-accent">
+                    <span className={`size-1.5 rounded-full ${HEALTH_DOT[bundle.status]}`} />
+                    {bundle.status}
+                </Badge>
+            </button>
+            <button onClick={onCheck} title="Re-check" className="text-muted-foreground hover:text-foreground">
+                <RefreshCw className="size-3" />
+            </button>
+        </div>
+    );
+}
+
+function SummaryStat({
+    label,
+    value,
+    active = false,
+    onClick,
+    dot,
+}: {
+    label: string;
+    value: number;
+    active?: boolean;
+    onClick?: () => void;
+    dot?: string;
+}) {
+    return (
+        <Card
+            className={`py-3 ${onClick ? 'cursor-pointer hover:bg-accent/30 transition-colors' : ''} ${active ? 'ring-2 ring-ring' : ''}`}
+            onClick={onClick}
+        >
+            <div className="px-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                    {dot && <span className={`size-2 rounded-full ${dot}`} />}
+                    <span className="text-sm text-muted-foreground">{label}</span>
+                </div>
+                <span className="text-2xl font-semibold tabular-nums">{value}</span>
+            </div>
+        </Card>
+    );
+}
+
+function PanelRow({ label, value }: { label: string; value: React.ReactNode }) {
+    return (
+        <div className="flex items-start justify-between gap-3 text-xs py-1">
+            <span className="text-gray-500 dark:text-gray-400 flex-shrink-0">{label}</span>
+            <span className="text-right text-gray-800 dark:text-gray-200">{value ?? '—'}</span>
+        </div>
+    );
+}
+
+function PanelSection({ title, children }: { title: string; children: React.ReactNode }) {
+    return (
+        <div className="border border-gray-100 dark:border-gray-700 rounded-lg overflow-hidden">
+            <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700 text-[11px] font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                {title}
+            </div>
+            <div className="px-3 py-2">{children}</div>
+        </div>
+    );
+}
+
+function HealthDetailPanel({
+    row,
+    bundle,
+    clerk,
+    onClose,
+    onRecheck,
+}: {
+    row: ConnectionRow;
+    bundle: HealthBundle;
+    clerk: ClerkUserSummary | null | undefined;
+    onClose: () => void;
+    onRecheck: () => void;
+}) {
+    const fmtNum = (v: number | null | undefined, d = 2) =>
+        v === null || v === undefined || Number.isNaN(v) ? '—' : v.toLocaleString(undefined, { maximumFractionDigits: d });
+
+    return (
+        <div className="fixed inset-0 z-50 flex justify-end bg-foreground/30" onClick={onClose}>
+            <div
+                className="w-full max-w-md h-full bg-background border-l shadow-xl flex flex-col overflow-hidden"
+                onClick={e => e.stopPropagation()}
+            >
+                {/* Header */}
+                <div className="px-5 py-4 border-b flex items-start justify-between gap-3 shrink-0">
+                    <div className="min-w-0">
+                        <Badge variant="outline" className="text-xs gap-1.5">
+                            <span className={`size-1.5 rounded-full ${HEALTH_DOT[bundle.status]}`} />
+                            {bundle.status}
+                        </Badge>
+                        <h2 className="mt-2 text-sm font-semibold truncate">
+                            {[clerk?.firstName, clerk?.lastName].filter(Boolean).join(' ') || clerk?.email || row.userId}
+                        </h2>
+                        <p className="text-xs text-muted-foreground mt-0.5">{bundle.reason}</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" className="size-7" onClick={onRecheck} title="Re-check">
+                            <RefreshCw className="size-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="size-7" onClick={onClose}>
+                            <X className="size-4" />
+                        </Button>
+                    </div>
                 </div>
 
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+                    <PanelSection title="Account">
+                        <PanelRow label="Account ID" value={<span className="font-mono text-[11px]">{row.accountId}</span>} />
+                        <PanelRow label="Checked at" value={new Date(bundle.checkedAt).toLocaleString()} />
+                    </PanelSection>
+
+                    {bundle.provisioning && (
+                        <PanelSection title="Provisioning (container)">
+                            <PanelRow label="State" value={bundle.provisioning.state} />
+                            <PanelRow label="Connection status" value={bundle.provisioning.connectionStatus} />
+                            <PanelRow label="Region" value={bundle.provisioning.region} />
+                            <PanelRow label="Reliability" value={bundle.provisioning.reliability} />
+                            <PanelRow label="Resource slots" value={bundle.provisioning.resourceSlots} />
+                            {!!bundle.provisioning.copyFactoryResourceSlots && (
+                                <PanelRow label="CopyFactory slots" value={bundle.provisioning.copyFactoryResourceSlots} />
+                            )}
+                            <PanelRow label="Platform" value={bundle.provisioning.platform} />
+                            <PanelRow label="Server" value={bundle.provisioning.server} />
+                            <PanelRow label="Login" value={bundle.provisioning.login as React.ReactNode} />
+                            <PanelRow label="Active connections" value={bundle.provisioning.connections.length} />
+                            {bundle.provisioning.connections.length > 0 && (
+                                <div className="mt-1 pl-2 border-l-2 border-gray-200 dark:border-gray-700">
+                                    {bundle.provisioning.connections.map((c, i) => (
+                                        <div key={i} className="text-[11px] text-gray-500 dark:text-gray-400">
+                                            {c.region ?? '—'} / {c.zone ?? '—'} {c.application ? `· ${c.application}` : ''}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </PanelSection>
+                    )}
+
+                    {bundle.accountInfo && (
+                        <PanelSection title="Account info">
+                            <PanelRow label="Trade allowed" value={bundle.accountInfo.tradeAllowed === null ? '—' : bundle.accountInfo.tradeAllowed ? '✓ yes' : '✗ no'} />
+                            <PanelRow label="Balance" value={fmtNum(bundle.accountInfo.balance)} />
+                            <PanelRow label="Equity" value={fmtNum(bundle.accountInfo.equity)} />
+                            <PanelRow label="Margin level" value={fmtNum(bundle.accountInfo.marginLevel)} />
+                            <PanelRow label="Currency" value={bundle.accountInfo.currency} />
+                            <PanelRow label="Leverage" value={bundle.accountInfo.leverage} />
+                        </PanelSection>
+                    )}
+
+                    {bundle.errors.length > 0 && (
+                        <PanelSection title="Errors">
+                            {bundle.errors.map((e, i) => (
+                                <div key={i} className="text-[11px] text-red-600 dark:text-red-400 py-0.5">{e}</div>
+                            ))}
+                        </PanelSection>
+                    )}
+                </div>
             </div>
         </div>
     );
