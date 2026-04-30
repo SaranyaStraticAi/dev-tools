@@ -28,10 +28,18 @@ export function SubscriptionStatusDialog({ email, currentStatus, currentPlan }: 
   const handleSave = async () => {
     setLoading(true);
     try {
-      await updateUserStatus(email, selectedCommand);
+      const result = await updateUserStatus(email, selectedCommand);
+      if (result?.error) {
+        alert(`Update failed: ${result.error}`);
+        return;
+      }
+      if (result?.warning) {
+        alert(result.warning);
+      }
       setOpen(false);
     } catch (error) {
       console.error('Failed to update status', error);
+      alert('Update failed — see console.');
     } finally {
       setLoading(false);
     }

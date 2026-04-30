@@ -16,7 +16,11 @@ export interface DirectoryUser {
   lastSignInAt: string | null;
   lastActiveAt: string | null;
 
-  // Billing (Postgres users table)
+  // Billing — Clerk publicMetadata (source of truth)
+  clerkPlan: string | null;
+  clerkPublicMetadata: Record<string, unknown> | null;
+
+  // Billing — Postgres users table (fallback)
   hasDbRow: boolean;
   planName: string | null;
   subscriptionStatus: string | null;
@@ -50,6 +54,8 @@ export interface DirectorySummary {
   live: number;
   dev: number;
   withPlan: number;
+  withClerkPlan: number;
+  planMismatch: number;
   brokerConnected: number;
   withStrategies: number;
   withChats: number;
@@ -202,11 +208,22 @@ export async function GET() {
       const threads = threadMap.get(clerkId) ?? null;
       const strat = stratMap.get(clerkId) ?? null;
 
+      const publicMetadata = (user.publicMetadata && typeof user.publicMetadata === 'object')
+        ? user.publicMetadata as Record<string, unknown>
+        : null;
+      const clerkPlanRaw = publicMetadata?.planName;
+      const clerkPlan = typeof clerkPlanRaw === 'string' && clerkPlanRaw.trim() !== ''
+        ? clerkPlanRaw
+        : null;
+
       const flags: string[] = [];
       if (!db) flags.push('no_db_row');
       if (!email) flags.push('no_email');
       if (email && duplicateEmails.has(email)) flags.push('duplicate_email');
       if (db && !db.email) flags.push('missing_db_email');
+      if (clerkPlan && db?.plan_name && clerkPlan.trim().toLowerCase() !== db.plan_name.trim().toLowerCase()) {
+        flags.push('plan_mismatch');
+      }
 
       rows.push({
         clerkId,
@@ -217,6 +234,9 @@ export async function GET() {
         createdAt: fmtDate(user.createdAt),
         lastSignInAt: fmtDate(user.lastSignInAt),
         lastActiveAt: fmtDate(user.lastActiveAt),
+
+        clerkPlan,
+        clerkPublicMetadata: publicMetadata && Object.keys(publicMetadata).length > 0 ? publicMetadata : null,
 
         hasDbRow: !!db,
         planName: db?.plan_name ?? null,
@@ -257,6 +277,8 @@ export async function GET() {
       live: rows.filter(r => r.clerkInstance === 'Live').length,
       dev: rows.filter(r => r.clerkInstance === 'Dev').length,
       withPlan: rows.filter(r => r.planName).length,
+      withClerkPlan: rows.filter(r => r.clerkPlan).length,
+      planMismatch: rows.filter(r => r.flags.includes('plan_mismatch')).length,
       brokerConnected: rows.filter(r => r.brokerConnected).length,
       withStrategies: rows.filter(r => r.strategyTotal > 0).length,
       withChats: rows.filter(r => r.chatThreadCount > 0).length,
