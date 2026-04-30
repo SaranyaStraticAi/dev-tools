@@ -63,7 +63,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                             <ThemeToggle />
                         </div>
                     </header>
-                    <main className="flex-1 bg-background p-4">
+                    <main className="min-w-0 flex-1 bg-background p-4">
                         {children}
                     </main>
                 </SidebarInset>

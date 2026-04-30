@@ -17,6 +17,7 @@ export function middleware(request: NextRequest) {
   // Proxy ALL /api requests to Grafana, EXCEPT for our local Next.js API routes
   // This ensures we catch all Grafana APIs (alerts, rules, datasources, etc.) automatically
   const isLocalApi = pathname.startsWith('/api/clerk-search') ||
+    pathname.startsWith('/api/clerk-users') ||
     pathname.startsWith('/api/delete') ||
     pathname.startsWith('/api/grafana') ||
     pathname.startsWith('/api/query') ||
