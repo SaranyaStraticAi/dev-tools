@@ -9,31 +9,55 @@ type Mode = 'cinematic' | 'stats';
 
 export default function PromptTesterPage() {
     const [mode, setMode] = useState<Mode>('cinematic');
-    const [cinematicSystem, setCinematicSystem] = useState(DEFAULT_SYSTEM_PROMPT);
-    const [cinematicUser, setCinematicUser]     = useState(DEFAULT_USER_TEMPLATE);
-    const [statsSystem, setStatsSystem]         = useState(STATS_SYSTEM_PROMPT);
-    const [statsUser, setStatsUser]             = useState(STATS_USER_TEMPLATE);
+    // Start empty — always loaded from Azure (seeded on first boot if blob missing)
+    const [cinematicSystem, setCinematicSystem] = useState('');
+    const [cinematicUser, setCinematicUser]     = useState('');
+    const [statsSystem, setStatsSystem]         = useState('');
+    const [statsUser, setStatsUser]             = useState('');
     const [showPrompts, setShowPrompts]         = useState(false);
     const [promptsLoading, setPromptsLoading]   = useState(true);
 
-    // On mount: try to load published prompts from Azure Blob.
-    // Falls back to hardcoded defaults if blob doesn't exist or fetch fails.
+    // On mount: load prompts from Azure Blob.
+    // If blob doesn't exist yet (first boot), auto-seed Azure with hardcoded defaults
+    // so Azure is the single source of truth from day one.
     useEffect(() => {
         (async () => {
             try {
                 const res = await fetch('/api/prompt-config');
                 if (!res.ok) throw new Error('fetch failed');
                 const data = await res.json();
+
                 if (data.exists && data.prompts) {
+                    // ✅ Azure has prompts — load them
                     const { cinematicSystem, cinematicUser, statsSystem, statsUser } = data.prompts;
                     if (cinematicSystem) setCinematicSystem(cinematicSystem);
                     if (cinematicUser)   setCinematicUser(cinematicUser);
                     if (statsSystem)     setStatsSystem(statsSystem);
                     if (statsUser)       setStatsUser(statsUser);
+                } else {
+                    // 🌱 First boot — seed Azure with hardcoded defaults
+                    await fetch('/api/prompt-config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            cinematicSystem: DEFAULT_SYSTEM_PROMPT,
+                            cinematicUser:   DEFAULT_USER_TEMPLATE,
+                            statsSystem:     STATS_SYSTEM_PROMPT,
+                            statsUser:       STATS_USER_TEMPLATE,
+                        }),
+                    });
+                    // Set state from the seeded values
+                    setCinematicSystem(DEFAULT_SYSTEM_PROMPT);
+                    setCinematicUser(DEFAULT_USER_TEMPLATE);
+                    setStatsSystem(STATS_SYSTEM_PROMPT);
+                    setStatsUser(STATS_USER_TEMPLATE);
                 }
-                // data.exists === false → blob not found, keep defaults
             } catch {
-                // network / parse error → keep defaults silently
+                // Network / parse error → fall back to hardcoded defaults silently
+                setCinematicSystem(DEFAULT_SYSTEM_PROMPT);
+                setCinematicUser(DEFAULT_USER_TEMPLATE);
+                setStatsSystem(STATS_SYSTEM_PROMPT);
+                setStatsUser(STATS_USER_TEMPLATE);
             } finally {
                 setPromptsLoading(false);
             }
