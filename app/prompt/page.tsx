@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DEFAULT_SYSTEM_PROMPT, DEFAULT_USER_TEMPLATE, STATS_SYSTEM_PROMPT, STATS_USER_TEMPLATE, STATIC_NEWS, NewsItem } from './constants';
 import NewsCarousel from './components/NewsCarousel';
 import PromptConfig from './components/PromptConfig';
@@ -14,6 +14,31 @@ export default function PromptTesterPage() {
     const [statsSystem, setStatsSystem]         = useState(STATS_SYSTEM_PROMPT);
     const [statsUser, setStatsUser]             = useState(STATS_USER_TEMPLATE);
     const [showPrompts, setShowPrompts]         = useState(false);
+    const [promptsLoading, setPromptsLoading]   = useState(true);
+
+    // On mount: try to load published prompts from Azure Blob.
+    // Falls back to hardcoded defaults if blob doesn't exist or fetch fails.
+    useEffect(() => {
+        (async () => {
+            try {
+                const res = await fetch('/api/prompt-config');
+                if (!res.ok) throw new Error('fetch failed');
+                const data = await res.json();
+                if (data.exists && data.prompts) {
+                    const { cinematicSystem, cinematicUser, statsSystem, statsUser } = data.prompts;
+                    if (cinematicSystem) setCinematicSystem(cinematicSystem);
+                    if (cinematicUser)   setCinematicUser(cinematicUser);
+                    if (statsSystem)     setStatsSystem(statsSystem);
+                    if (statsUser)       setStatsUser(statsUser);
+                }
+                // data.exists === false → blob not found, keep defaults
+            } catch {
+                // network / parse error → keep defaults silently
+            } finally {
+                setPromptsLoading(false);
+            }
+        })();
+    }, []);
 
     const systemPrompt    = mode === 'cinematic' ? cinematicSystem : statsSystem;
     const userTemplate    = mode === 'cinematic' ? cinematicUser   : statsUser;
@@ -90,6 +115,17 @@ export default function PromptTesterPage() {
             setLoadingStep('');
         }
     };
+
+    if (promptsLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-background">
+                <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                    <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 animate-spin rounded-full" />
+                    <p className="text-xs">Loading prompts from Azure…</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex flex-col items-center min-h-screen bg-background py-12 px-4 gap-8">
