@@ -15,6 +15,7 @@
     "@azure/identity": "^4.13.1",
     "@azure/msal-browser": "^4.27.0",
     "@azure/msal-react": "^3.0.23",
+    "@azure/storage-blob": "^12.31.0",
     "@clerk/backend": "^2.24.0",
     "@clerk/nextjs": "^6.36.8",
     "@radix-ui/react-avatar": "^1.1.11",
