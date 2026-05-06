@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image, Link2, Network, LayoutGrid, ChevronDown } from 'lucide-react';
+import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image, Link2, Network, LayoutGrid, ChevronDown, Mail } from 'lucide-react';
 import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
 import { useState, useEffect } from 'react';
 
@@ -58,9 +58,10 @@ const navGroups = [
   {
     label: 'Marketing',
     items: [
-      { name: 'Image Generator',  href: '/image-generator',  icon: Image },
-      { name: 'Link Tracker',     href: '/link-tracker',     icon: Link2 },
-      { name: 'Prompt Tester',    href: '/prompt',           icon: Code },
+      { name: 'Newsletter Tester',   href: '/newsletter-tester',   icon: Mail },
+      { name: 'Image Generator',     href: '/image-generator',     icon: Image },
+      { name: 'Link Tracker',        href: '/link-tracker',        icon: Link2 },
+      { name: 'Prompt Tester',       href: '/prompt',              icon: Code },
     ],
   },
   {
@@ -70,6 +71,7 @@ const navGroups = [
     ],
   },
 ];
+
 
 
 function CollapsibleNavGroup({
