@@ -146,7 +146,6 @@ export default function NewsletterTesterPage() {
                     rawText={rawText}
                     parsed={parsed}
                     newsletterType={type}
-                    onDownload={downloadHtml}
                 />
             )}
 
