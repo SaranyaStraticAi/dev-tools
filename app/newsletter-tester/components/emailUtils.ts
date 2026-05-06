@@ -6,33 +6,46 @@
 
 // ── Parse all named tokens from raw AI output ─────────────────────────────────
 export function parseNewsletter(raw: string) {
-    const get = (label: string) => {
-        const m = raw.match(new RegExp(`^${label}:\\s*(.+)$`, 'im'));
-        return m ? m[1].trim() : '';
-    };
-    return {
-        subject:         get('SUBJECT'),
-        preview:         get('PREVIEW'),
-        opening:         get('OPENING'),
-        section1_title:  get('SECTION1_TITLE'),
-        section1_body:   get('SECTION1_BODY'),
-        survey_question: get('SURVEY_QUESTION'),
-        survey_opt1:     get('SURVEY_OPT1'),
-        survey_opt2:     get('SURVEY_OPT2'),
-        survey_opt3:     get('SURVEY_OPT3'),
-        survey_opt4:     get('SURVEY_OPT4'),
-        section2_title:  get('SECTION2_TITLE'),
-        section2_body:   get('SECTION2_BODY'),
-        cta:             get('CTA'),
-        section3_title:  get('SECTION3_TITLE'),
-        section3_body:   get('SECTION3_BODY'),
-        takeaway1:       get('TAKEAWAY1'),
-        takeaway2:       get('TAKEAWAY2'),
-        takeaway3:       get('TAKEAWAY3'),
-        source1:         get('SOURCE1'),
-        source2:         get('SOURCE2'),
+    // Initialize with defaults for core keys to ensure UI compatibility
+    const results: Record<string, string> = {
+        subject: '',
+        preview: '',
+        opening: '',
+        section1_title: '',
+        section1_body: '',
+        survey_question: '',
+        survey_opt1: '',
+        survey_opt2: '',
+        survey_opt3: '',
+        survey_opt4: '',
+        section2_title: '',
+        section2_body: '',
+        cta: '',
+        section3_title: '',
+        section3_body: '',
+        takeaway1: '',
+        takeaway2: '',
+        takeaway3: '',
+        source1: '',
+        source2: '',
         body: '', // kept for puzzle compat
     };
+
+    // Regex explanation:
+    // ^([A-Z0-9_]+):    -> Matches a label at the start of a line (e.g., SUBJECT:)
+    // \s*               -> Matches optional whitespace
+    // ([\s\S]*?)        -> Captures everything (including newlines) lazily
+    // (?=\n[A-Z0-9_]+:|$) -> Until it sees another label at start of line OR end of string
+    const regex = /^([A-Z0-9_]+):\s*([\s\S]*?)(?=\n[A-Z0-9_]+:|$)/gim;
+
+    let match;
+    while ((match = regex.exec(raw)) !== null) {
+        const label = match[1].toLowerCase();
+        const value = match[2].trim();
+        results[label] = value;
+    }
+
+    return results;
 }
 
 // ── Branded SVG banner ────────────────────────────────────────────────────────
@@ -81,58 +94,63 @@ export function generateHeroBannerDataUrl(subject: string): string {
     return `data:image/svg+xml;base64,${b64}`;
 }
 
-// ── Weekly renderer — pure token substitution, no parsing logic ───────────────
-// Template HTML comes entirely from the Azure blob (weeklyTemplate key).
-// Designer edits HTML in dev-tools → Publish → Python pipeline uses same blob.
-export function weeklyBodyToHtml(_body: string): string { return ''; } // legacy no-op
-
+// ── Weekly renderer — pure token substitution ────────────────────────────────
 export function renderTemplate(
     template: string,
-    parsed: ReturnType<typeof parseNewsletter>,
+    parsed: Record<string, string>,
     type: 'weekly' | 'puzzle' = 'weekly'
 ): string {
-    const bannerSrc = generateHeroBannerDataUrl(parsed.subject);
-    const bannerTag = `<img src="${bannerSrc}" alt="${parsed.subject.replace(/"/g, "'")}" width="560" style="display:block;width:100%;max-width:560px;height:auto;"/>`;
+    const bannerSrc = generateHeroBannerDataUrl(parsed.subject || '');
+    const bannerTag = `<img src="${bannerSrc}" alt="${(parsed.subject || '').replace(/"/g, "'")}" width="560" style="display:block;width:100%;max-width:560px;height:auto;"/>`;
     const nl = (s: string) => s.replace(/\\n\\n/g, '<br><br>').replace(/\n\n/g, '<br><br>');
 
-    const filled = template
-        .replace(/\{banner\}/g,          bannerTag)
-        .replace(/\{subject\}/g,         parsed.subject)
-        .replace(/\{preview\}/g,         parsed.preview)
-        .replace(/\{opening\}/g,         nl(parsed.opening))
-        .replace(/\{section1_title\}/g,  parsed.section1_title)
-        .replace(/\{section1_body\}/g,   nl(parsed.section1_body))
-        .replace(/\{survey_question\}/g, parsed.survey_question)
-        .replace(/\{survey_opt1\}/g,     parsed.survey_opt1)
-        .replace(/\{survey_opt2\}/g,     parsed.survey_opt2)
-        .replace(/\{survey_opt3\}/g,     parsed.survey_opt3)
-        .replace(/\{survey_opt4\}/g,     parsed.survey_opt4)
-        .replace(/\{section2_title\}/g,  parsed.section2_title)
-        .replace(/\{section2_body\}/g,   nl(parsed.section2_body))
-        .replace(/\{cta\}/g,             parsed.cta)
-        .replace(/\{section3_title\}/g,  parsed.section3_title)
-        .replace(/\{section3_body\}/g,   nl(parsed.section3_body))
-        .replace(/\{takeaway1\}/g,       parsed.takeaway1)
-        .replace(/\{takeaway2\}/g,       parsed.takeaway2)
-        .replace(/\{takeaway3\}/g,       parsed.takeaway3)
-        .replace(/\{source1\}/g,         parsed.source1)
-        .replace(/\{source2\}/g,         parsed.source2);
+    // Start with the provided template (from Azure)
+    let filled = template;
+
+    // 1. Special handling for the banner
+    filled = filled.split('{banner}').join(bannerTag);
+
+    // 1.5 Handle virtual "list" tokens (e.g. {sources_list} replaces all SOURCE1, SOURCE2... items)
+    const buildList = (prefix: string, formatter: (v: string) => string) => {
+        return Object.entries(parsed)
+            .filter(([k]) => k.startsWith(prefix))
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([_, v]) => formatter(v))
+            .join('');
+    };
+
+    const sourcesHtml   = buildList('source',   v => `<li style="margin-bottom:8px;"><a href="${v}" target="_blank" style="color:#8a50db;text-decoration:underline;">${v}</a></li>`);
+    const takeawaysHtml = buildList('takeaway', v => `<li style="margin-bottom:8px;">${v}</li>`);
+
+    if (sourcesHtml)   filled = filled.split('{sources_list}').join(`<ul style="padding-left:20px;margin:10px 0;">${sourcesHtml}</ul>`);
+    if (takeawaysHtml) filled = filled.split('{takeaways_list}').join(`<ul style="padding-left:20px;margin:10px 0;">${takeawaysHtml}</ul>`);
+
+    // 2. Dynamically replace all tokens found in the parsed AI output
+    // This supports {source1}, {source2}, {source3}... as long as they are in the template
+    Object.entries(parsed).forEach(([key, value]) => {
+        const token = `{${key}}`;
+        filled = filled.split(token).join(nl(value));
+    });
 
     const bg = '#fafafa';
-    return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional //EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
-<head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>${parsed.subject}</title>
-<style>body{margin:0;padding:0;font-family:Helvetica,Arial,sans-serif;background:${bg};}table{border-spacing:0;border-collapse:collapse;}img{outline:none;text-decoration:none;border:none;}p{margin:0 0 10px 0;}a{color:#8a50db;text-decoration:underline;}</style>
-</head>
-<body style="margin:0;padding:0;background:${bg};">
-<div style="display:none;font-size:1px;color:${bg};max-height:0;overflow:hidden;">${parsed.preview}&nbsp;</div>
-<table width="100%" cellpadding="0" cellspacing="0" style="background:${bg};">
-  <tr><td align="center" style="padding:20px 10px;">${filled}</td></tr>
-</table>
-</body></html>`;
+    // Returning a clean div wrapper instead of a full <html> document.
+    // This makes it 100% HubSpot compatible while keeping the professional preview.
+    return `
+<div style="background-color:${bg}; padding: 20px 10px; font-family: Helvetica, Arial, sans-serif;">
+  <!-- Preheader text for email clients -->
+  <div style="display:none;font-size:1px;color:${bg};max-height:0;overflow:hidden;">${parsed.preview || ''}&nbsp;</div>
+  
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:${bg};">
+    <tr>
+      <td align="center">
+        ${filled}
+      </td>
+    </tr>
+  </table>
+</div>`;
 }
+
+
 
 // ── Tuesday Puzzle builder ────────────────────────────────────────────────────
 function parsePuzzleBody(body: string) {

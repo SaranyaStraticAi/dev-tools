@@ -17,6 +17,7 @@ interface TemplateEditorProps {
     onTemplateTypeChange: (t: NewsletterType) => void;
     onTemplateChange: (val: string) => void;
     onReloadFromAzure: (type: NewsletterType) => void;
+    parsed: Record<string, string> | null;
 }
 
 export default function TemplateEditor({
@@ -26,11 +27,17 @@ export default function TemplateEditor({
     onTemplateTypeChange,
     onTemplateChange,
     onReloadFromAzure,
+    parsed,
 }: TemplateEditorProps) {
     const [showTemplate, setShowTemplate] = useState(false);
 
     const currentTemplate = templateType === 'weekly' ? weeklyTemplate : puzzleTemplate;
-    const tokens          = templateType === 'weekly' ? WEEKLY_TOKENS : PUZZLE_TOKENS;
+    
+    // Dynamic tokens: if we have parsed data, show those keys. 
+    // Always include the virtual list helpers.
+    const tokens = parsed 
+        ? [...Object.keys(parsed).map(k => `{${k}}`), '{sources_list}', '{takeaways_list}']
+        : (templateType === 'weekly' ? WEEKLY_TOKENS : PUZZLE_TOKENS);
 
     return (
         <div className="w-full max-w-3xl border rounded-2xl overflow-hidden bg-card shadow-sm">
