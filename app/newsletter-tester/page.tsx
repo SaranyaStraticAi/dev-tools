@@ -136,6 +136,7 @@ export default function NewsletterTesterPage() {
                 onTemplateTypeChange={setTemplateType}
                 onTemplateChange={handleTemplateChange}
                 onReloadFromAzure={reloadTemplateFromAzure}
+                parsed={parsed}
             />
 
             {/* ── Output panel (Preview / HTML / Raw tabs) ─────────────────── */}
