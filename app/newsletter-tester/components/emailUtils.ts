@@ -48,60 +48,17 @@ export function parseNewsletter(raw: string) {
     return results;
 }
 
-// ── Branded SVG banner ────────────────────────────────────────────────────────
-export function generateHeroBannerDataUrl(subject: string): string {
-    const words = subject.split(' ');
-    let splitAt = Math.max(1, Math.round(words.length * 0.45));
-    for (let i = Math.max(1, splitAt - 2); i < Math.min(words.length, splitAt + 3); i++) {
-        if (words.slice(0, i).join(' ').length <= 42) splitAt = i;
-        else break;
-    }
-    const line1 = words.slice(0, splitAt).join(' ');
-    const line2 = words.slice(splitAt).join(' ');
-    const esc = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    const l1 = esc(line1), l2 = esc(line2);
-    const y1 = l2 ? '220' : '260';
-    const btnY = l2 ? '340' : '320';
-    const btnTY = String(parseInt(btnY) + 30);
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="500" viewBox="0 0 1200 500">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#B8A4E8"/><stop offset="35%" stop-color="#C084E8"/>
-      <stop offset="65%" stop-color="#D870C0"/><stop offset="100%" stop-color="#F472B6"/>
-    </linearGradient>
-    <radialGradient id="bp" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#7C3AED" stop-opacity="0.75"/><stop offset="100%" stop-color="#7C3AED" stop-opacity="0"/></radialGradient>
-    <radialGradient id="bk" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#EC4899" stop-opacity="0.7"/><stop offset="100%" stop-color="#EC4899" stop-opacity="0"/></radialGradient>
-    <radialGradient id="bb" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#8B5CF6" stop-opacity="0.65"/><stop offset="100%" stop-color="#8B5CF6" stop-opacity="0"/></radialGradient>
-    <radialGradient id="ray" cx="30%" cy="50%" r="70%"><stop offset="0%" stop-color="rgba(255,255,255,0.18)"/><stop offset="100%" stop-color="rgba(255,255,255,0)"/></radialGradient>
-  </defs>
-  <rect width="1200" height="500" fill="url(#bg)"/>
-  <rect width="1200" height="500" fill="url(#ray)"/>
-  <ellipse cx="-30" cy="420" rx="280" ry="260" fill="url(#bp)"/>
-  <ellipse cx="1230" cy="-30" rx="300" ry="280" fill="url(#bk)"/>
-  <ellipse cx="1100" cy="80" rx="220" ry="200" fill="url(#bb)" opacity="0.6"/>
-  <ellipse cx="1250" cy="520" rx="240" ry="220" fill="url(#bk)" opacity="0.4"/>
-  <text x="1045" y="58" font-family="Arial,sans-serif" font-size="22" font-weight="300" fill="rgba(255,255,255,0.95)">vibe</text>
-  <text x="1094" y="56" font-family="Arial,sans-serif" font-size="16" font-weight="700" fill="white">&#x26A1;</text>
-  <text x="1045" y="88" font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="white">trader</text>
-  <text x="80" y="${y1}" font-family="Arial,sans-serif" font-size="58" font-weight="300" fill="rgba(255,255,255,0.95)">${l1}</text>
-  ${l2 ? `<text x="80" y="295" font-family="Arial,sans-serif" font-size="66" font-weight="800" fill="white">${l2}</text>` : ''}
-  <rect x="80" y="${btnY}" width="262" height="52" rx="26" fill="rgba(45,20,90,0.88)"/>
-  <text x="211" y="${btnTY}" text-anchor="middle" font-family="Arial,sans-serif" font-size="17" fill="white">Explore <tspan font-weight="700">Vibe Trader</tspan></text>
-  <rect x="356" y="${btnY}" width="220" height="52" rx="26" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.5)" stroke-width="1.5"/>
-  <text x="466" y="${btnTY}" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" fill="rgba(255,255,255,0.9)">vibetrader.com</text>
-</svg>`;
-    const b64 = typeof btoa !== 'undefined' ? btoa(unescape(encodeURIComponent(svg))) : Buffer.from(svg).toString('base64');
-    return `data:image/svg+xml;base64,${b64}`;
-}
+// ── Branded SVG banner generator removed (we now use /api/generate-banner to upload PNGs) ──
 
 // ── Weekly renderer — pure token substitution ────────────────────────────────
 export function renderTemplate(
     template: string,
     parsed: Record<string, string>,
-    type: 'weekly' | 'puzzle' = 'weekly'
+    type: 'weekly' | 'puzzle' = 'weekly',
+    bannerUrl: string = ''
 ): string {
-    const bannerSrc = generateHeroBannerDataUrl(parsed.subject || '');
-    const bannerTag = `<img src="${bannerSrc}" alt="${(parsed.subject || '').replace(/"/g, "'")}" width="560" style="display:block;width:100%;max-width:560px;height:auto;"/>`;
+    const bannerSrc = bannerUrl || 'https://via.placeholder.com/1200x500.png?text=Vibe+Trader';
+    const bannerTag = `<img src="${bannerSrc}" alt="${(parsed.subject || '').replace(/"/g, "'")}" style="display:block;width:100%;max-width:600px;height:auto;"/>`;
     const nl = (s: string) => s.replace(/\\n\\n/g, '<br><br>').replace(/\n\n/g, '<br><br>');
 
     // Start with the provided template (from Azure)

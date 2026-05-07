@@ -27,6 +27,7 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/api/user-directory') ||
     pathname.startsWith('/api/user-reports') ||
     pathname.startsWith('/api/generate-image') ||
+    pathname.startsWith('/api/generate-banner') ||
     pathname.startsWith('/api/prompt') ||
     pathname.startsWith('/api/newsletter-generate') ||
     pathname.startsWith('/api/newsletter-prompts') ||
