@@ -7,17 +7,30 @@ export async function GET(req: NextRequest) {
     const subreddit = searchParams.get('subreddit') || 'Forex';
     const timeframe = searchParams.get('t') || 'week';
     const limit     = searchParams.get('limit') || '10';
-    const url = `https://old.reddit.com/r/${subreddit}/top.json?t=${timeframe}&limit=${limit}`;
+
+    // The target Reddit URL
+    const targetUrl = `https://www.reddit.com/r/${subreddit}/top.json?t=${timeframe}&limit=${limit}`;
+    
+    // Use a public proxy to bypass the Vercel IP block
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+
     try {
-        const res = await fetch(url, {
+        const res = await fetch(proxyUrl, {
             headers: { 
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' 
             },
         });
+
         if (!res.ok) {
-            return NextResponse.json({ error: `Reddit returned ${res.status}` }, { status: 502 });
+            return NextResponse.json({ error: `Reddit Proxy returned ${res.status}` }, { status: 502 });
         }
+
         const data = await res.json();
+        
+        if (!data || !data.data || !data.data.children) {
+             return NextResponse.json({ error: 'Invalid response from Reddit' }, { status: 502 });
+        }
+
         const posts = (data.data.children as any[]).map((item, i) => {
             const p = item.data;
             return {
