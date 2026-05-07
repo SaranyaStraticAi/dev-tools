@@ -41,6 +41,7 @@ const FLAG_META: Record<string, { label: string; cls: string; tip: string }> = {
   no_email:         { label: 'No Email',    cls: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400', tip: 'Clerk account has no email address associated' },
   duplicate_email:  { label: 'Dup Email',   cls: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400', tip: 'Same email exists in both Dev and Live Clerk instances — same person signed up twice' },
   missing_db_email: { label: 'DB Email∅',   cls: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400', tip: 'Postgres users row exists but the email column is blank' },
+  plan_mismatch:    { label: 'Plan ≠',      cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',    tip: 'Clerk publicMetadata.plan and Postgres users.plan_name disagree — billing-source drift' },
 };
 
 function FlagBadges({ flags }: { flags: string[] }) {
@@ -173,12 +174,31 @@ function UserPanel({ user, onClose }: { user: DirectoryUser; onClose: () => void
 
           {/* Billing */}
           <Section icon={CreditCard} title="Billing">
-            <Row label="Plan" value={
+            <Row label="Plan (Clerk)" value={
+              user.clerkPlan
+                ? <span className="font-medium text-emerald-600 dark:text-emerald-400 capitalize">{user.clerkPlan}</span>
+                : <span className="italic text-gray-400">—</span>
+            } />
+            <Row label="Plan (DB)" value={
               user.planName
                 ? <span className="font-medium text-emerald-600 dark:text-emerald-400 capitalize">{user.planName}</span>
                 : <span className="italic text-gray-400">Free</span>
             } />
             <Row label="Sub Status" value={<SubStatusBadge status={user.subscriptionStatus} />} />
+            <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="text-xs text-gray-500 dark:text-gray-400">Clerk publicMetadata</span>
+                {user.clerkPublicMetadata && (
+                  <button onClick={() => copy(JSON.stringify(user.clerkPublicMetadata, null, 2))}
+                    className="text-gray-400 hover:text-blue-500" title="Copy JSON">
+                    <Copy size={10} />
+                  </button>
+                )}
+              </div>
+              <pre className="text-[10px] font-mono bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded p-2 overflow-x-auto whitespace-pre text-gray-700 dark:text-gray-300 max-h-48">
+{user.clerkPublicMetadata ? JSON.stringify(user.clerkPublicMetadata, null, 2) : '(empty)'}
+              </pre>
+            </div>
             <Row label="Broker Paid" value={
               <span className={user.hasPaidForBroker ? 'text-green-600 dark:text-green-400' : 'text-gray-400'}>
                 {user.hasPaidForBroker ? 'Yes' : 'No'}
@@ -286,7 +306,9 @@ function SummaryCards({ s, filter, setFilter }: { s: DirectorySummary; filter: F
     { label: 'Total',          value: s.total,          color: 'blue',    key: null,         val: '' },
     { label: 'Live',           value: s.live,            color: 'green',   key: 'instance',   val: 'Live' },
     { label: 'Dev',            value: s.dev,             color: 'purple',  key: 'instance',   val: 'Dev' },
-    { label: 'Paid Plan',      value: s.withPlan,        color: 'emerald', key: 'plan',       val: 'paid' },
+    { label: 'Plan (Clerk)',   value: s.withClerkPlan,   color: 'emerald', key: 'plan',       val: 'paid' },
+    { label: 'Plan (DB)',      value: s.withPlan,        color: 'emerald', key: 'plan',       val: 'paid' },
+    { label: 'Plan ≠ DB',      value: s.planMismatch,    color: 'amber',   key: 'flags',      val: 'plan_mismatch' },
     { label: 'Broker On',      value: s.brokerConnected, color: 'teal',    key: 'broker',     val: 'connected' },
     { label: 'Has Strategies', value: s.withStrategies,  color: 'indigo',  key: null,         val: '' },
     { label: 'Has Chats',      value: s.withChats,       color: 'sky',     key: null,         val: '' },
@@ -297,13 +319,14 @@ function SummaryCards({ s, filter, setFilter }: { s: DirectorySummary; filter: F
     green: 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400',
     purple: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400',
     emerald: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400',
+    amber: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
     teal: 'bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400',
     indigo: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400',
     sky: 'bg-sky-100 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400',
     red: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
   };
   return (
-    <div className="grid grid-cols-4 sm:grid-cols-8 gap-3">
+    <div className="grid grid-cols-4 sm:grid-cols-5 lg:grid-cols-10 gap-3">
       {cards.map(c => {
         const isActive = c.key && (filter as any)[c.key] === c.val;
         return (
@@ -363,8 +386,8 @@ export default function UserDirectoryPage() {
   const filtered = useMemo(() => {
     let r = users;
     if (filters.instance) r = r.filter(u => u.clerkInstance === filters.instance);
-    if (filters.plan === 'paid') r = r.filter(u => !!u.planName);
-    if (filters.plan === 'free') r = r.filter(u => !u.planName);
+    if (filters.plan === 'paid') r = r.filter(u => !!u.clerkPlan || !!u.planName);
+    if (filters.plan === 'free') r = r.filter(u => !u.clerkPlan && !u.planName);
     if (filters.broker === 'connected') r = r.filter(u => u.brokerConnected);
     if (filters.broker === 'disconnected') r = r.filter(u => !u.brokerConnected);
     if (filters.flags) r = r.filter(u => u.flags.includes(filters.flags));
@@ -373,6 +396,7 @@ export default function UserDirectoryPage() {
       r = r.filter(u =>
         u.email?.toLowerCase().includes(q) || u.clerkId.toLowerCase().includes(q) ||
         u.firstName?.toLowerCase().includes(q) || u.lastName?.toLowerCase().includes(q) ||
+        u.clerkPlan?.toLowerCase().includes(q) ||
         u.planName?.toLowerCase().includes(q) || u.metaApiAccountId?.toLowerCase().includes(q)
       );
     }
@@ -425,7 +449,7 @@ export default function UserDirectoryPage() {
               {key === 'instance' && <><option value="">All instances</option><option value="Live">Live</option><option value="Dev">Dev</option></>}
               {key === 'plan' && <><option value="">All plans</option><option value="paid">Paid</option><option value="free">Free</option></>}
               {key === 'broker' && <><option value="">All broker</option><option value="connected">Connected</option><option value="disconnected">Not connected</option></>}
-              {key === 'flags' && <><option value="">All flags</option><option value="no_db_row">No DB Row</option><option value="no_email">No Email</option><option value="duplicate_email">Duplicate Email</option></>}
+              {key === 'flags' && <><option value="">All flags</option><option value="no_db_row">No DB Row</option><option value="no_email">No Email</option><option value="duplicate_email">Duplicate Email</option><option value="plan_mismatch">Plan Mismatch</option></>}
             </select>
           ))}
           <button onClick={() => setFilters({ search: '', instance: '', plan: '', broker: '', flags: '' })}
@@ -447,7 +471,8 @@ export default function UserDirectoryPage() {
                   <tr>
                     <Th label="User" sortKey="email" {...thProps} />
                     <Th label="Instance" sortKey="clerkInstance" {...thProps} />
-                    <Th label="Plan" sortKey="planName" {...thProps} />
+                    <Th label="Plan (Clerk)" sortKey="clerkPlan" tip="Source of truth — publicMetadata.plan from Clerk" {...thProps} />
+                    <Th label="Plan (DB)" sortKey="planName" tip="Fallback — users.plan_name from Postgres" {...thProps} />
                     <Th label="Sub Status" sortKey="subscriptionStatus" tip="Stripe subscription status — hover each badge for meaning" {...thProps} />
                     <Th label="Broker" sortKey="brokerConnected" {...thProps} />
                     <Th label="MetaAPI ID" sortKey="metaApiAccountId" {...thProps} />
@@ -465,7 +490,7 @@ export default function UserDirectoryPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={14} className="text-center py-12 text-gray-400 text-sm">No users found.</td></tr>
+                    <tr><td colSpan={15} className="text-center py-12 text-gray-400 text-sm">No users found.</td></tr>
                   ) : filtered.map(u => (
                     <tr key={u.clerkId}
                       onClick={() => setSelected(u)}
@@ -487,7 +512,13 @@ export default function UserDirectoryPage() {
                         </span>
                       </td>
 
-                      {/* Plan */}
+                      {/* Plan (Clerk) */}
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        {u.clerkPlan ? <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400 capitalize">{u.clerkPlan}</span>
+                          : <span className="text-xs text-gray-400 italic">—</span>}
+                      </td>
+
+                      {/* Plan (DB) */}
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         {u.planName ? <span className="text-xs font-medium text-emerald-700 dark:text-emerald-400 capitalize">{u.planName}</span>
                           : <span className="text-xs text-gray-400 italic">Free</span>}

@@ -35,7 +35,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         const allowedEmployees = [
             { email: 'gowtham@vibetradingai.com', password: 'Gowtham@video' },
-            { email: 'kalyani@vibetradingai.com', password: 'kalyani@video' }
+            { email: 'kalyani@vibetradingai.com', password: 'kalyani@video' },
+            { email: 'ketki@vibetrader.com', password: 'ketki@designer' }
         ];
 
         const match = allowedEmployees.find(emp => emp.email === email && emp.password === password);
@@ -63,7 +64,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                             <ThemeToggle />
                         </div>
                     </header>
-                    <main className="flex-1 bg-background p-4">
+                    <main className="min-w-0 flex-1 bg-background p-4">
                         {children}
                     </main>
                 </SidebarInset>

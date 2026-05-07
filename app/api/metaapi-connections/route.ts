@@ -70,17 +70,17 @@ export interface ConnectionRow {
     lifetimeTrades: number;
     deployedHoursAccrued: number;
     lifetimeDeployments: number;
-    deployedHoursRemaining: number; // 60 - accrued (free tier limit)
+    deployedHoursRemaining: number;
     lastTradeAt: string | null;
     lastDeployAt: string | null;
     convertedAt: string | null;
     convertedReason: string | null;
 
-    // Cost (computed from usage + MetaAPI rate)
-    lifetimeCostUsd: number;       // deployedHoursAccrued × $0.013
-    minBilledCostUsd: number;      // lifetimeDeployments × $0.078 (6h min per deploy)
-    actualCostUsd: number;         // max(lifetimeCostUsd, minBilledCostUsd) — what MetaAPI actually charges
-    currentSessionCostUsd: number; // cost of current deployed session if deployed now
+    // Cost
+    lifetimeCostUsd: number;
+    minBilledCostUsd: number;
+    actualCostUsd: number;
+    currentSessionCostUsd: number;
 }
 
 export interface ConnectionsSummary {
@@ -95,9 +95,9 @@ export interface ConnectionsSummary {
     metaApiLiveData: boolean;
     totalDeployedHours: number;
     avgDeployedHours: number;
-    totalActualCostUsd: number;        // sum of actualCostUsd across all accounts
-    totalCurrentSessionCostUsd: number; // cost of all currently-deployed accounts
-    projectedMonthlyCostUsd: number;   // based on currently-deployed × 720h/month
+    totalActualCostUsd: number;
+    totalCurrentSessionCostUsd: number;
+    projectedMonthlyCostUsd: number;
 }
 
 const CLERK_INSTANCES = [
@@ -109,7 +109,6 @@ const FREE_TIER_HOURS_LIMIT = 60;
 
 // MetaAPI billing rate — configurable via METAAPI_RATE_PER_HOUR env var
 // Default $0.0152/h ≈ $11/month per always-on account (720h × $0.0152)
-// Set METAAPI_RATE_PER_HOUR in .env.local to match your actual MetaAPI invoice
 const METAAPI_RATE_PER_HOUR = parseFloat(process.env.METAAPI_RATE_PER_HOUR || '0.0152');
 const METAAPI_MIN_HOURS_PER_DEPLOY = 6;
 const METAAPI_MIN_COST_PER_DEPLOY = METAAPI_RATE_PER_HOUR * METAAPI_MIN_HOURS_PER_DEPLOY;
@@ -214,22 +213,16 @@ export async function GET() {
             const deployedHoursAccrued = Number(usage?.deployedHoursAccrued ?? 0);
             const lifetimeDeployments = Number(usage?.lifetimeDeployments ?? 0);
 
-            // Cost calculation
-            // MetaAPI charges per hour but bills a 6h minimum on every deploy start.
-            // Actual cost = max(hours × rate, deployments × 6h-min × rate)
             const lifetimeCostUsd = deployedHoursAccrued * METAAPI_RATE_PER_HOUR;
             const minBilledCostUsd = lifetimeDeployments * METAAPI_MIN_COST_PER_DEPLOY;
             const actualCostUsd = Math.max(lifetimeCostUsd, minBilledCostUsd);
 
-            // Current session cost: if deployed right now, how long has this session been running?
             const isDeployedNow = (cache?.lifecycleState ?? liveData?.state) === 'DEPLOYED';
             let currentSessionCostUsd = 0;
             if (isDeployedNow && cache?.lastDeployedAt) {
                 const sessionHours = (Date.now() - new Date(cache.lastDeployedAt).getTime()) / (1000 * 60 * 60);
-                const billableHours = Math.max(METAAPI_MIN_HOURS_PER_DEPLOY, sessionHours);
-                currentSessionCostUsd = billableHours * METAAPI_RATE_PER_HOUR;
+                currentSessionCostUsd = Math.max(METAAPI_MIN_HOURS_PER_DEPLOY, sessionHours) * METAAPI_RATE_PER_HOUR;
             } else if (isDeployedNow) {
-                // deployed but no timestamp — assume minimum billing
                 currentSessionCostUsd = METAAPI_MIN_COST_PER_DEPLOY;
             }
 
@@ -274,7 +267,6 @@ export async function GET() {
             };
         });
 
-        // Sort: connected + deployed first, then by lastDeployedAt desc
         connections.sort((a, b) => {
             if (a.connected !== b.connected) return a.connected ? -1 : 1;
             if (a.lastDeployedAt && b.lastDeployedAt) return b.lastDeployedAt.localeCompare(a.lastDeployedAt);
@@ -299,7 +291,6 @@ export async function GET() {
                 : 0,
             totalActualCostUsd: connections.reduce((sum, c) => sum + c.actualCostUsd, 0),
             totalCurrentSessionCostUsd: deployedNow.reduce((sum, c) => sum + c.currentSessionCostUsd, 0),
-            // Projected monthly: currently-deployed accounts × $0.013/h × 720h/month
             projectedMonthlyCostUsd: deployedNow.length * METAAPI_RATE_PER_HOUR * 720,
         };
 

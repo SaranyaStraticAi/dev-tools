@@ -38,6 +38,12 @@ export type User = {
   subscription_status: string | null;
   has_paid_for_broker: boolean | null;
   referral_id: string | null;
+  // Source of truth — pulled from Clerk publicMetadata in the page loader.
+  clerk_plan: string | null;
+  clerk_subscribed: boolean | null;
+  clerk_subscription_status: string | null;
+  clerk_onboarded: boolean | null;
+  clerk_onboarded_at: string | null;
 };
 
 // Helper for initials
@@ -105,13 +111,95 @@ export const columns: ColumnDef<User>[] = [
     },
   },
   {
+    accessorKey: 'clerk_plan',
+    header: 'Plan (Clerk)',
+    cell: ({ row }) => {
+      const clerkPlan = row.original.clerk_plan;
+      const dbPlan = row.original.plan_name;
+      const mismatch =
+        !!clerkPlan && !!dbPlan && clerkPlan.trim().toLowerCase() !== dbPlan.trim().toLowerCase();
+      return (
+        <span className="flex items-center gap-1.5">
+          <span className="font-medium text-sm capitalize">
+            {clerkPlan || <span className="text-gray-400 italic">—</span>}
+          </span>
+          {mismatch && (
+            <Badge
+              variant="outline"
+              className="text-[9px] px-1.5 py-0 h-4 bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800"
+              title={`Clerk says "${clerkPlan}", DB says "${dbPlan}"`}
+            >
+              ≠ DB
+            </Badge>
+          )}
+        </span>
+      );
+    },
+  },
+  {
     accessorKey: 'plan_name',
-    header: 'Plan',
+    header: 'Plan (DB)',
     cell: ({ row }) => {
       const plan = row.getValue('plan_name') as string | null;
       return (
         <span className="font-medium text-sm capitalize">
           {plan || <span className="text-gray-400 italic">Free</span>}
+        </span>
+      );
+    },
+  },
+  {
+    accessorKey: 'clerk_subscription_status',
+    header: 'Sub Status (Clerk)',
+    cell: ({ row }) => {
+      const status = row.original.clerk_subscription_status;
+      if (!status) return <span className="text-gray-400 text-xs">—</span>;
+      return (
+        <Badge variant="outline" className="text-[10px] px-2 py-0.5 h-5 capitalize">
+          {status}
+        </Badge>
+      );
+    },
+  },
+  {
+    accessorKey: 'clerk_subscribed',
+    header: 'Subscribed (Clerk)',
+    cell: ({ row }) => {
+      const v = row.original.clerk_subscribed;
+      if (v === null) return <span className="text-gray-400 text-xs">—</span>;
+      return v ? (
+        <Badge variant="secondary" className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+          Yes
+        </Badge>
+      ) : (
+        <Badge variant="secondary" className="text-[10px] bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+          No
+        </Badge>
+      );
+    },
+  },
+  {
+    accessorKey: 'clerk_onboarded',
+    header: 'Onboarded',
+    cell: ({ row }) => {
+      const v = row.original.clerk_onboarded;
+      if (v === null) return <span className="text-gray-400 text-xs">—</span>;
+      return v ? (
+        <span className="text-emerald-600 dark:text-emerald-400 text-sm">✓</span>
+      ) : (
+        <span className="text-gray-400 text-sm">✗</span>
+      );
+    },
+  },
+  {
+    accessorKey: 'clerk_onboarded_at',
+    header: 'Onboarded At',
+    cell: ({ row }) => {
+      const v = row.original.clerk_onboarded_at;
+      if (!v) return <span className="text-gray-400 text-xs">—</span>;
+      return (
+        <span className="text-sm text-gray-500" title={v}>
+          {new Date(v).toLocaleDateString()}
         </span>
       );
     },

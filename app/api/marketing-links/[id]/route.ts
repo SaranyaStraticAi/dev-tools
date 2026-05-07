@@ -7,6 +7,12 @@ export async function DELETE(
 ) {
     try {
         const { id } = await params;
+        
+        // Manual cleanup (in case Cascade Delete isn't synced yet)
+        await prisma.marketing_link_visitors.deleteMany({
+            where: { link_id: id }
+        });
+
         await prisma.marketing_links.delete({
             where: { id }
         });

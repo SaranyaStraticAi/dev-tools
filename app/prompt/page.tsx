@@ -1,44 +1,86 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Send, Sparkles } from 'lucide-react';
-import { DEFAULT_SYSTEM_PROMPT, DEFAULT_USER_TEMPLATE, STATIC_NEWS, NewsItem } from './constants';
+import { DEFAULT_SYSTEM_PROMPT, DEFAULT_USER_TEMPLATE, STATS_SYSTEM_PROMPT, STATS_USER_TEMPLATE, STATIC_NEWS, NewsItem } from './constants';
 import NewsCarousel from './components/NewsCarousel';
-import ContentControls from './components/ContentControls';
 import PromptConfig from './components/PromptConfig';
-import ResultPanel from './components/ResultPanel';
+
+type Mode = 'cinematic' | 'stats';
 
 export default function PromptTesterPage() {
-    // 1. Core State Management
-    const [systemPrompt, setSystemPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
-    const [userTemplate, setUserTemplate] = useState(DEFAULT_USER_TEMPLATE);
-    const [headline, setHeadline] = useState(STATIC_NEWS[0].headline);
-    const [summary, setSummary] = useState(STATIC_NEWS[0].generated_news);
-    const [sentiment, setSentiment] = useState(STATIC_NEWS[0].sentiment_score.toString());
-    const [selectedId, setSelectedId] = useState<string | null>(STATIC_NEWS[0].id);
-    const [isLoaded, setIsLoaded] = useState(false);
+    const [mode, setMode] = useState<Mode>('cinematic');
+    // Start empty — always loaded from Azure (seeded on first boot if blob missing)
+    const [cinematicSystem, setCinematicSystem] = useState('');
+    const [cinematicUser, setCinematicUser]     = useState('');
+    const [statsSystem, setStatsSystem]         = useState('');
+    const [statsUser, setStatsUser]             = useState('');
+    const [showPrompts, setShowPrompts]         = useState(false);
+    const [promptsLoading, setPromptsLoading]   = useState(true);
 
-    // 1.5. Local Storage Persistence
+    // On mount: load prompts from Azure Blob.
+    // If blob doesn't exist yet (first boot), auto-seed Azure with hardcoded defaults
+    // so Azure is the single source of truth from day one.
     useEffect(() => {
-        const savedSystem = localStorage.getItem('vibe_architect_system_prompt');
-        const savedTemplate = localStorage.getItem('vibe_architect_user_template');
+        (async () => {
+            try {
+                const res = await fetch('/api/prompt-config');
+                if (!res.ok) throw new Error('fetch failed');
+                const data = await res.json();
 
-        if (savedSystem) setSystemPrompt(savedSystem);
-        if (savedTemplate) setUserTemplate(savedTemplate);
-        setIsLoaded(true);
+                if (data.exists && data.prompts) {
+                    // ✅ Azure has prompts — load them
+                    const { cinematicSystem, cinematicUser, statsSystem, statsUser } = data.prompts;
+                    if (cinematicSystem) setCinematicSystem(cinematicSystem);
+                    if (cinematicUser)   setCinematicUser(cinematicUser);
+                    if (statsSystem)     setStatsSystem(statsSystem);
+                    if (statsUser)       setStatsUser(statsUser);
+                } else {
+                    // 🌱 First boot — seed Azure with hardcoded defaults
+                    await fetch('/api/prompt-config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            cinematicSystem: DEFAULT_SYSTEM_PROMPT,
+                            cinematicUser:   DEFAULT_USER_TEMPLATE,
+                            statsSystem:     STATS_SYSTEM_PROMPT,
+                            statsUser:       STATS_USER_TEMPLATE,
+                        }),
+                    });
+                    // Set state from the seeded values
+                    setCinematicSystem(DEFAULT_SYSTEM_PROMPT);
+                    setCinematicUser(DEFAULT_USER_TEMPLATE);
+                    setStatsSystem(STATS_SYSTEM_PROMPT);
+                    setStatsUser(STATS_USER_TEMPLATE);
+                }
+            } catch {
+                // Network / parse error → fall back to hardcoded defaults silently
+                setCinematicSystem(DEFAULT_SYSTEM_PROMPT);
+                setCinematicUser(DEFAULT_USER_TEMPLATE);
+                setStatsSystem(STATS_SYSTEM_PROMPT);
+                setStatsUser(STATS_USER_TEMPLATE);
+            } finally {
+                setPromptsLoading(false);
+            }
+        })();
     }, []);
 
-    useEffect(() => {
-        if (!isLoaded) return;
-        localStorage.setItem('vibe_architect_system_prompt', systemPrompt);
-        localStorage.setItem('vibe_architect_user_template', userTemplate);
-    }, [systemPrompt, userTemplate, isLoaded]);
+    const systemPrompt    = mode === 'cinematic' ? cinematicSystem : statsSystem;
+    const userTemplate    = mode === 'cinematic' ? cinematicUser   : statsUser;
+    const setSystemPrompt = (v: string) => mode === 'cinematic' ? setCinematicSystem(v) : setStatsSystem(v);
+    const setUserTemplate = (v: string) => mode === 'cinematic' ? setCinematicUser(v)   : setStatsUser(v);
+    const handleModeSwitch = (newMode: Mode) => setMode(newMode);
 
-    const [result, setResult] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [headline, setHeadline]   = useState(STATIC_NEWS[0].headline);
+    const [summary, setSummary]     = useState(STATIC_NEWS[0].generated_news);
+    const [sentiment, setSentiment] = useState(STATIC_NEWS[0].sentiment_score.toString());
+    const [selectedId, setSelectedId] = useState<string | null>(STATIC_NEWS[0].id);
 
-    // 2. Selection Handler
+    const [imageB64, setImageB64]       = useState<string | null>(null);
+    const [loading, setLoading]         = useState(false);
+    const [loadingStep, setLoadingStep] = useState('');
+    const [error, setError]             = useState<string | null>(null);
+    const [generatedPrompt, setGeneratedPrompt] = useState('');
+
     const selectItem = (item: NewsItem) => {
         setSelectedId(item.id);
         setHeadline(item.headline);
@@ -46,107 +88,188 @@ export default function PromptTesterPage() {
         setSentiment(item.sentiment_score.toString());
     };
 
-    // 3. API Generation Handler
     const handleGenerate = async () => {
         setLoading(true);
         setError(null);
-        setResult('');
+        setImageB64(null);
+        setGeneratedPrompt('');
 
         try {
-            const response = await fetch('/api/prompt', {
+            setLoadingStep('🧠 Writing image prompt...');
+            const promptRes = await fetch('/api/prompt', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    systemPrompt,
-                    userPromptTemplate: userTemplate,
-                    headline,
-                    summary,
-                    sentiment: parseFloat(sentiment)
-                }),
+                body: JSON.stringify({ systemPrompt, userPromptTemplate: userTemplate, headline, summary, sentiment: parseFloat(sentiment) }),
             });
+            const promptData = await promptRes.json();
+            if (!promptRes.ok) throw new Error(promptData.message || 'Prompt generation failed');
+            setGeneratedPrompt(promptData.text);
 
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.message || 'Generation failed');
-            setResult(data.text);
+            setLoadingStep('🎨 Generating image... (1–3 mins)');
+            const configRes = await fetch('/api/generate-image');
+            const config = await configRes.json();
+            if (!configRes.ok) throw new Error(config.error || 'Config fetch failed');
+
+            const imageRes = await fetch(config.url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'api-key': config.apiKey },
+                body: JSON.stringify({ model: config.deployment, prompt: promptData.text, n: 1, size: '1024x1024' }),
+            });
+            const imageData = await imageRes.json();
+            if (!imageRes.ok) throw new Error(imageData.error?.message || `Azure error ${imageRes.status}`);
+
+            const imgItem = imageData.data?.[0];
+            if (!imgItem) throw new Error('No image returned');
+
+            if (imgItem.b64_json) {
+                setImageB64(imgItem.b64_json);
+            } else if (imgItem.url) {
+                const urlRes = await fetch(imgItem.url);
+                const blob = await urlRes.blob();
+                const reader = new FileReader();
+                reader.onloadend = () => setImageB64((reader.result as string).split(',')[1]);
+                reader.readAsDataURL(blob);
+            } else {
+                throw new Error('No image data in response');
+            }
         } catch (err: any) {
             setError(err.message);
         } finally {
             setLoading(false);
+            setLoadingStep('');
         }
     };
 
-    return (
-        <div className="flex flex-col h-full space-y-4 max-w-[1600px] mx-auto overflow-hidden">
-            {/* Header Section */}
-            <div className="flex items-center justify-between px-2">
-                <div className="flex items-center gap-3">
-                    <div className="p-2 bg-purple-600 rounded-lg shadow-lg shadow-purple-500/20">
-                        <Sparkles className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                        <h1 className="text-xl font-bold tracking-tight">Vibe Prompt Architect</h1>
-                        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-widest opacity-70">Real-Time Cinematic Generation</p>
-                    </div>
+    if (promptsLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-background">
+                <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                    <div className="w-6 h-6 border-2 border-purple-500/30 border-t-purple-500 animate-spin rounded-full" />
+                    <p className="text-xs">Loading prompts from Azure…</p>
                 </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex flex-col items-center min-h-screen bg-background py-12 px-4 gap-8">
+
+            {/* ── Title ── */}
+            <div className="text-center">
+                <h1 className="text-2xl font-bold tracking-tight">VibeTrader Image Generator</h1>
+                <p className="text-sm text-muted-foreground mt-1">Pick a news item, choose a style, generate.</p>
+            </div>
+
+            {/* ── News Carousel ── */}
+            <div className="w-full max-w-3xl">
+                <NewsCarousel selectedId={selectedId} onSelect={selectItem} />
+            </div>
+
+            {/* ── Two Main Buttons ── */}
+            <div className="flex items-center gap-4">
+                {/* Cinematic */}
                 <button
-                    onClick={handleGenerate}
-                    disabled={loading || !headline}
-                    className="group px-8 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-400 disabled:to-gray-500 text-white font-bold rounded-xl transition-all shadow-xl shadow-purple-500/30 flex items-center gap-3 active:scale-95"
+                    onClick={() => { handleModeSwitch('cinematic'); handleGenerate(); }}
+                    disabled={loading}
+                    className={`px-8 py-4 rounded-2xl font-bold text-sm transition-all shadow-lg active:scale-95 flex items-center gap-2 ${
+                        mode === 'cinematic' && loading
+                            ? 'bg-purple-700 text-white cursor-wait'
+                            : 'bg-purple-600 hover:bg-purple-700 text-white shadow-purple-500/30'
+                    } disabled:opacity-60`}
                 >
-                    {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white animate-spin rounded-full" /> : <Send className="w-4 h-4 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />}
-                    {loading ? 'Processing...' : 'Generate Prompt'}
+                    {mode === 'cinematic' && loading
+                        ? <div className="w-4 h-4 border-2 border-white/30 border-t-white animate-spin rounded-full" />
+                        : '🎬'}
+                    Cinematic
+                </button>
+
+                {/* Stats Card */}
+                <button
+                    onClick={() => { handleModeSwitch('stats'); handleGenerate(); }}
+                    disabled={loading}
+                    className={`px-8 py-4 rounded-2xl font-bold text-sm transition-all shadow-lg active:scale-95 flex items-center gap-2 ${
+                        mode === 'stats' && loading
+                            ? 'bg-cyan-700 text-white cursor-wait'
+                            : 'bg-cyan-600 hover:bg-cyan-700 text-white shadow-cyan-500/30'
+                    } disabled:opacity-60`}
+                >
+                    {mode === 'stats' && loading
+                        ? <div className="w-4 h-4 border-2 border-white/30 border-t-white animate-spin rounded-full" />
+                        : '📊'}
+                    Stats Card
+                </button>
+
+                {/* Edit Prompts */}
+                <button
+                    onClick={() => setShowPrompts(v => !v)}
+                    className="px-8 py-4 rounded-2xl font-bold text-sm border border-border hover:bg-muted transition-all shadow-sm flex items-center gap-2"
+                >
+                    ✏️ Edit Prompts
                 </button>
             </div>
 
-            {/* Horizontal News Carousel */}
-            <NewsCarousel
-                selectedId={selectedId}
-                onSelect={selectItem}
-            />
+            {/* ── Loading Status ── */}
+            {loading && (
+                <p className="text-sm text-muted-foreground animate-pulse">{loadingStep}</p>
+            )}
 
-            {/* Main 3-Column Workspace */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 flex-1 overflow-hidden pb-4 px-2">
-                {/* Column 1: Content Controls */}
-                <div className="lg:col-span-3 flex flex-col gap-4 overflow-y-auto pr-1 no-scrollbar">
-                    <ContentControls
-                        headline={headline}
-                        setHeadline={setHeadline}
-                        sentiment={sentiment}
-                        setSentiment={setSentiment}
-                        summary={summary}
-                        setSummary={setSummary}
-                    />
+            {/* ── Error ── */}
+            {error && (
+                <div className="w-full max-w-2xl p-4 bg-red-500/10 border border-red-500/30 rounded-2xl text-red-400 text-sm text-center">
+                    ❌ {error}
                 </div>
+            )}
 
-                {/* Column 2: Prompt Configuration */}
-                <div className="lg:col-span-5 flex flex-col gap-4 overflow-y-auto pr-1 no-scrollbar">
+            {/* ── Generated Image ── */}
+            {imageB64 && (
+                <div className="flex flex-col items-center gap-3 w-full max-w-2xl">
+                    <img
+                        src={`data:image/png;base64,${imageB64}`}
+                        alt="Generated visual"
+                        className="w-full rounded-2xl shadow-2xl border border-white/10"
+                    />
+                    <div className="flex gap-3">
+                        <a
+                            href={`data:image/png;base64,${imageB64}`}
+                            download={`vibetrader-${mode}-${Date.now()}.png`}
+                            className="px-4 py-2 bg-muted rounded-xl text-xs font-bold hover:bg-muted/80 transition-all"
+                        >
+                            ⬇️ Download
+                        </a>
+                        <details className="relative">
+                            <summary className="px-4 py-2 bg-muted rounded-xl text-xs font-bold cursor-pointer hover:bg-muted/80 transition-all list-none">
+                                📄 View Prompt
+                            </summary>
+                            <pre className="absolute bottom-10 left-0 w-[600px] max-h-64 overflow-auto p-4 bg-card border rounded-xl text-[10px] font-mono whitespace-pre-wrap z-10 shadow-xl">
+                                {generatedPrompt}
+                            </pre>
+                        </details>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Edit Prompts Panel ── */}
+            {showPrompts && (
+                <div className="w-full max-w-3xl border rounded-2xl p-6 bg-card shadow-lg">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="font-bold text-sm">Edit Prompts</h2>
+                        <button onClick={() => setShowPrompts(false)} className="text-xs text-muted-foreground hover:text-foreground">✕ Close</button>
+                    </div>
                     <PromptConfig
                         systemPrompt={systemPrompt}
                         setSystemPrompt={setSystemPrompt}
                         userTemplate={userTemplate}
                         setUserTemplate={setUserTemplate}
+                        mode={mode}
+                        setMode={handleModeSwitch}
+                        cinematicSystem={cinematicSystem}
+                        cinematicUser={cinematicUser}
+                        statsSystem={statsSystem}
+                        statsUser={statsUser}
                     />
                 </div>
+            )}
 
-                {/* Column 3: Results Panel */}
-                <div className="lg:col-span-4 flex flex-col gap-4 overflow-hidden relative">
-                    <ResultPanel
-                        result={result}
-                        loading={loading}
-                        error={error}
-                    />
-                </div>
-            </div>
-
-            <style jsx global>{`
-                .no-scrollbar::-webkit-scrollbar {
-                    display: none;
-                }
-                .no-scrollbar {
-                    -ms-overflow-style: none;
-                    scrollbar-width: none;
-                }
-            `}</style>
         </div>
     );
 }

@@ -21,17 +21,17 @@ const fmtUsd = (v: number) => `$${v.toFixed(2)}`;
 
 // ── Policy badge ───────────────────────────────────────────────────────────────
 const POLICY_LABELS: Record<string, { label: string; cls: string; desc: string }> = {
-    'always-on':             { label: 'Always On',   cls: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',   desc: 'Never undeployed — paid user with active strategies or manual override' },
-    'weekend-only':          { label: 'Weekend Off',  cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',       desc: 'Undeployed on forex weekends only — paid user, no active strategies' },
-    'overnight-and-weekend': { label: 'Free Tier',    cls: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400', desc: 'Undeployed after 6h idle or on weekends — free tier user' },
+    'always-on':             { label: 'Always On',  cls: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',    desc: 'Never undeployed — paid user with active strategies or manual override' },
+    'weekend-only':          { label: 'Weekend Off', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',        desc: 'Undeployed on forex weekends only — paid user, no active strategies' },
+    'overnight-and-weekend': { label: 'Free Tier',   cls: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400', desc: 'Undeployed after 6h idle or on weekends — free tier user' },
 };
 
 // ── Lifecycle state badge ──────────────────────────────────────────────────────
 const STATE_LABELS: Record<string, { label: string; cls: string }> = {
-    'DEPLOYED':    { label: 'Deployed',    cls: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
-    'UNDEPLOYED':  { label: 'Undeployed',  cls: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400' },
-    'DEPLOYING':   { label: 'Deploying…',  cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
-    'UNDEPLOYING': { label: 'Stopping…',   cls: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' },
+    'DEPLOYED':    { label: 'Deployed',   cls: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+    'UNDEPLOYED':  { label: 'Undeployed', cls: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400' },
+    'DEPLOYING':   { label: 'Deploying…', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+    'UNDEPLOYING': { label: 'Stopping…',  cls: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' },
 };
 
 // ── Usage bar ──────────────────────────────────────────────────────────────────
@@ -124,18 +124,17 @@ function ConfirmDialog({ action, row, onConfirm, onCancel, loading }: {
 function SummaryCards({ s, ratePerHour }: { s: ConnectionsSummary; ratePerHour: number }) {
     const monthlyPerAccount = (ratePerHour * 720).toFixed(2);
     const cards = [
-        { label: 'Total',            value: s.total,              cls: 'text-blue-600 dark:text-blue-400',       icon: Activity },
-        { label: 'Connected',        value: s.connected,          cls: 'text-green-600 dark:text-green-400',     icon: Wifi },
-        { label: 'Deployed',         value: s.deployed,           cls: 'text-emerald-600 dark:text-emerald-400', icon: Power },
-        { label: 'Undeployed',       value: s.undeployed,         cls: 'text-gray-500 dark:text-gray-400',       icon: PowerOff },
-        { label: 'Always On',        value: s.alwaysOn,           cls: 'text-green-600 dark:text-green-400',     icon: CheckCircle },
-        { label: 'Weekend Off',      value: s.weekendOnly,        cls: 'text-blue-600 dark:text-blue-400',       icon: Clock },
-        { label: 'Free Tier',        value: s.overnightAndWeekend, cls: 'text-orange-600 dark:text-orange-400', icon: Zap },
-        { label: 'Avg Hours Used',   value: `${Number(s.avgDeployedHours).toFixed(1)}h`, cls: 'text-purple-600 dark:text-purple-400', icon: TrendingUp },
+        { label: 'Total',          value: s.total,               cls: 'text-blue-600 dark:text-blue-400',       icon: Activity },
+        { label: 'Connected',      value: s.connected,           cls: 'text-green-600 dark:text-green-400',     icon: Wifi },
+        { label: 'Deployed',       value: s.deployed,            cls: 'text-emerald-600 dark:text-emerald-400', icon: Power },
+        { label: 'Undeployed',     value: s.undeployed,          cls: 'text-gray-500 dark:text-gray-400',       icon: PowerOff },
+        { label: 'Always On',      value: s.alwaysOn,            cls: 'text-green-600 dark:text-green-400',     icon: CheckCircle },
+        { label: 'Weekend Off',    value: s.weekendOnly,         cls: 'text-blue-600 dark:text-blue-400',       icon: Clock },
+        { label: 'Free Tier',      value: s.overnightAndWeekend, cls: 'text-orange-600 dark:text-orange-400',   icon: Zap },
+        { label: 'Avg Hours Used', value: `${Number(s.avgDeployedHours).toFixed(1)}h`, cls: 'text-purple-600 dark:text-purple-400', icon: TrendingUp },
     ];
     return (
         <div className="space-y-3">
-            {/* Cost summary banner */}
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-4 flex flex-wrap gap-6 items-center">
                 <div className="flex items-center gap-2">
                     <DollarSign size={16} className="text-yellow-500" />
@@ -159,7 +158,6 @@ function SummaryCards({ s, ratePerHour }: { s: ConnectionsSummary; ratePerHour: 
                 </div>
                 <span className="text-[10px] text-gray-400 ml-auto">Set METAAPI_RATE_PER_HOUR in .env.local to match your invoice</span>
             </div>
-            {/* Metric cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
                 {cards.map(c => {
                     const Icon = c.icon;
@@ -212,12 +210,7 @@ export default function MetaApiConnectionsPage() {
     const [sortKey, setSortKey] = useState<SortKey>('lastDeployedAt');
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
     const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
-
-    // Action confirm state
-    const [pendingAction, setPendingAction] = useState<{
-        action: 'undeploy' | 'deploy' | 'delete';
-        row: ConnectionRow;
-    } | null>(null);
+    const [pendingAction, setPendingAction] = useState<{ action: 'undeploy' | 'deploy' | 'delete'; row: ConnectionRow } | null>(null);
     const [actionLoading, setActionLoading] = useState(false);
 
     const fetchConnections = useCallback(async () => {
@@ -261,7 +254,7 @@ export default function MetaApiConnectionsPage() {
             if (!res.ok) throw new Error(data.error || 'Action failed');
             setToast({ msg: `${action.charAt(0).toUpperCase() + action.slice(1)} successful for ${row.email || row.userId}`, type: 'success' });
             setPendingAction(null);
-            setTimeout(() => fetchConnections(), 1500); // refresh after brief delay
+            setTimeout(() => fetchConnections(), 1500);
         } catch (e: any) {
             setToast({ msg: e.message, type: 'error' });
         } finally {
@@ -322,10 +315,8 @@ export default function MetaApiConnectionsPage() {
                     </button>
                 </div>
 
-                {/* Summary */}
                 {summary && <SummaryCards s={summary} ratePerHour={ratePerHour} />}
 
-                {/* Error */}
                 {error && <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-700 dark:text-red-400">Error: {error}</div>}
 
                 {/* Filters */}
@@ -390,7 +381,6 @@ export default function MetaApiConnectionsPage() {
                                         const policy = row.policy ? POLICY_LABELS[row.policy] : null;
                                         const state = row.lifecycleState ? STATE_LABELS[row.lifecycleState] : null;
                                         const isDeployed = row.lifecycleState === 'DEPLOYED';
-
                                         return (
                                             <tr key={row.userId + i} className="hover:bg-gray-50/70 dark:hover:bg-gray-700/30 transition-colors">
 
@@ -409,32 +399,20 @@ export default function MetaApiConnectionsPage() {
 
                                                 {/* Broker status */}
                                                 <td className="px-3 py-2.5 whitespace-nowrap">
-                                                    {row.connected ? (
-                                                        <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 font-medium">
-                                                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />Connected
-                                                        </span>
-                                                    ) : (
-                                                        <span className="flex items-center gap-1 text-xs text-gray-400">
-                                                            <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />Disconnected
-                                                        </span>
-                                                    )}
+                                                    {row.connected
+                                                        ? <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />Connected</span>
+                                                        : <span className="flex items-center gap-1 text-xs text-gray-400"><span className="w-1.5 h-1.5 rounded-full bg-gray-300" />Disconnected</span>}
                                                 </td>
 
-                                                {/* Lifecycle state */}
+                                                {/* Lifecycle */}
                                                 <td className="px-3 py-2.5 whitespace-nowrap">
-                                                    {state
-                                                        ? <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${state.cls}`}>{state.label}</span>
-                                                        : <span className="text-gray-400 text-xs">—</span>}
-                                                    {row.lastUndeployReason && (
-                                                        <div className="text-[10px] text-gray-400 mt-0.5">{row.lastUndeployReason}</div>
-                                                    )}
+                                                    {state ? <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${state.cls}`}>{state.label}</span> : <span className="text-gray-400 text-xs">—</span>}
+                                                    {row.lastUndeployReason && <div className="text-[10px] text-gray-400 mt-0.5">{row.lastUndeployReason}</div>}
                                                 </td>
 
                                                 {/* Policy */}
                                                 <td className="px-3 py-2.5 whitespace-nowrap">
-                                                    {policy
-                                                        ? <span title={policy.desc} className={`text-xs px-2 py-0.5 rounded-full font-medium cursor-help ${policy.cls}`}>{policy.label}</span>
-                                                        : <span className="text-gray-400 text-xs">—</span>}
+                                                    {policy ? <span title={policy.desc} className={`text-xs px-2 py-0.5 rounded-full font-medium cursor-help ${policy.cls}`}>{policy.label}</span> : <span className="text-gray-400 text-xs">—</span>}
                                                     {row.alwaysOnFlag && <div className="text-[10px] text-green-500 mt-0.5">Manual override</div>}
                                                 </td>
 
@@ -455,38 +433,28 @@ export default function MetaApiConnectionsPage() {
                                                 {/* Trades */}
                                                 <td className="px-3 py-2.5 text-center whitespace-nowrap">
                                                     {row.lifetimeTrades > 0
-                                                        ? <div>
-                                                            <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{row.lifetimeTrades}</span>
-                                                            <UsageBar used={row.lifetimeTrades} total={10} label="" />
-                                                          </div>
+                                                        ? <div><span className="text-sm font-medium text-gray-800 dark:text-gray-200">{row.lifetimeTrades}</span><UsageBar used={row.lifetimeTrades} total={10} label="" /></div>
                                                         : <span className="text-gray-400 text-xs">—</span>}
                                                 </td>
 
                                                 {/* Deployments */}
                                                 <td className="px-3 py-2.5 text-center whitespace-nowrap">
                                                     {row.lifetimeDeployments > 0
-                                                        ? <div>
-                                                            <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{row.lifetimeDeployments}</span>
-                                                            <UsageBar used={row.lifetimeDeployments} total={10} label="" />
-                                                          </div>
+                                                        ? <div><span className="text-sm font-medium text-gray-800 dark:text-gray-200">{row.lifetimeDeployments}</span><UsageBar used={row.lifetimeDeployments} total={10} label="" /></div>
                                                         : <span className="text-gray-400 text-xs">—</span>}
                                                 </td>
 
                                                 {/* Lifetime cost */}
                                                 <td className="px-3 py-2.5 whitespace-nowrap text-right">
-                                                    <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
-                                                        {fmtUsd(Number(row.actualCostUsd) || 0)}
-                                                    </span>
+                                                    <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{fmtUsd(Number(row.actualCostUsd) || 0)}</span>
                                                     <div className="text-[10px] text-gray-400">{Number(row.deployedHoursAccrued).toFixed(1)}h billed</div>
                                                 </td>
 
-                                                {/* Current session cost */}
+                                                {/* Session cost */}
                                                 <td className="px-3 py-2.5 whitespace-nowrap text-right">
-                                                    {(Number(row.currentSessionCostUsd) || 0) > 0 ? (
-                                                        <span className="text-sm font-semibold text-orange-600 dark:text-orange-400">
-                                                            {fmtUsd(Number(row.currentSessionCostUsd))}
-                                                        </span>
-                                                    ) : <span className="text-gray-400 text-xs">—</span>}
+                                                    {(Number(row.currentSessionCostUsd) || 0) > 0
+                                                        ? <span className="text-sm font-semibold text-orange-600 dark:text-orange-400">{fmtUsd(Number(row.currentSessionCostUsd))}</span>
+                                                        : <span className="text-gray-400 text-xs">—</span>}
                                                 </td>
 
                                                 {/* Balance */}
@@ -501,15 +469,15 @@ export default function MetaApiConnectionsPage() {
 
                                                 {/* MetaAPI Account */}
                                                 <td className="px-3 py-2.5">
-                                                    {row.accountId ? (
-                                                        <div className="flex items-center gap-1">
+                                                    {row.accountId
+                                                        ? <div className="flex items-center gap-1">
                                                             <span className="text-[10px] font-mono text-gray-600 dark:text-gray-400 truncate max-w-[130px]">{row.accountId}</span>
                                                             <button onClick={() => copy(row.accountId!, `acc-${i}`)} className="text-gray-300 hover:text-blue-500 flex-shrink-0">
                                                                 {copied === `acc-${i}` ? <span className="text-green-500 text-[10px]">✓</span> : <Copy size={9} />}
                                                             </button>
                                                             <a href={`/metaapi-lookup?accountId=${row.accountId}`} className="text-gray-300 hover:text-blue-500 flex-shrink-0"><ExternalLink size={9} /></a>
-                                                        </div>
-                                                    ) : <span className="text-gray-400 text-xs">—</span>}
+                                                          </div>
+                                                        : <span className="text-gray-400 text-xs">—</span>}
                                                     {row.platform && <div className="text-[10px] text-gray-400">{row.platform} · {row.region}</div>}
                                                 </td>
 
@@ -525,9 +493,9 @@ export default function MetaApiConnectionsPage() {
                                                 {/* Last trade */}
                                                 <td className="px-3 py-2.5 whitespace-nowrap text-xs text-gray-500">{fmtDate(row.lastTradeAt)}</td>
 
-                                                {/* Actions */}
-                                                <td className="px-3 py-2.5 whitespace-nowrap">
-                                                    {row.accountId && (
+                                                {/* Actions — sticky right */}
+                                                <td className="px-3 py-2.5 whitespace-nowrap sticky right-0 bg-white dark:bg-gray-800 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)]">
+                                                    {row.accountId ? (
                                                         <div className="flex items-center gap-1.5">
                                                             {isDeployed ? (
                                                                 <button onClick={() => setPendingAction({ action: 'undeploy', row })}
@@ -548,6 +516,8 @@ export default function MetaApiConnectionsPage() {
                                                                 <Trash2 size={10} /> Delete
                                                             </button>
                                                         </div>
+                                                    ) : (
+                                                        <span className="text-[10px] text-gray-400 italic">No account ID</span>
                                                     )}
                                                 </td>
                                             </tr>
@@ -560,7 +530,6 @@ export default function MetaApiConnectionsPage() {
                 </div>
             </div>
 
-            {/* Confirm dialog */}
             {pendingAction && (
                 <ConfirmDialog
                     action={pendingAction.action}
@@ -571,7 +540,6 @@ export default function MetaApiConnectionsPage() {
                 />
             )}
 
-            {/* Toast */}
             {toast && <Toast msg={toast.msg} type={toast.type} onDismiss={() => setToast(null)} />}
         </div>
     );

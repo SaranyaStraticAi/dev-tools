@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image, Link2, Network, LayoutGrid } from 'lucide-react';
+import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image, Link2, Network, LayoutGrid, ChevronDown, Mail } from 'lucide-react';
 import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
 import { useState, useEffect } from 'react';
 
@@ -22,89 +22,97 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 
-const navItems = [
+const navGroups = [
   {
-    name: 'PostgreSQL Viewer',
-    href: '/',
-    icon: Database,
+    label: 'Users & Identity',
+    items: [
+      { name: 'User Directory',     href: '/user-directory',  icon: LayoutGrid },
+      { name: 'Users',              href: '/users',           icon: Users },
+      { name: 'User Reports',       href: '/user-reports',    icon: FileBarChart },
+      { name: 'Clerk User Search',  href: '/clerk-search',    icon: Search },
+    ],
   },
   {
-    name: 'Envecl',
-    href: '/envecl',
-    icon: Lock,
+    label: 'Trading & Brokers',
+    items: [
+      { name: 'MetaAPI Lookup',       href: '/metaapi-lookup',      icon: Layers },
+      { name: 'MetaAPI Connections',  href: '/metaapi-connections', icon: Network },
+      { name: 'Strategy Dashboard',   href: '/strategy-dashboard',  icon: LineChart },
+      { name: 'Journal Dashboard',    href: '/journal-dashboard',   icon: TrendingUp },
+    ],
   },
   {
-    name: 'Clerk User Search',
-    href: '/clerk-search',
-    icon: Search,
+    label: 'Analytics & Monitoring',
+    items: [
+      { name: 'Monitoring',     href: '/monitoring',     icon: BarChart3 },
+      { name: 'Chat Analytics', href: '/chat-analytics', icon: MessageSquare },
+    ],
   },
   {
-    name: 'MetaAPI Lookup',
-    href: '/metaapi-lookup',
-    icon: Layers,
+    label: 'Data & Storage',
+    items: [
+      { name: 'PostgreSQL Viewer', href: '/',       icon: Database },
+      { name: 'Envecl',            href: '/envecl', icon: Lock },
+    ],
   },
   {
-    name: 'MetaAPI Connections',
-    href: '/metaapi-connections',
-    icon: Network,
+    label: 'Marketing',
+    items: [
+      { name: 'Newsletter Tester',   href: '/newsletter-tester',   icon: Mail },
+      { name: 'Image Generator',     href: '/image-generator',     icon: Image },
+      { name: 'Link Tracker',        href: '/link-tracker',        icon: Link2 },
+      { name: 'Prompt Tester',       href: '/prompt',              icon: Code },
+    ],
   },
   {
-    name: 'Users',
-    href: '/users',
-    icon: Users,
-  },
-  {
-    name: 'User Directory',
-    href: '/user-directory',
-    icon: LayoutGrid,
-  },
-  {
-    name: 'User Reports',
-    href: '/user-reports',
-    icon: FileBarChart,
-  },
-  {
-    name: 'JSON Converter',
-    href: '/json-converter',
-    icon: Code,
-  },
-  {
-    name: 'Monitoring',
-    href: '/monitoring',
-    icon: BarChart3,
-  },
-  {
-    name: 'Prompt Tester',
-    href: '/prompt',
-    icon: Code,
-  },
-  {
-    name: 'Journal Dashboard',
-    href: '/journal-dashboard',
-    icon: TrendingUp,
-  },
-  {
-    name: 'Chat Analytics',
-    href: '/chat-analytics',
-    icon: MessageSquare,
-  },
-  {
-    name: 'Strategy Dashboard',
-    href: '/strategy-dashboard',
-    icon: LineChart,
-  },
-  {
-    name: 'Image Generator',
-    href: '/image-generator',
-    icon: Image,
-  },
-  {
-    name: 'Link Tracker',
-    href: '/link-tracker',
-    icon: Link2,
+    label: 'Tools & Utilities',
+    items: [
+      { name: 'JSON Converter',   href: '/json-converter',   icon: Code },
+    ],
   },
 ];
 
+
+
+function CollapsibleNavGroup({
+  label,
+  defaultOpen,
+  children,
+}: {
+  label: string;
+  defaultOpen: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  // If route changes into this group later, auto-expand it.
+  useEffect(() => { if (defaultOpen) setOpen(true); }, [defaultOpen]);
+
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel asChild>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="flex w-full items-center justify-between gap-2 rounded-md text-left hover:bg-sidebar-accent/40 transition-colors cursor-pointer"
+        >
+          <span>{label}</span>
+          <ChevronDown
+            size={14}
+            className={`transition-transform duration-200 ${open ? 'rotate-0' : '-rotate-90'}`}
+          />
+        </button>
+      </SidebarGroupLabel>
+      <SidebarGroupContent
+        className={`grid transition-all duration-200 ease-in-out ${
+          open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+        }`}
+      >
+        <div className="overflow-hidden min-h-0">{children}</div>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+}
 
 export default function AppSidebar() {
   const pathname = usePathname();
@@ -145,30 +153,36 @@ export default function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navItems.map((item) => {
-                const isActive = pathname === item.href;
-                return (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={isActive}
-                      tooltip={item.name}
-                    >
-                      <Link href={item.href}>
-                        <item.icon />
-                        <span>{item.name}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {navGroups.map((group) => {
+          const groupHasActive = group.items.some((i) => i.href === pathname);
+          return (
+            <CollapsibleNavGroup
+              key={group.label}
+              label={group.label}
+              defaultOpen={groupHasActive}
+            >
+              <SidebarMenu>
+                {group.items.map((item) => {
+                  const isActive = pathname === item.href;
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive}
+                        tooltip={item.name}
+                      >
+                        <Link href={item.href}>
+                          <item.icon />
+                          <span>{item.name}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </CollapsibleNavGroup>
+          );
+        })}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border">
