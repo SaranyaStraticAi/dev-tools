@@ -47,6 +47,7 @@ export function useNewsletterPage() {
 
     // ── Output state ──────────────────────────────────────────────────────────
     const [rawText,   setRawText]   = useState('');
+    const [bannerUrl, setBannerUrl] = useState('');
     const [emailHtml, setEmailHtml] = useState('');
     const [loading,   setLoading]   = useState(false);
     const [step,      setStep]      = useState('');
@@ -120,7 +121,7 @@ export function useNewsletterPage() {
         else setPuzzleTemplate(val);
         // If there's already a generated result for this type, re-render live
         if (rawText && templateType === type && type === 'weekly') {
-            setEmailHtml(renderTemplate(val, parseNewsletter(rawText)));
+            setEmailHtml(renderTemplate(val, parseNewsletter(rawText), 'weekly', bannerUrl));
         }
     };
 
@@ -141,7 +142,7 @@ export function useNewsletterPage() {
             setError('Template not loaded from Azure yet. Wait for blob to load or publish first.');
             return;
         }
-        setType(chosenType); setLoading(true); setError(''); setRawText(''); setEmailHtml('');
+        setType(chosenType); setLoading(true); setError(''); setRawText(''); setEmailHtml(''); setBannerUrl('');
         const sys    = chosenType === 'weekly' ? weeklySystem : puzzleSystem;
         const tmpl   = chosenType === 'weekly' ? weeklyUser   : puzzleUser;
         const today  = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
@@ -156,10 +157,32 @@ export function useNewsletterPage() {
             if (!res.ok) throw new Error(data.error || 'Generation failed');
             const raw = data.text as string;
             setRawText(raw);
+
+            const parsed = parseNewsletter(raw);
+            let finalBannerUrl = '';
+            
+            // 2. Generate banner PNG and upload to Azure
+            if (chosenType === 'weekly' && parsed.subject) {
+                setStep('🖼️ Generating banner image...');
+                try {
+                    const bannerRes = await fetch('/api/generate-banner', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ subject: parsed.subject })
+                    });
+                    if (bannerRes.ok) {
+                        const bannerData = await bannerRes.json();
+                        finalBannerUrl = bannerData.url;
+                        setBannerUrl(finalBannerUrl);
+                    }
+                } catch (err) {
+                    console.error('Banner generation failed:', err);
+                }
+            }
+
             setStep('🌐 Building HTML...');
-            const parsed   = parseNewsletter(raw);
             const htmlTmpl = chosenType === 'weekly' ? weeklyTemplate : puzzleTemplate;
-            setEmailHtml(renderTemplate(htmlTmpl, parsed, chosenType));
+            setEmailHtml(renderTemplate(htmlTmpl, parsed, chosenType, finalBannerUrl));
         } catch (e: any) { setError(e.message); }
         finally { setLoading(false); setStep(''); }
     };
