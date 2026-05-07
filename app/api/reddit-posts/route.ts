@@ -7,10 +7,12 @@ export async function GET(req: NextRequest) {
     const subreddit = searchParams.get('subreddit') || 'Forex';
     const timeframe = searchParams.get('t') || 'week';
     const limit     = searchParams.get('limit') || '10';
-    const url = `https://www.reddit.com/r/${subreddit}/top.json?t=${timeframe}&limit=${limit}`;
+    const url = `https://old.reddit.com/r/${subreddit}/top.json?t=${timeframe}&limit=${limit}`;
     try {
         const res = await fetch(url, {
-            headers: { 'User-Agent': 'VibeTraderNewsletterBot/1.0' },
+            headers: { 
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' 
+            },
         });
         if (!res.ok) {
             return NextResponse.json({ error: `Reddit returned ${res.status}` }, { status: 502 });
