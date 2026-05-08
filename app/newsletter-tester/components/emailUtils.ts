@@ -32,15 +32,16 @@ export function parseNewsletter(raw: string) {
     };
 
     // Regex explanation:
-    // ^([A-Z0-9_]+):    -> Matches a label at the start of a line (e.g., SUBJECT:)
+    // ^([A-Z0-9_\s]+):    -> Matches a label at the start of a line (e.g., SUBJECT:, NEWSLETTER TITLE:)
     // \s*               -> Matches optional whitespace
     // ([\s\S]*?)        -> Captures everything (including newlines) lazily
-    // (?=\n[A-Z0-9_]+:|$) -> Until it sees another label at start of line OR end of string
-    const regex = /^([A-Z0-9_]+):\s*([\s\S]*?)(?=\n[A-Z0-9_]+:|$)/gim;
+    // (?=\n[A-Z0-9_\s]+:|$) -> Until it sees another label at start of line OR end of string
+    const regex = /^([A-Z0-9_\s]+):\s*([\s\S]*?)(?=\n[A-Z0-9_\s]+:|$)/gim;
 
     let match;
     while ((match = regex.exec(raw)) !== null) {
-        const label = match[1].toLowerCase();
+        // Trim, lower-case, and replace any spaces with underscores so tokens are standard
+        const label = match[1].trim().toLowerCase().replace(/\s+/g, '_');
         const value = match[2].trim();
         results[label] = value;
     }
