@@ -28,6 +28,7 @@ export default function OutputPanel({
     newsletterType,
 }: OutputPanelProps) {
     const [tab, setTab] = useState<'preview' | 'template' | 'raw'>('preview');
+    const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
     const [editedHtml, setEditedHtml] = useState(emailHtml);
     const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -72,7 +73,7 @@ export default function OutputPanel({
     };
 
     return (
-        <div className="w-full max-w-3xl flex flex-col gap-4">
+        <div className="w-full max-w-4xl flex flex-col gap-4">
 
             {/* Subject + Preview metadata */}
             <div className="border rounded-2xl p-4 bg-card flex flex-col gap-1.5">
@@ -104,26 +105,55 @@ export default function OutputPanel({
 
             {/* Preview tab — iframe rendering the email HTML */}
             {/* We use hidden instead of unmounting so the iframe doesn't lose your edits when switching tabs */}
-            <div className={`w-full border rounded-2xl overflow-hidden shadow-xl ring-2 ring-purple-500/20 ${tab === 'preview' ? 'block' : 'hidden'}`}>
-                <div className="bg-muted/40 px-4 py-2 border-b flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-red-400"/>
-                        <div className="w-3 h-3 rounded-full bg-yellow-400"/>
-                        <div className="w-3 h-3 rounded-full bg-green-400"/>
-                        <span className="text-xs text-muted-foreground ml-2 font-mono">email preview</span>
+            <div className={`w-full flex flex-col items-center bg-gray-50/50 p-4 border rounded-2xl shadow-xl ring-2 ring-purple-500/20 ${tab === 'preview' ? 'block' : 'hidden'}`}>
+                
+                {/* Preview Toolbar */}
+                <div className="w-full flex items-center justify-between mb-4 bg-white p-2 rounded-xl border shadow-sm">
+                    <div className="flex bg-muted p-1 rounded-lg">
+                        <button 
+                            onClick={() => setDevice('desktop')}
+                            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-2 ${device === 'desktop' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                            💻 Desktop
+                        </button>
+                        <button 
+                            onClick={() => setDevice('mobile')}
+                            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-2 ${device === 'mobile' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                        >
+                            📱 Mobile
+                        </button>
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded border bg-purple-500 text-white shadow-sm flex items-center gap-1">
+
+                    <span className="text-[10px] font-bold px-3 py-1.5 rounded-lg border bg-purple-500 text-white shadow-sm flex items-center gap-1">
                         <span className="animate-pulse">✨</span> Interactive Editing Mode
                     </span>
                 </div>
-                <iframe 
-                    ref={iframeRef}
-                    srcDoc={emailHtml} 
-                    onLoad={handleIframeLoad}
-                    className="w-full border-0 outline-none" 
-                    style={{ height: '720px' }} 
-                    title="Newsletter preview"
-                />
+
+                {/* Device Frame */}
+                <div className={`relative transition-all duration-300 ease-in-out bg-white overflow-hidden shadow-2xl ${device === 'mobile' ? 'w-[375px] h-[812px] border-[14px] border-slate-800 rounded-[40px]' : 'w-full max-w-3xl h-[800px] border border-gray-200 rounded-xl'}`}>
+                    {device === 'mobile' && (
+                        <div className="w-full h-6 bg-slate-800 flex justify-center items-end pb-1 absolute top-0 left-0 z-10 pointer-events-none rounded-t-[26px]">
+                            <div className="w-1/3 h-4 bg-black rounded-b-2xl"></div>
+                        </div>
+                    )}
+                    <iframe 
+                        ref={iframeRef}
+                        srcDoc={`<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>body { margin: 0; padding: 0; background-color: #fafafa; }</style>
+</head>
+<body>
+    ${emailHtml}
+</body>
+</html>`} 
+                        onLoad={handleIframeLoad}
+                        className="w-full h-full border-0 outline-none relative z-0" 
+                        title="Newsletter preview"
+                    />
+                </div>
             </div>
 
             {/* HTML tab — raw HTML source */}

@@ -93,7 +93,7 @@ export function renderTemplate(
     // Returning a clean div wrapper instead of a full <html> document.
     // This makes it 100% HubSpot compatible while keeping the professional preview.
     return `
-<div style="background-color:${bg}; padding: 20px 10px; font-family: Helvetica, Arial, sans-serif;">
+<div style="background-color:${bg}; padding: 20px 0px; font-family: Helvetica, Arial, sans-serif;">
   <!-- Preheader text for email clients -->
   <div style="display:none;font-size:1px;color:${bg};max-height:0;overflow:hidden;">${parsed.preview || ''}&nbsp;</div>
   
