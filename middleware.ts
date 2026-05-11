@@ -16,6 +16,7 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/api/query') ||
     pathname.startsWith('/api/metaapi-lookup') ||
     pathname.startsWith('/api/metaapi-connections') ||
+    pathname.startsWith('/api/metaapi-manage') ||
     pathname.startsWith('/api/metaapi-health') ||
     pathname.startsWith('/api/user-directory') ||
     pathname.startsWith('/api/user-reports') ||
