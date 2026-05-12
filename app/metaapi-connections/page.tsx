@@ -1,751 +1,546 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { RefreshCw, Copy, ExternalLink, Activity, X, Search as SearchIcon } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+    RefreshCw, Wifi, WifiOff, Copy, ExternalLink, AlertTriangle,
+    ChevronDown, ChevronUp, Zap, Clock, TrendingUp, Activity,
+    PowerOff, Power, Trash2, X, CheckCircle, DollarSign
+} from 'lucide-react';
+import type { ConnectionRow, ConnectionsSummary } from '../api/metaapi-connections/route';
 
-interface SummaryCounts {
-    total: number;
-    connected: number;
-    disconnected: number;
-}
-
-type SearchKind = 'userId' | 'email' | 'name' | 'none';
-
-interface ConnectionRow {
-    userId: string;
-    accountId: string | null;
-    connected: boolean;
-    lastUpdated: string | null;
-    brokerName: string | null;
-    server: string | null;
-    platform: string | null;
-    region: string | null;
-}
-
-interface ClerkUserSummary {
-    email: string | null;
-    firstName: string | null;
-    lastName: string | null;
-    instance: 'Live' | 'Dev';
-}
-
-interface PageInfo {
-    size: number;
-    requestedSize: number;
-    nextContinuationToken: string | null;
-}
-
-type FilterStatus = 'all' | 'connected' | 'disconnected';
-
-type HealthStatus = 'Healthy' | 'Inactive' | 'Degraded' | 'Down' | 'Unknown';
-
-interface HealthBundle {
-    status: HealthStatus;
-    reason: string;
-    checkedAt: string;
-    provisioning: {
-        state: string | null;
-        connectionStatus: string | null;
-        region: string | null;
-        reliability: string | null;
-        resourceSlots: number | null;
-        copyFactoryResourceSlots: number | null;
-        connections: Array<{ region?: string; zone?: string; application?: string }>;
-        platform: string | null;
-        server: string | null;
-        login: string | number | null;
-    } | null;
-    accountInfo: {
-        tradeAllowed: boolean | null;
-        balance: number | null;
-        equity: number | null;
-        marginLevel: number | null;
-        currency: string | null;
-        leverage: number | null;
-    } | null;
-    errors: string[];
-}
-
-type HealthCellState =
-    | { kind: 'idle' }
-    | { kind: 'loading' }
-    | { kind: 'ok'; bundle: HealthBundle }
-    | { kind: 'error'; message: string };
-
-// Neutral palette: a single colored dot communicates status; chip stays outline.
-const HEALTH_DOT: Record<HealthStatus, string> = {
-    Healthy: 'bg-emerald-500',
-    Inactive: 'bg-sky-400',
-    Degraded: 'bg-amber-500',
-    Down: 'bg-red-500',
-    Unknown: 'bg-muted-foreground',
+// ── helpers ────────────────────────────────────────────────────────────────────
+const fmtDate = (v: string | null) => {
+    if (!v) return '—';
+    try { return new Date(v).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return v; }
 };
+const fmtDateTime = (v: string | null) => {
+    if (!v) return '—';
+    try { return new Date(v).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch { return v; }
+};
+const fmtUsd = (v: number) => `$${v.toFixed(2)}`;
+
+// ── Policy badge ───────────────────────────────────────────────────────────────
+const POLICY_LABELS: Record<string, { label: string; cls: string; desc: string }> = {
+    'always-on':             { label: 'Always On',  cls: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',    desc: 'Never undeployed — paid user with active strategies or manual override' },
+    'weekend-only':          { label: 'Weekend Off', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',        desc: 'Undeployed on forex weekends only — paid user, no active strategies' },
+    'overnight-and-weekend': { label: 'Free Tier',   cls: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400', desc: 'Undeployed after 6h idle or on weekends — free tier user' },
+};
+
+// ── Lifecycle state badge ──────────────────────────────────────────────────────
+const STATE_LABELS: Record<string, { label: string; cls: string }> = {
+    'DEPLOYED':    { label: 'Deployed',   cls: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+    'UNDEPLOYED':  { label: 'Undeployed', cls: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400' },
+    'DEPLOYING':   { label: 'Deploying…', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+    'UNDEPLOYING': { label: 'Stopping…',  cls: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' },
+};
+
+// ── Usage bar ──────────────────────────────────────────────────────────────────
+function UsageBar({ used, total, label }: { used: number; total: number; label: string }) {
+    const n = Number(used) || 0;
+    const pct = Math.min(100, (n / total) * 100);
+    const color = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-yellow-500' : 'bg-green-500';
+    return (
+        <div className="w-full">
+            <div className="flex justify-between text-[10px] text-gray-500 mb-0.5">
+                <span>{label}</span>
+                <span>{n.toFixed(1)} / {total}</span>
+            </div>
+            <div className="w-full h-1.5 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden">
+                <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+            </div>
+        </div>
+    );
+}
+
+// ── Confirm dialog ─────────────────────────────────────────────────────────────
+function ConfirmDialog({ action, row, onConfirm, onCancel, loading }: {
+    action: 'undeploy' | 'deploy' | 'delete';
+    row: ConnectionRow;
+    onConfirm: () => void;
+    onCancel: () => void;
+    loading: boolean;
+}) {
+    const name = [row.firstName, row.lastName].filter(Boolean).join(' ') || row.email || row.userId;
+    const configs = {
+        undeploy: {
+            title: 'Undeploy MetaAPI Account',
+            desc: `This will stop the MetaAPI terminal for ${name}. The account still exists — they can redeploy. Billing stops while undeployed.`,
+            btnCls: 'bg-yellow-600 hover:bg-yellow-700',
+            btnLabel: 'Undeploy',
+            icon: PowerOff,
+        },
+        deploy: {
+            title: 'Deploy MetaAPI Account',
+            desc: `This will start the MetaAPI terminal for ${name}. Billing resumes once deployed.`,
+            btnCls: 'bg-green-600 hover:bg-green-700',
+            btnLabel: 'Deploy',
+            icon: Power,
+        },
+        delete: {
+            title: '⚠️ Delete MetaAPI Account',
+            desc: `This permanently deletes the MetaAPI account for ${name} (account ID: ${row.accountId}). This CANNOT be undone. The user will need to reconnect their broker.`,
+            btnCls: 'bg-red-600 hover:bg-red-700',
+            btnLabel: 'Permanently Delete',
+            icon: Trash2,
+        },
+    };
+    const cfg = configs[action];
+    const Icon = cfg.icon;
+    return (
+        <>
+            <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" onClick={onCancel} />
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6">
+                    <div className="flex items-start gap-3 mb-4">
+                        <div className={`p-2 rounded-lg ${action === 'delete' ? 'bg-red-100 text-red-600' : action === 'undeploy' ? 'bg-yellow-100 text-yellow-600' : 'bg-green-100 text-green-600'}`}>
+                            <Icon size={20} />
+                        </div>
+                        <div>
+                            <h3 className="font-semibold text-gray-900 dark:text-white">{cfg.title}</h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{cfg.desc}</p>
+                        </div>
+                    </div>
+                    <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 mb-4 text-xs font-mono text-gray-600 dark:text-gray-300">
+                        Account ID: {row.accountId ?? '—'}
+                    </div>
+                    <div className="flex gap-3 justify-end">
+                        <button onClick={onCancel} disabled={loading}
+                            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 rounded-lg transition-colors">
+                            Cancel
+                        </button>
+                        <button onClick={onConfirm} disabled={loading}
+                            className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors flex items-center gap-2 ${cfg.btnCls} disabled:opacity-50`}>
+                            {loading ? <RefreshCw size={14} className="animate-spin" /> : <Icon size={14} />}
+                            {loading ? 'Processing…' : cfg.btnLabel}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </>
+    );
+}
+
+// ── Summary cards ──────────────────────────────────────────────────────────────
+function SummaryCards({ s, ratePerHour }: { s: ConnectionsSummary; ratePerHour: number }) {
+    const monthlyPerAccount = (ratePerHour * 720).toFixed(2);
+    const cards = [
+        { label: 'Total',          value: s.total,               cls: 'text-blue-600 dark:text-blue-400',       icon: Activity },
+        { label: 'Connected',      value: s.connected,           cls: 'text-green-600 dark:text-green-400',     icon: Wifi },
+        { label: 'Deployed',       value: s.deployed,            cls: 'text-emerald-600 dark:text-emerald-400', icon: Power },
+        { label: 'Undeployed',     value: s.undeployed,          cls: 'text-gray-500 dark:text-gray-400',       icon: PowerOff },
+        { label: 'Always On',      value: s.alwaysOn,            cls: 'text-green-600 dark:text-green-400',     icon: CheckCircle },
+        { label: 'Weekend Off',    value: s.weekendOnly,         cls: 'text-blue-600 dark:text-blue-400',       icon: Clock },
+        { label: 'Free Tier',      value: s.overnightAndWeekend, cls: 'text-orange-600 dark:text-orange-400',   icon: Zap },
+        { label: 'Avg Hours Used', value: `${Number(s.avgDeployedHours).toFixed(1)}h`, cls: 'text-purple-600 dark:text-purple-400', icon: TrendingUp },
+    ];
+    return (
+        <div className="space-y-3">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-4 flex flex-wrap gap-6 items-center">
+                <div className="flex items-center gap-2">
+                    <DollarSign size={16} className="text-yellow-500" />
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Rate:</span>
+                    <span className="text-sm font-bold text-gray-900 dark:text-white">${ratePerHour}/h</span>
+                    <span className="text-xs text-gray-400">(≈${monthlyPerAccount}/account/month always-on)</span>
+                </div>
+                <div className="h-5 w-px bg-gray-200 dark:bg-gray-600 hidden sm:block" />
+                <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-gray-500">Lifetime spend:</span>
+                    <span className="text-sm font-bold text-gray-900 dark:text-white">{fmtUsd(s.totalActualCostUsd)}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-gray-500">Current sessions:</span>
+                    <span className="text-sm font-bold text-orange-600 dark:text-orange-400">{fmtUsd(s.totalCurrentSessionCostUsd)}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-gray-500">Projected monthly:</span>
+                    <span className="text-sm font-bold text-red-600 dark:text-red-400">{fmtUsd(s.projectedMonthlyCostUsd)}</span>
+                    <span className="text-xs text-gray-400">({s.deployed} deployed × ${monthlyPerAccount})</span>
+                </div>
+                <span className="text-[10px] text-gray-400 ml-auto">Set METAAPI_RATE_PER_HOUR in .env.local to match your invoice</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+                {cards.map(c => {
+                    const Icon = c.icon;
+                    return (
+                        <div key={c.label} className="bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+                            <Icon size={14} className={`mb-1 ${c.cls}`} />
+                            <p className={`text-2xl font-bold leading-none ${c.cls}`}>{c.value}</p>
+                            <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">{c.label}</p>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────────────
+function Toast({ msg, type, onDismiss }: { msg: string; type: 'success' | 'error'; onDismiss: () => void }) {
+    useEffect(() => {
+        const t = setTimeout(onDismiss, 4000);
+        return () => clearTimeout(t);
+    }, [onDismiss]);
+    return (
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium
+            ${type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
+            {type === 'success' ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
+            {msg}
+            <button onClick={onDismiss}><X size={14} /></button>
+        </div>
+    );
+}
+
+// ── Main page ──────────────────────────────────────────────────────────────────
+type FilterStatus = 'all' | 'connected' | 'disconnected';
+type FilterState = 'all' | 'DEPLOYED' | 'UNDEPLOYED';
+type FilterPolicy = 'all' | 'always-on' | 'weekend-only' | 'overnight-and-weekend';
+type SortKey = keyof ConnectionRow;
 
 export default function MetaApiConnectionsPage() {
     const [connections, setConnections] = useState<ConnectionRow[]>([]);
-    const [pageInfo, setPageInfo] = useState<PageInfo | null>(null);
-    const [metaApiLiveData, setMetaApiLiveData] = useState(false);
+    const [summary, setSummary] = useState<ConnectionsSummary | null>(null);
+    const [ratePerHour, setRatePerHour] = useState<number>(0.0152);
     const [loading, setLoading] = useState(false);
-    const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [filter, setFilter] = useState<FilterStatus>('all');
+    const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
+    const [filterState, setFilterState] = useState<FilterState>('all');
+    const [filterPolicy, setFilterPolicy] = useState<FilterPolicy>('all');
     const [search, setSearch] = useState('');
     const [copied, setCopied] = useState<string | null>(null);
-    const [healthByAccount, setHealthByAccount] = useState<Record<string, HealthCellState>>({});
-    const [openDetail, setOpenDetail] = useState<{ row: ConnectionRow; bundle: HealthBundle } | null>(null);
-    const [clerkByUser, setClerkByUser] = useState<Record<string, ClerkUserSummary | null>>({});
-    const [summary, setSummary] = useState<SummaryCounts | null>(null);
+    const [sortKey, setSortKey] = useState<SortKey>('lastDeployedAt');
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+    const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+    const [pendingAction, setPendingAction] = useState<{ action: 'undeploy' | 'deploy' | 'delete'; row: ConnectionRow } | null>(null);
+    const [actionLoading, setActionLoading] = useState(false);
 
-    // Search-mode state. When `searchActive` is true we display searchResults
-    // instead of the paginated `connections` list.
-    const [searchActive, setSearchActive] = useState(false);
-    const [searching, setSearching] = useState(false);
-    const [searchResults, setSearchResults] = useState<ConnectionRow[]>([]);
-    const [searchKind, setSearchKind] = useState<SearchKind>('none');
-    const searchSeq = useRef(0); // guard against stale responses from older queries
-
-    const fetchClerkForUserIds = useCallback(async (userIds: string[]) => {
-        if (userIds.length === 0) return;
+    const fetchConnections = useCallback(async () => {
+        setLoading(true); setError(null);
         try {
-            const res = await fetch('/api/clerk-users', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userIds }),
-            });
-            const data = await res.json();
-            const users: Record<string, ClerkUserSummary> = data?.users ?? {};
-            setClerkByUser(prev => {
-                const next = { ...prev };
-                // Mark every requested ID — null means "looked up, not found".
-                for (const id of userIds) next[id] = users[id] ?? null;
-                return next;
-            });
-        } catch (e) {
-            console.error('Clerk batch fetch failed:', (e as Error).message);
-        }
-    }, []);
-
-    const fetchConnections = useCallback(async (continuationToken?: string) => {
-        const isFirstPage = !continuationToken;
-        if (isFirstPage) setLoading(true);
-        else setLoadingMore(true);
-        setError(null);
-        try {
-            const url = new URL('/api/metaapi-connections', window.location.origin);
-            url.searchParams.set('pageSize', '50');
-            if (continuationToken) url.searchParams.set('continuationToken', continuationToken);
-
-            const res = await fetch(url.toString());
+            const res = await fetch('/api/metaapi-connections');
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to fetch');
-
-            const newRows: ConnectionRow[] = data.connections ?? [];
-            setConnections(prev => isFirstPage ? newRows : [...prev, ...newRows]);
-            setPageInfo(data.page ?? null);
-            setMetaApiLiveData(!!data.metaApiLiveData);
-
-            // Lazy-load Clerk for the new rows (don't block the table render)
-            const userIdsNeedingClerk = newRows
-                .map(r => r.userId)
-                .filter(id => clerkByUser[id] === undefined);
-            if (userIdsNeedingClerk.length > 0) {
-                void fetchClerkForUserIds(userIdsNeedingClerk);
-            }
-        } catch (e) {
-            setError((e as Error).message);
-        } finally {
-            setLoading(false);
-            setLoadingMore(false);
-        }
-    }, [clerkByUser, fetchClerkForUserIds]);
-
-    // First-page load on mount only — fetchConnections changes when clerkByUser
-    // updates, but we don't want to refetch the table every time Clerk data lands.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => { fetchConnections(); }, []);
-
-    const fetchSummary = useCallback(async () => {
-        try {
-            const res = await fetch('/api/metaapi-connections/summary');
-            if (!res.ok) return;
-            const data = await res.json();
-            setSummary({
-                total: data.total ?? 0,
-                connected: data.connected ?? 0,
-                disconnected: data.disconnected ?? 0,
-            });
-        } catch (e) {
-            console.error('Summary fetch failed:', (e as Error).message);
-        }
+            setConnections(data.connections ?? []);
+            setSummary(data.summary ?? null);
+            if (data.ratePerHour) setRatePerHour(data.ratePerHour);
+        } catch (e: any) { setError(e.message); }
+        finally { setLoading(false); }
     }, []);
 
-    useEffect(() => { fetchSummary(); }, [fetchSummary]);
+    useEffect(() => { fetchConnections(); }, [fetchConnections]);
 
-    // Debounced server-side search.
-    useEffect(() => {
-        const q = search.trim();
-        if (!q) {
-            setSearchActive(false);
-            setSearchResults([]);
-            setSearchKind('none');
-            return;
-        }
-        const seq = ++searchSeq.current;
-        setSearchActive(true);
-        setSearching(true);
-        const handle = setTimeout(async () => {
-            try {
-                const url = new URL('/api/metaapi-connections/search', window.location.origin);
-                url.searchParams.set('q', q);
-                const res = await fetch(url.toString());
-                if (seq !== searchSeq.current) return; // a newer search has superseded us
-                const data = await res.json();
-                if (!res.ok) {
-                    setSearchResults([]);
-                    setSearchKind('none');
-                    setError(data.error ?? 'Search failed');
-                    return;
-                }
-                const rows: ConnectionRow[] = data.connections ?? [];
-                setSearchResults(rows);
-                setSearchKind((data.searchKind as SearchKind) ?? 'none');
-                // Lazy Clerk for any matched userIds we don't already have.
-                const need = rows.map(r => r.userId).filter(id => clerkByUser[id] === undefined);
-                if (need.length > 0) void fetchClerkForUserIds(need);
-            } catch (e) {
-                if (seq === searchSeq.current) {
-                    setSearchResults([]);
-                    setError((e as Error).message);
-                }
-            } finally {
-                if (seq === searchSeq.current) setSearching(false);
-            }
-        }, 300);
-        return () => clearTimeout(handle);
-    }, [search, clerkByUser, fetchClerkForUserIds]);
-
-    const checkHealth = useCallback(async (accountId: string) => {
-        setHealthByAccount(prev => ({ ...prev, [accountId]: { kind: 'loading' } }));
-        try {
-            const res = await fetch('/api/metaapi-connections/health', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ accountId }),
-            });
-            const data = await res.json();
-            if (data?.health) {
-                setHealthByAccount(prev => ({ ...prev, [accountId]: { kind: 'ok', bundle: data.health } }));
-            } else {
-                setHealthByAccount(prev => ({
-                    ...prev,
-                    [accountId]: { kind: 'error', message: data?.error ?? 'Unknown error' },
-                }));
-            }
-        } catch (e) {
-            setHealthByAccount(prev => ({
-                ...prev,
-                [accountId]: { kind: 'error', message: (e as Error).message },
-            }));
-        }
-    }, []);
-
-    const copyToClipboard = (text: string, key: string) => {
+    const copy = (text: string, key: string) => {
         navigator.clipboard.writeText(text);
         setCopied(key);
         setTimeout(() => setCopied(null), 1500);
     };
 
-    const formatDate = (val: string | null) => {
-        if (!val) return '—';
-        try { return new Date(val).toLocaleString(); } catch { return val; }
+    const handleSort = (key: SortKey) => {
+        if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+        else { setSortKey(key); setSortDir('desc'); }
     };
 
-    const displayName = (row: ConnectionRow) => {
-        const clerk = clerkByUser[row.userId];
-        if (clerk) {
-            const name = [clerk.firstName, clerk.lastName].filter(Boolean).join(' ');
-            return name || clerk.email || row.userId;
+    const execAction = async () => {
+        if (!pendingAction) return;
+        const { action, row } = pendingAction;
+        if (!row.accountId) return;
+        setActionLoading(true);
+        try {
+            const res = await fetch('/api/metaapi-manage', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action, accountId: row.accountId, userId: row.userId }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Action failed');
+            setToast({ msg: `${action.charAt(0).toUpperCase() + action.slice(1)} successful for ${row.email || row.userId}`, type: 'success' });
+            setPendingAction(null);
+            setTimeout(() => fetchConnections(), 1500);
+        } catch (e: any) {
+            setToast({ msg: e.message, type: 'error' });
+        } finally {
+            setActionLoading(false);
         }
-        // Clerk lookup hasn't returned yet (or returned null) — fall back to userId.
-        return row.userId;
     };
 
-    // Search results replace the paginated dataset; status filter still applies.
-    const sourceRows = searchActive ? searchResults : connections;
-    const filtered = sourceRows.filter(c => {
-        if (filter === 'connected' && !c.connected) return false;
-        if (filter === 'disconnected' && c.connected) return false;
-        return true;
-    });
+    const filtered = useMemo(() => {
+        let r = connections;
+        if (filterStatus === 'connected') r = r.filter(c => c.connected);
+        if (filterStatus === 'disconnected') r = r.filter(c => !c.connected);
+        if (filterState !== 'all') r = r.filter(c => c.lifecycleState === filterState);
+        if (filterPolicy !== 'all') r = r.filter(c => c.policy === filterPolicy);
+        if (search.trim()) {
+            const q = search.toLowerCase();
+            r = r.filter(c =>
+                c.email?.toLowerCase().includes(q) ||
+                c.userId.toLowerCase().includes(q) ||
+                c.accountId?.toLowerCase().includes(q) ||
+                c.brokerName?.toLowerCase().includes(q) ||
+                c.server?.toLowerCase().includes(q)
+            );
+        }
+        return [...r].sort((a, b) => {
+            const av = (a as any)[sortKey] ?? '';
+            const bv = (b as any)[sortKey] ?? '';
+            if (typeof av === 'number') return sortDir === 'asc' ? av - bv : bv - av;
+            return sortDir === 'asc' ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
+        });
+    }, [connections, filterStatus, filterState, filterPolicy, search, sortKey, sortDir]);
 
-    const refreshAll = () => {
-        setConnections([]);
-        setPageInfo(null);
-        setHealthByAccount({});
-        fetchConnections();
-        fetchSummary();
-    };
+    function SortTh({ label, k }: { label: string; k: SortKey }) {
+        const active = sortKey === k;
+        return (
+            <th onClick={() => handleSort(k)} className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-gray-800 dark:hover:text-white select-none">
+                <span className="flex items-center gap-1">{label}{active ? (sortDir === 'asc' ? <ChevronUp size={11} /> : <ChevronDown size={11} />) : null}</span>
+            </th>
+        );
+    }
 
     return (
-        <div className="space-y-4">
-            <div className="space-y-4">
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4 md:p-6 pt-16 md:pt-6">
+            <div className="max-w-[1800px] mx-auto space-y-5">
 
                 {/* Header */}
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-0.5 min-w-0">
-                        <h1 className="text-xl font-semibold">MetaAPI Broker Connections</h1>
-                        <p className="text-sm text-muted-foreground">
-                            All users connected via MetaAPI — for billing &amp; budget tracking
-                            {metaApiLiveData && <span className="ml-2 text-foreground">· live data</span>}
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-5 flex items-center justify-between flex-wrap gap-4">
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">MetaAPI Connections</h1>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                            Usage tracking · Lifecycle state · Billing actions
+                            {summary?.metaApiLiveData && <span className="ml-2 text-green-600 dark:text-green-400 font-medium">✓ Live MetaAPI data</span>}
                         </p>
                     </div>
-                    <Button onClick={refreshAll} disabled={loading} variant="outline" size="sm">
-                        <RefreshCw className={loading ? 'animate-spin' : ''} />
+                    <button onClick={fetchConnections} disabled={loading}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-medium rounded-lg transition-colors">
+                        <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
                         {loading ? 'Loading…' : 'Refresh'}
-                    </Button>
+                    </button>
                 </div>
 
-                {/* Summary cards */}
-                {summary && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <SummaryStat label="Total" value={summary.total} />
-                        <SummaryStat
-                            label="Connected"
-                            value={summary.connected}
-                            active={filter === 'connected'}
-                            onClick={() => setFilter(filter === 'connected' ? 'all' : 'connected')}
-                            dot="bg-emerald-500"
-                        />
-                        <SummaryStat
-                            label="Disconnected"
-                            value={summary.disconnected}
-                            active={filter === 'disconnected'}
-                            onClick={() => setFilter(filter === 'disconnected' ? 'all' : 'disconnected')}
-                            dot="bg-muted-foreground"
-                        />
-                    </div>
-                )}
+                {summary && <SummaryCards s={summary} ratePerHour={ratePerHour} />}
 
-                {/* Error */}
-                {error && (
-                    <Card className="border-destructive">
-                        <CardContent className="pt-6">
-                            <p className="text-sm text-destructive">{error}</p>
-                        </CardContent>
-                    </Card>
-                )}
+                {error && <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-700 dark:text-red-400">Error: {error}</div>}
 
-                {/* Filters + Search */}
-                <Card>
-                    <CardContent className="pt-6 flex flex-wrap items-center gap-3">
-                        <div className="flex gap-1">
-                            {(['all', 'connected', 'disconnected'] as FilterStatus[]).map(f => (
-                                <Button
-                                    key={f}
-                                    variant={filter === f ? 'default' : 'outline'}
-                                    size="sm"
-                                    className="capitalize"
-                                    onClick={() => setFilter(f)}
-                                >
-                                    {f}
-                                </Button>
-                            ))}
-                        </div>
-                        <div className="relative flex-1 min-w-[240px]">
-                            {searching ? (
-                                <RefreshCw className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground animate-spin pointer-events-none" />
-                            ) : (
-                                <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-                            )}
-                            <Input
-                                value={search}
-                                onChange={e => setSearch(e.target.value)}
-                                placeholder="Search by user ID, email, or name…"
-                                className="pl-8 pr-8"
-                            />
-                            {search && (
-                                <button
-                                    onClick={() => setSearch('')}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                                    title="Clear"
-                                >
-                                    <X className="size-4" />
-                                </button>
-                            )}
-                        </div>
-                        {searchActive && searchKind !== 'none' && (
-                            <Badge variant="outline">
-                                matched by {searchKind === 'userId' ? 'user ID' : searchKind}
-                            </Badge>
-                        )}
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                            {searchActive
-                                ? `${filtered.length} match${filtered.length === 1 ? '' : 'es'}`
-                                : `${filtered.length} of ${summary?.total ?? connections.length} rows loaded`}
-                        </span>
-                    </CardContent>
-                </Card>
+                {/* Filters */}
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-4 flex flex-wrap gap-3 items-center">
+                    <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+                        placeholder="Search email, user ID, account ID, broker, server…"
+                        className="flex-1 min-w-[200px] text-sm px-3 py-1.5 border border-gray-200 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
+                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value as FilterStatus)}
+                        className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 dark:bg-gray-700 dark:text-white">
+                        <option value="all">All connections</option>
+                        <option value="connected">Connected</option>
+                        <option value="disconnected">Disconnected</option>
+                    </select>
+                    <select value={filterState} onChange={e => setFilterState(e.target.value as FilterState)}
+                        className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 dark:bg-gray-700 dark:text-white">
+                        <option value="all">All states</option>
+                        <option value="DEPLOYED">Deployed</option>
+                        <option value="UNDEPLOYED">Undeployed</option>
+                    </select>
+                    <select value={filterPolicy} onChange={e => setFilterPolicy(e.target.value as FilterPolicy)}
+                        className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 dark:bg-gray-700 dark:text-white">
+                        <option value="all">All policies</option>
+                        <option value="always-on">Always On</option>
+                        <option value="weekend-only">Weekend Off</option>
+                        <option value="overnight-and-weekend">Free Tier</option>
+                    </select>
+                    <span className="text-xs text-gray-500 ml-auto whitespace-nowrap">{filtered.length} / {connections.length}</span>
+                </div>
 
                 {/* Table */}
-                <Card className="overflow-hidden">
-                    {loading && connections.length === 0 ? (
-                        <div className="p-16 text-center text-sm text-muted-foreground">
-                            <RefreshCw className="animate-spin mx-auto mb-3 size-6" />
-                            Loading connections…
-                        </div>
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow overflow-hidden">
+                    {loading && !connections.length ? (
+                        <div className="p-16 text-center text-gray-400"><RefreshCw size={28} className="animate-spin mx-auto mb-3 opacity-40" />Loading…</div>
                     ) : filtered.length === 0 ? (
-                        <div className="p-16 text-center text-sm text-muted-foreground">
-                            No connections found.
-                        </div>
+                        <div className="p-16 text-center text-gray-400">No connections found.</div>
                     ) : (
                         <div className="overflow-x-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Status</TableHead>
-                                        <TableHead>Health</TableHead>
-                                        <TableHead>User</TableHead>
-                                        <TableHead>Email</TableHead>
-                                        <TableHead>MetaAPI Account ID</TableHead>
-                                        <TableHead>Broker</TableHead>
-                                        <TableHead>Server</TableHead>
-                                        <TableHead>Platform</TableHead>
-                                        <TableHead>Region</TableHead>
-                                        <TableHead>Last Updated</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
+                            <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-700 text-sm">
+                                <thead className="bg-gray-50 dark:bg-gray-700/60 sticky top-0 z-10">
+                                    <tr>
+                                        <SortTh label="User" k="email" />
+                                        <SortTh label="Broker Status" k="connected" />
+                                        <SortTh label="Lifecycle" k="lifecycleState" />
+                                        <SortTh label="Policy" k="policy" />
+                                        <SortTh label="Hours Used" k="deployedHoursAccrued" />
+                                        <SortTh label="Hours Left" k="deployedHoursRemaining" />
+                                        <SortTh label="Trades" k="lifetimeTrades" />
+                                        <SortTh label="Deployments" k="lifetimeDeployments" />
+                                        <SortTh label="Cost (Lifetime)" k="actualCostUsd" />
+                                        <SortTh label="Session Cost" k="currentSessionCostUsd" />
+                                        <SortTh label="Balance" k="cachedBalance" />
+                                        <SortTh label="MetaAPI Account" k="accountId" />
+                                        <SortTh label="Broker" k="brokerName" />
+                                        <SortTh label="Last Deployed" k="lastDeployedAt" />
+                                        <SortTh label="Last Trade" k="lastTradeAt" />
+                                        <th className="px-3 py-2.5 text-xs font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider whitespace-nowrap sticky right-0 bg-gray-50 dark:bg-gray-700/60 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)]">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
                                     {filtered.map((row, i) => {
-                                        const clerk = clerkByUser[row.userId];
-                                        const clerkPending = clerk === undefined;
-                                        const name = clerk ? [clerk.firstName, clerk.lastName].filter(Boolean).join(' ') : '';
+                                        const name = [row.firstName, row.lastName].filter(Boolean).join(' ') || '—';
+                                        const policy = row.policy ? POLICY_LABELS[row.policy] : null;
+                                        const state = row.lifecycleState ? STATE_LABELS[row.lifecycleState] : null;
+                                        const isDeployed = row.lifecycleState === 'DEPLOYED';
                                         return (
-                                            <TableRow key={row.userId + i}>
-                                                {/* Status */}
-                                                <TableCell>
-                                                    <span className="inline-flex items-center gap-2 text-sm">
-                                                        <span className={`size-1.5 rounded-full ${row.connected ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
-                                                        <span className={row.connected ? 'text-foreground' : 'text-muted-foreground'}>
-                                                            {row.connected ? 'Connected' : 'Disconnected'}
-                                                        </span>
-                                                    </span>
-                                                </TableCell>
-
-                                                {/* Health */}
-                                                <TableCell>
-                                                    <HealthCell
-                                                        accountId={row.accountId}
-                                                        state={row.accountId ? healthByAccount[row.accountId] ?? { kind: 'idle' } : { kind: 'idle' }}
-                                                        onCheck={() => row.accountId && checkHealth(row.accountId)}
-                                                        onOpenDetail={(bundle) => setOpenDetail({ row, bundle })}
-                                                    />
-                                                </TableCell>
+                                            <tr key={row.userId + i} className="hover:bg-gray-50/70 dark:hover:bg-gray-700/30 transition-colors">
 
                                                 {/* User */}
-                                                <TableCell className="min-w-[180px]">
-                                                    <div className="text-sm font-medium">
-                                                        {clerkPending ? <Skeleton className="h-3 w-24" /> : (name || clerk?.email || row.userId)}
-                                                    </div>
+                                                <td className="px-3 py-2.5">
+                                                    <div className="font-medium text-gray-900 dark:text-white text-xs truncate max-w-[160px]">{name}</div>
+                                                    <div className="text-xs text-gray-500 truncate max-w-[160px]">{row.email ?? <span className="italic text-red-400">no email</span>}</div>
                                                     <div className="flex items-center gap-1 mt-0.5">
-                                                        <span className="text-xs font-mono text-muted-foreground truncate max-w-[160px]">{row.userId}</span>
-                                                        <button
-                                                            onClick={() => copyToClipboard(row.userId, `uid-${i}`)}
-                                                            className="text-muted-foreground hover:text-foreground"
-                                                            title="Copy user ID"
-                                                        >
-                                                            <Copy className="size-3" />
+                                                        <span className="text-[10px] font-mono text-gray-400 truncate max-w-[120px]">{row.userId}</span>
+                                                        <button onClick={() => copy(row.userId, `uid-${i}`)} className="text-gray-300 hover:text-blue-500">
+                                                            {copied === `uid-${i}` ? <span className="text-green-500 text-[10px]">✓</span> : <Copy size={9} />}
                                                         </button>
                                                     </div>
-                                                    {clerk?.instance && (
-                                                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{clerk.instance}</span>
-                                                    )}
-                                                </TableCell>
+                                                    {row.clerkInstance && <span className="text-[10px] text-indigo-500">{row.clerkInstance}</span>}
+                                                </td>
 
-                                                {/* Email */}
-                                                <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                                                    {clerkPending ? (
-                                                        <Skeleton className="h-3 w-32" />
-                                                    ) : (clerk?.email ?? '—')}
-                                                </TableCell>
+                                                {/* Broker status */}
+                                                <td className="px-3 py-2.5 whitespace-nowrap">
+                                                    {row.connected
+                                                        ? <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />Connected</span>
+                                                        : <span className="flex items-center gap-1 text-xs text-gray-400"><span className="w-1.5 h-1.5 rounded-full bg-gray-300" />Disconnected</span>}
+                                                </td>
 
-                                                {/* Account ID */}
-                                                <TableCell>
+                                                {/* Lifecycle */}
+                                                <td className="px-3 py-2.5 whitespace-nowrap">
+                                                    {state ? <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${state.cls}`}>{state.label}</span> : <span className="text-gray-400 text-xs">—</span>}
+                                                    {row.lastUndeployReason && <div className="text-[10px] text-gray-400 mt-0.5">{row.lastUndeployReason}</div>}
+                                                </td>
+
+                                                {/* Policy */}
+                                                <td className="px-3 py-2.5 whitespace-nowrap">
+                                                    {policy ? <span title={policy.desc} className={`text-xs px-2 py-0.5 rounded-full font-medium cursor-help ${policy.cls}`}>{policy.label}</span> : <span className="text-gray-400 text-xs">—</span>}
+                                                    {row.alwaysOnFlag && <div className="text-[10px] text-green-500 mt-0.5">Manual override</div>}
+                                                </td>
+
+                                                {/* Hours used */}
+                                                <td className="px-3 py-2.5 min-w-[110px]">
+                                                    <UsageBar used={row.deployedHoursAccrued} total={60} label="" />
+                                                    <div className="text-[10px] text-gray-500 mt-0.5">{Number(row.deployedHoursAccrued).toFixed(1)}h used</div>
+                                                </td>
+
+                                                {/* Hours remaining */}
+                                                <td className="px-3 py-2.5 whitespace-nowrap text-center">
+                                                    <span className={`text-sm font-semibold ${Number(row.deployedHoursRemaining) <= 10 ? 'text-red-500' : Number(row.deployedHoursRemaining) <= 20 ? 'text-yellow-500' : 'text-green-600 dark:text-green-400'}`}>
+                                                        {Number(row.deployedHoursRemaining).toFixed(0)}h
+                                                    </span>
+                                                    <div className="text-[10px] text-gray-400">remaining</div>
+                                                </td>
+
+                                                {/* Trades */}
+                                                <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                                                    {row.lifetimeTrades > 0
+                                                        ? <div><span className="text-sm font-medium text-gray-800 dark:text-gray-200">{row.lifetimeTrades}</span><UsageBar used={row.lifetimeTrades} total={10} label="" /></div>
+                                                        : <span className="text-gray-400 text-xs">—</span>}
+                                                </td>
+
+                                                {/* Deployments */}
+                                                <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                                                    {row.lifetimeDeployments > 0
+                                                        ? <div><span className="text-sm font-medium text-gray-800 dark:text-gray-200">{row.lifetimeDeployments}</span><UsageBar used={row.lifetimeDeployments} total={10} label="" /></div>
+                                                        : <span className="text-gray-400 text-xs">—</span>}
+                                                </td>
+
+                                                {/* Lifetime cost */}
+                                                <td className="px-3 py-2.5 whitespace-nowrap text-right">
+                                                    <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">{fmtUsd(Number(row.actualCostUsd) || 0)}</span>
+                                                    <div className="text-[10px] text-gray-400">{Number(row.deployedHoursAccrued).toFixed(1)}h billed</div>
+                                                </td>
+
+                                                {/* Session cost */}
+                                                <td className="px-3 py-2.5 whitespace-nowrap text-right">
+                                                    {(Number(row.currentSessionCostUsd) || 0) > 0
+                                                        ? <span className="text-sm font-semibold text-orange-600 dark:text-orange-400">{fmtUsd(Number(row.currentSessionCostUsd))}</span>
+                                                        : <span className="text-gray-400 text-xs">—</span>}
+                                                </td>
+
+                                                {/* Balance */}
+                                                <td className="px-3 py-2.5 whitespace-nowrap text-right">
+                                                    {row.cachedBalance != null
+                                                        ? <div>
+                                                            <span className="text-sm font-medium text-gray-800 dark:text-gray-200">${row.cachedBalance.toLocaleString('en', { maximumFractionDigits: 2 })}</span>
+                                                            {row.cachedEquity != null && <div className="text-[10px] text-gray-400">Eq: ${row.cachedEquity.toLocaleString('en', { maximumFractionDigits: 2 })}</div>}
+                                                          </div>
+                                                        : <span className="text-gray-400 text-xs">—</span>}
+                                                </td>
+
+                                                {/* MetaAPI Account */}
+                                                <td className="px-3 py-2.5">
+                                                    {row.accountId
+                                                        ? <div className="flex items-center gap-1">
+                                                            <span className="text-[10px] font-mono text-gray-600 dark:text-gray-400 truncate max-w-[130px]">{row.accountId}</span>
+                                                            <button onClick={() => copy(row.accountId!, `acc-${i}`)} className="text-gray-300 hover:text-blue-500 flex-shrink-0">
+                                                                {copied === `acc-${i}` ? <span className="text-green-500 text-[10px]">✓</span> : <Copy size={9} />}
+                                                            </button>
+                                                            <a href={`/metaapi-lookup?accountId=${row.accountId}`} className="text-gray-300 hover:text-blue-500 flex-shrink-0"><ExternalLink size={9} /></a>
+                                                          </div>
+                                                        : <span className="text-gray-400 text-xs">—</span>}
+                                                    {row.platform && <div className="text-[10px] text-gray-400">{row.platform} · {row.region}</div>}
+                                                </td>
+
+                                                {/* Broker */}
+                                                <td className="px-3 py-2.5 whitespace-nowrap">
+                                                    <div className="text-xs text-gray-700 dark:text-gray-300">{row.brokerName ?? '—'}</div>
+                                                    {row.server && <div className="text-[10px] text-gray-400 truncate max-w-[100px]">{row.server}</div>}
+                                                </td>
+
+                                                {/* Last deployed */}
+                                                <td className="px-3 py-2.5 whitespace-nowrap text-xs text-gray-500">{fmtDateTime(row.lastDeployedAt)}</td>
+
+                                                {/* Last trade */}
+                                                <td className="px-3 py-2.5 whitespace-nowrap text-xs text-gray-500">{fmtDate(row.lastTradeAt)}</td>
+
+                                                {/* Actions — sticky right */}
+                                                <td className="px-3 py-2.5 whitespace-nowrap sticky right-0 bg-white dark:bg-gray-800 shadow-[-4px_0_6px_-2px_rgba(0,0,0,0.08)]">
                                                     {row.accountId ? (
                                                         <div className="flex items-center gap-1.5">
-                                                            <span className="text-xs font-mono truncate max-w-[160px]">{row.accountId}</span>
-                                                            <button
-                                                                onClick={() => copyToClipboard(row.accountId!, `acc-${i}`)}
-                                                                className="text-muted-foreground hover:text-foreground shrink-0"
-                                                                title="Copy account ID"
-                                                            >
-                                                                {copied === `acc-${i}` ? <span className="text-emerald-500 text-xs">✓</span> : <Copy className="size-3" />}
+                                                            {isDeployed ? (
+                                                                <button onClick={() => setPendingAction({ action: 'undeploy', row })}
+                                                                    title="Undeploy — stops terminal, saves billing"
+                                                                    className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 transition-colors">
+                                                                    <PowerOff size={10} /> Undeploy
+                                                                </button>
+                                                            ) : (
+                                                                <button onClick={() => setPendingAction({ action: 'deploy', row })}
+                                                                    title="Deploy — restarts terminal"
+                                                                    className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 transition-colors">
+                                                                    <Power size={10} /> Deploy
+                                                                </button>
+                                                            )}
+                                                            <button onClick={() => setPendingAction({ action: 'delete', row })}
+                                                                title="Delete permanently — cannot be undone"
+                                                                className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 transition-colors">
+                                                                <Trash2 size={10} /> Delete
                                                             </button>
-                                                            <a
-                                                                href={`/metaapi-lookup?accountId=${row.accountId}`}
-                                                                className="text-muted-foreground hover:text-foreground shrink-0"
-                                                                title="Open in MetaAPI Lookup"
-                                                            >
-                                                                <ExternalLink className="size-3" />
-                                                            </a>
                                                         </div>
-                                                    ) : <span className="text-sm text-muted-foreground">—</span>}
-                                                </TableCell>
-
-                                                <TableCell className="text-sm whitespace-nowrap">{row.brokerName ?? <span className="text-muted-foreground">—</span>}</TableCell>
-                                                <TableCell className="text-sm whitespace-nowrap">{row.server ?? <span className="text-muted-foreground">—</span>}</TableCell>
-                                                <TableCell className="text-sm whitespace-nowrap">{row.platform ?? <span className="text-muted-foreground">—</span>}</TableCell>
-                                                <TableCell className="text-sm whitespace-nowrap">{row.region ?? <span className="text-muted-foreground">—</span>}</TableCell>
-                                                <TableCell className="text-sm text-muted-foreground whitespace-nowrap">{formatDate(row.lastUpdated)}</TableCell>
-                                            </TableRow>
+                                                    ) : (
+                                                        <span className="text-[10px] text-gray-400 italic">No account ID</span>
+                                                    )}
+                                                </td>
+                                            </tr>
                                         );
                                     })}
-                                </TableBody>
-                            </Table>
+                                </tbody>
+                            </table>
                         </div>
                     )}
-                </Card>
-
-                {/* Load More — browsing mode only */}
-                {!searchActive && pageInfo?.nextContinuationToken && (
-                    <div className="flex justify-center">
-                        <Button
-                            variant="outline"
-                            onClick={() => fetchConnections(pageInfo.nextContinuationToken ?? undefined)}
-                            disabled={loadingMore}
-                        >
-                            {loadingMore && <RefreshCw className="animate-spin" />}
-                            {loadingMore ? 'Loading…' : `Load more (${connections.length} of ${summary?.total ?? '?'} loaded)`}
-                        </Button>
-                    </div>
-                )}
-
+                </div>
             </div>
 
-            {openDetail && (
-                <HealthDetailPanel
-                    row={openDetail.row}
-                    bundle={openDetail.bundle}
-                    clerk={clerkByUser[openDetail.row.userId]}
-                    onClose={() => setOpenDetail(null)}
-                    onRecheck={() => {
-                        if (openDetail.row.accountId) checkHealth(openDetail.row.accountId);
-                        setOpenDetail(null);
-                    }}
+            {pendingAction && (
+                <ConfirmDialog
+                    action={pendingAction.action}
+                    row={pendingAction.row}
+                    onConfirm={execAction}
+                    onCancel={() => setPendingAction(null)}
+                    loading={actionLoading}
                 />
             )}
-        </div>
-    );
-}
 
-function HealthCell({
-    accountId,
-    state,
-    onCheck,
-    onOpenDetail,
-}: {
-    accountId: string | null;
-    state: HealthCellState;
-    onCheck: () => void;
-    onOpenDetail: (bundle: HealthBundle) => void;
-}) {
-    if (!accountId) return <span className="text-xs text-muted-foreground">—</span>;
-
-    if (state.kind === 'idle') {
-        return (
-            <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={onCheck}>
-                <Activity className="size-3" /> Check
-            </Button>
-        );
-    }
-
-    if (state.kind === 'loading') {
-        return (
-            <Badge variant="outline" className="text-xs">
-                <RefreshCw className="animate-spin" /> Checking…
-            </Badge>
-        );
-    }
-
-    if (state.kind === 'error') {
-        return (
-            <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs text-destructive border-destructive/40" onClick={onCheck} title={state.message}>
-                Failed — retry
-            </Button>
-        );
-    }
-
-    const { bundle } = state;
-    return (
-        <div className="flex items-center gap-1.5">
-            <button
-                onClick={() => onOpenDetail(bundle)}
-                title={`${bundle.reason} — click for details`}
-                className="inline-flex"
-            >
-                <Badge variant="outline" className="text-xs gap-1.5 hover:bg-accent">
-                    <span className={`size-1.5 rounded-full ${HEALTH_DOT[bundle.status]}`} />
-                    {bundle.status}
-                </Badge>
-            </button>
-            <button onClick={onCheck} title="Re-check" className="text-muted-foreground hover:text-foreground">
-                <RefreshCw className="size-3" />
-            </button>
-        </div>
-    );
-}
-
-function SummaryStat({
-    label,
-    value,
-    active = false,
-    onClick,
-    dot,
-}: {
-    label: string;
-    value: number;
-    active?: boolean;
-    onClick?: () => void;
-    dot?: string;
-}) {
-    return (
-        <Card
-            className={`py-3 ${onClick ? 'cursor-pointer hover:bg-accent/30 transition-colors' : ''} ${active ? 'ring-2 ring-ring' : ''}`}
-            onClick={onClick}
-        >
-            <div className="px-4 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
-                    {dot && <span className={`size-2 rounded-full ${dot}`} />}
-                    <span className="text-sm text-muted-foreground">{label}</span>
-                </div>
-                <span className="text-2xl font-semibold tabular-nums">{value}</span>
-            </div>
-        </Card>
-    );
-}
-
-function PanelRow({ label, value }: { label: string; value: React.ReactNode }) {
-    return (
-        <div className="flex items-start justify-between gap-3 text-xs py-1">
-            <span className="text-gray-500 dark:text-gray-400 flex-shrink-0">{label}</span>
-            <span className="text-right text-gray-800 dark:text-gray-200">{value ?? '—'}</span>
-        </div>
-    );
-}
-
-function PanelSection({ title, children }: { title: string; children: React.ReactNode }) {
-    return (
-        <div className="border border-gray-100 dark:border-gray-700 rounded-lg overflow-hidden">
-            <div className="px-3 py-1.5 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-100 dark:border-gray-700 text-[11px] font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-300">
-                {title}
-            </div>
-            <div className="px-3 py-2">{children}</div>
-        </div>
-    );
-}
-
-function HealthDetailPanel({
-    row,
-    bundle,
-    clerk,
-    onClose,
-    onRecheck,
-}: {
-    row: ConnectionRow;
-    bundle: HealthBundle;
-    clerk: ClerkUserSummary | null | undefined;
-    onClose: () => void;
-    onRecheck: () => void;
-}) {
-    const fmtNum = (v: number | null | undefined, d = 2) =>
-        v === null || v === undefined || Number.isNaN(v) ? '—' : v.toLocaleString(undefined, { maximumFractionDigits: d });
-
-    return (
-        <div className="fixed inset-0 z-50 flex justify-end bg-foreground/30" onClick={onClose}>
-            <div
-                className="w-full max-w-md h-full bg-background border-l shadow-xl flex flex-col overflow-hidden"
-                onClick={e => e.stopPropagation()}
-            >
-                {/* Header */}
-                <div className="px-5 py-4 border-b flex items-start justify-between gap-3 shrink-0">
-                    <div className="min-w-0">
-                        <Badge variant="outline" className="text-xs gap-1.5">
-                            <span className={`size-1.5 rounded-full ${HEALTH_DOT[bundle.status]}`} />
-                            {bundle.status}
-                        </Badge>
-                        <h2 className="mt-2 text-sm font-semibold truncate">
-                            {[clerk?.firstName, clerk?.lastName].filter(Boolean).join(' ') || clerk?.email || row.userId}
-                        </h2>
-                        <p className="text-xs text-muted-foreground mt-0.5">{bundle.reason}</p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="icon" className="size-7" onClick={onRecheck} title="Re-check">
-                            <RefreshCw className="size-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="size-7" onClick={onClose}>
-                            <X className="size-4" />
-                        </Button>
-                    </div>
-                </div>
-
-                {/* Body */}
-                <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-                    <PanelSection title="Account">
-                        <PanelRow label="Account ID" value={<span className="font-mono text-[11px]">{row.accountId}</span>} />
-                        <PanelRow label="Checked at" value={new Date(bundle.checkedAt).toLocaleString()} />
-                    </PanelSection>
-
-                    {bundle.provisioning && (
-                        <PanelSection title="Provisioning (container)">
-                            <PanelRow label="State" value={bundle.provisioning.state} />
-                            <PanelRow label="Connection status" value={bundle.provisioning.connectionStatus} />
-                            <PanelRow label="Region" value={bundle.provisioning.region} />
-                            <PanelRow label="Reliability" value={bundle.provisioning.reliability} />
-                            <PanelRow label="Resource slots" value={bundle.provisioning.resourceSlots} />
-                            {!!bundle.provisioning.copyFactoryResourceSlots && (
-                                <PanelRow label="CopyFactory slots" value={bundle.provisioning.copyFactoryResourceSlots} />
-                            )}
-                            <PanelRow label="Platform" value={bundle.provisioning.platform} />
-                            <PanelRow label="Server" value={bundle.provisioning.server} />
-                            <PanelRow label="Login" value={bundle.provisioning.login as React.ReactNode} />
-                            <PanelRow label="Active connections" value={bundle.provisioning.connections.length} />
-                            {bundle.provisioning.connections.length > 0 && (
-                                <div className="mt-1 pl-2 border-l-2 border-gray-200 dark:border-gray-700">
-                                    {bundle.provisioning.connections.map((c, i) => (
-                                        <div key={i} className="text-[11px] text-gray-500 dark:text-gray-400">
-                                            {c.region ?? '—'} / {c.zone ?? '—'} {c.application ? `· ${c.application}` : ''}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </PanelSection>
-                    )}
-
-                    {bundle.accountInfo && (
-                        <PanelSection title="Account info">
-                            <PanelRow label="Trade allowed" value={bundle.accountInfo.tradeAllowed === null ? '—' : bundle.accountInfo.tradeAllowed ? '✓ yes' : '✗ no'} />
-                            <PanelRow label="Balance" value={fmtNum(bundle.accountInfo.balance)} />
-                            <PanelRow label="Equity" value={fmtNum(bundle.accountInfo.equity)} />
-                            <PanelRow label="Margin level" value={fmtNum(bundle.accountInfo.marginLevel)} />
-                            <PanelRow label="Currency" value={bundle.accountInfo.currency} />
-                            <PanelRow label="Leverage" value={bundle.accountInfo.leverage} />
-                        </PanelSection>
-                    )}
-
-                    {bundle.errors.length > 0 && (
-                        <PanelSection title="Errors">
-                            {bundle.errors.map((e, i) => (
-                                <div key={i} className="text-[11px] text-red-600 dark:text-red-400 py-0.5">{e}</div>
-                            ))}
-                        </PanelSection>
-                    )}
-                </div>
-            </div>
+            {toast && <Toast msg={toast.msg} type={toast.type} onDismiss={() => setToast(null)} />}
         </div>
     );
 }
