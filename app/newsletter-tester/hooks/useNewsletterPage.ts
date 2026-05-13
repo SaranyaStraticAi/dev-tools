@@ -11,7 +11,7 @@ import {
     WEEKLY_SYSTEM_PROMPT, WEEKLY_USER_TEMPLATE,
     PUZZLE_SYSTEM_PROMPT, PUZZLE_USER_TEMPLATE,
 } from '../constants';
-import { parseNewsletter, renderTemplate } from '../components/emailUtils';
+import { parseNewsletter, renderTemplate, processPuzzleTokens } from '../components/emailUtils';
 import { formatPosts } from '../components/utils';
 
 export function useNewsletterPage() {
@@ -158,7 +158,11 @@ export function useNewsletterPage() {
             const raw = data.text as string;
             setRawText(raw);
 
-            const parsed = parseNewsletter(raw);
+            let parsed = parseNewsletter(raw);
+            if (chosenType === 'puzzle') {
+                parsed = processPuzzleTokens(parsed);
+            }
+            
             let finalBannerUrl = '';
             
             // 2. Generate banner PNG and upload to Azure
@@ -199,7 +203,10 @@ export function useNewsletterPage() {
     };
 
     // ── Derived values ────────────────────────────────────────────────────────
-    const parsed = rawText ? parseNewsletter(rawText) : null;
+    let parsed = rawText ? parseNewsletter(rawText) : null;
+    if (parsed && type === 'puzzle') {
+        parsed = processPuzzleTokens(parsed);
+    }
 
     return {
         // Types
