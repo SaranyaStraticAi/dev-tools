@@ -46,8 +46,8 @@ export async function POST(req: NextRequest) {
                         position: 'absolute', 
                         top: '80px', 
                         bottom: '160px', 
-                        left: '170px', 
-                        right: '100px',
+                        left: '150px', 
+                        right: '80px',
                         display: 'flex', 
                         flexDirection: 'column', 
                         justifyContent: 'center',
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
                         {/* Part 1 */}
                         <div style={{ display: 'flex', flexWrap: 'wrap', marginBottom: 12 }}>
                             {wordsPart1.map((word: string, i: number) => (
-                                <span key={`p1-${i}`} style={{ fontSize: 36, fontWeight: 400, color: 'white', letterSpacing: '0.02em', marginRight: 10 }}>
+                                <span key={`p1-${i}`} style={{ fontSize: 38, fontWeight: 400, color: 'white', letterSpacing: '0.02em', marginRight: 10 }}>
                                     {word}
                                 </span>
                             ))}
