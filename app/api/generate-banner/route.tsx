@@ -98,7 +98,8 @@ export async function POST(req: NextRequest) {
             blobHTTPHeaders: { blobContentType: 'image/png' }
         });
 
-        return NextResponse.json({ url: blockBlobClient.url });
+        const proxiedUrl = `${protocol}://${host}/api/assets/${blobName}`;
+        return NextResponse.json({ url: proxiedUrl });
 
     } catch (error: any) {
         console.error('Error generating banner:', error);
