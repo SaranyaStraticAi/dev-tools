@@ -9,6 +9,7 @@ export function middleware(request: NextRequest) {
   const isGrafanaDashboard = pathname.startsWith('/d/');
 
   const isLocalApi =
+    pathname.startsWith('/api/assets') ||
     pathname.startsWith('/api/clerk-search') ||
     pathname.startsWith('/api/clerk-users') ||
     pathname.startsWith('/api/delete') ||
@@ -31,6 +32,7 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/api/marketing-links') ||
     pathname.startsWith('/api/link-tracker') ||
     pathname.startsWith('/api/news-source') ||
+    pathname.startsWith('/api/commissions') ||
     pathname.startsWith('/api/auth');
 
   const isGrafanaApi = pathname.startsWith('/api/') && !isLocalApi;

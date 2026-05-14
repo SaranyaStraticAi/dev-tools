@@ -69,7 +69,7 @@ Every weekly newsletter follows this exact 5-part structure. Do not deviate from
 PART 3 — THURSDAY WEEKLY NEWSLETTER
 Send day: Thursday 7:00 AM recipient local time
 Audience: Prospects + Newsletter subscribers (NOT app users)
-Length: 300–450 words body copy. One CTA button.
+Length: 400–600 words body copy. One CTA button.
 Formula: Pain + Solution always.
 CTA: Specific to the email content — not "Explore Vibe Trader"
 Reply hook: Mandatory.
@@ -133,7 +133,7 @@ STRICT RULES:
 - Subject: Pain + Solution formula, first 6 words name the pain
 - Preview: max 90 chars, never the tagline, never repeats subject
 - Opening hook: 2–3 sentences, trader's own words, NO Vibe Trader mention
-- Body: 300–450 words total
+- Body: 400–600 words total
 - One CTA only — never "Explore Vibe Trader"
 - Reply hook at the close — one direct question, mandatory
 - No investment advice, no return promises, no fake urgency`;
