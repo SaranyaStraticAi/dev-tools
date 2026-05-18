@@ -17,6 +17,13 @@ export default function PromptTesterPage() {
     const [showPrompts, setShowPrompts]         = useState(false);
     const [promptsLoading, setPromptsLoading]   = useState(true);
 
+    const handleRestoreVersion = (prompts: Record<string, any>) => {
+        if (prompts.cinematicSystem) setCinematicSystem(prompts.cinematicSystem);
+        if (prompts.cinematicUser)   setCinematicUser(prompts.cinematicUser);
+        if (prompts.statsSystem)     setStatsSystem(prompts.statsSystem);
+        if (prompts.statsUser)       setStatsUser(prompts.statsUser);
+    };
+
     // On mount: load prompts from Azure Blob.
     // If blob doesn't exist yet (first boot), auto-seed Azure with hardcoded defaults
     // so Azure is the single source of truth from day one.
@@ -266,6 +273,7 @@ export default function PromptTesterPage() {
                         cinematicUser={cinematicUser}
                         statsSystem={statsSystem}
                         statsUser={statsUser}
+                        onRestore={handleRestoreVersion}
                     />
                 </div>
             )}
