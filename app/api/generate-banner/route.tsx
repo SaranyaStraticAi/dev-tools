@@ -98,7 +98,10 @@ export async function POST(req: NextRequest) {
             blobHTTPHeaders: { blobContentType: 'image/png' }
         });
 
-        const proxiedUrl = `${protocol}://${host}/api/assets/${blobName}`;
+        // Use BANNER_BASE_URL env var to serve assets from vibetrader.com
+        // instead of the internal dev-tools domain (e.g. dev-tools.vercel.app)
+        const bannerBaseUrl = process.env.BANNER_BASE_URL || `${protocol}://${host}`;
+        const proxiedUrl = `${bannerBaseUrl}/api/assets/${blobName}`;
         return NextResponse.json({ url: proxiedUrl });
 
     } catch (error: any) {

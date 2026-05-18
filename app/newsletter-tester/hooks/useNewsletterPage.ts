@@ -266,6 +266,16 @@ export function useNewsletterPage() {
         finally { setLoading(false); setStep(''); }
     };
 
+    // ── Restore a past version into editor state ──────────────────────────────
+    const restoreVersion = (prompts: Record<string, any>) => {
+        if (prompts.weeklySystem)   setWeeklySystem(prompts.weeklySystem);
+        if (prompts.weeklyUser)     setWeeklyUser(prompts.weeklyUser);
+        if (prompts.puzzleSystem)   setPuzzleSystem(prompts.puzzleSystem);
+        if (prompts.puzzleUser)     setPuzzleUser(prompts.puzzleUser);
+        if (prompts.weeklyTemplate) setWeeklyTemplate(prompts.weeklyTemplate);
+        if (prompts.puzzleTemplate) setPuzzleTemplate(prompts.puzzleTemplate);
+    };
+
     // ── Download current HTML ─────────────────────────────────────────────────
     const downloadHtml = () => {
         if (!emailHtml) return;
@@ -300,6 +310,7 @@ export function useNewsletterPage() {
         azureSource, lastPublishedAt,
         blobLoadError,
         publishToAzure,
+        restoreVersion,
         // Templates
         weeklyTemplate, puzzleTemplate,
         handleTemplateChange, reloadTemplateFromAzure,
