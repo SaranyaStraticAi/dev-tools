@@ -29,6 +29,10 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/api/newsletter-generate') ||
     pathname.startsWith('/api/newsletter-prompts') ||
     pathname.startsWith('/api/reddit-posts') ||
+    pathname.startsWith('/api/resend-contacts') ||
+    pathname.startsWith('/api/resend-segments') ||
+    pathname.startsWith('/api/send-newsletter') ||
+    pathname.startsWith('/api/newsletter-metrics') ||
     pathname.startsWith('/api/marketing-links') ||
     pathname.startsWith('/api/link-tracker') ||
     pathname.startsWith('/api/news-source') ||

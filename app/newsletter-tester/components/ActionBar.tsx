@@ -1,22 +1,43 @@
 'use client';
-// ActionBar.tsx — the row of 4 main action buttons
+// ActionBar.tsx — the row of main action buttons
 import { NewsletterType } from '../constants';
+import type { SendStatus } from '../hooks/useNewsletterPage';
 
 interface ActionBarProps {
-    activeType: NewsletterType;
-    loading: boolean;
-    showPrompts: boolean;
-    publishing: boolean;
+    activeType:    NewsletterType;
+    loading:       boolean;
+    showPrompts:   boolean;
+    publishing:    boolean;
     publishStatus: 'idle' | 'success' | 'error';
-    onGenerate: (type: NewsletterType) => void;
+    sendStatus:    SendStatus;
+    hasHtml:       boolean;
+    onGenerate:      (type: NewsletterType) => void;
     onTogglePrompts: () => void;
-    onPublish: () => void;
+    onPublish:       () => void;
+    onSend:          () => void;
 }
 
 export default function ActionBar({
     activeType, loading, showPrompts, publishing, publishStatus,
-    onGenerate, onTogglePrompts, onPublish,
+    sendStatus, hasHtml,
+    onGenerate, onTogglePrompts, onPublish, onSend,
 }: ActionBarProps) {
+
+    const sendLabel = () => {
+        if (sendStatus === 'sending') return <><span className="w-4 h-4 border-2 border-white/30 border-t-white animate-spin rounded-full"/>Sending…</>;
+        if (sendStatus === 'sent')    return <>✅ Sent!</>;
+        if (sendStatus === 'error')   return <>❌ Failed</>;
+        return <>📨 Send via Resend</>;
+    };
+
+    const sendClass = () => {
+        const base = 'px-6 py-4 rounded-2xl font-bold text-sm transition-all flex items-center gap-2 disabled:opacity-60';
+        if (sendStatus === 'sent')    return `${base} bg-emerald-600 text-white`;
+        if (sendStatus === 'error')   return `${base} bg-red-600 text-white`;
+        if (sendStatus === 'sending') return `${base} bg-orange-500 text-white cursor-wait`;
+        return `${base} bg-orange-500 hover:bg-orange-600 text-white shadow-lg shadow-orange-500/20`;
+    };
+
     return (
         <div className="flex items-center gap-3 flex-wrap justify-center">
             <button onClick={() => onGenerate('weekly')} disabled={loading}
@@ -34,6 +55,14 @@ export default function ActionBar({
             <button onClick={onPublish} disabled={publishing}
                 className={`px-6 py-4 rounded-2xl font-bold text-sm transition-all flex items-center gap-2 disabled:opacity-60 ${publishStatus==='success' ? 'bg-green-600 text-white' : publishStatus==='error' ? 'bg-red-600 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-500/20'}`}>
                 {publishing ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white animate-spin rounded-full"/>Publishing…</> : publishStatus==='success' ? '✅ Published!' : publishStatus==='error' ? '❌ Failed' : '☁️ Publish to Azure'}
+            </button>
+            
+            <button
+                onClick={onSend}
+                disabled={!hasHtml || sendStatus === 'sending'}
+                className={sendClass()}
+            >
+                {sendLabel()}
             </button>
         </div>
     );
