@@ -4,21 +4,25 @@
 // OutputPanel.tsx — shows the generated newsletter output
 // Contains:
 //   - Subject + Preview metadata bar at the top
-//   - Tab switcher: Preview (iframe) | HTML (pre) | Raw text (pre)
+//   - Tab switcher: Preview (iframe) | HTML (pre) | Raw text (pre) | Metrics
 //   - Download .html button
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef } from 'react';
 import { NewsletterType } from '../constants';
 import { parseNewsletter } from './emailUtils';
+import type { BroadcastMetrics } from '@/app/api/newsletter-metrics/route';
 
 type ParsedNewsletter = ReturnType<typeof parseNewsletter>;
 
 interface OutputPanelProps {
-    emailHtml: string;
-    rawText: string;
-    parsed: ParsedNewsletter;
-    newsletterType: NewsletterType;
+    emailHtml:     string;
+    rawText:       string;
+    parsed:        ParsedNewsletter;
+    newsletterType:NewsletterType;
+    broadcastId?:  string | null;
+    metrics?:      BroadcastMetrics | null;
+    sendError?:    string;
 }
 
 export default function OutputPanel({
@@ -26,8 +30,11 @@ export default function OutputPanel({
     rawText,
     parsed,
     newsletterType,
+    broadcastId,
+    metrics,
+    sendError,
 }: OutputPanelProps) {
-    const [tab, setTab] = useState<'preview' | 'template' | 'raw'>('preview');
+    const [tab, setTab] = useState<'preview' | 'template' | 'raw' | 'metrics'>('preview');
     const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
     const [editedHtml, setEditedHtml] = useState(emailHtml);
     const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -88,7 +95,7 @@ export default function OutputPanel({
             </div>
 
             {/* Tab bar */}
-            <div className="flex items-center justify-between w-full">
+            <div className="flex items-center justify-between w-full flex-wrap gap-2">
                 <div className="flex items-center gap-1 p-1 bg-muted rounded-xl border w-fit flex-wrap">
                     {(['preview', 'template', 'raw'] as const).map(t => (
                         <button key={t} onClick={() => setTab(t)}
@@ -96,6 +103,11 @@ export default function OutputPanel({
                             {t === 'preview' ? '👁 Preview' : t === 'template' ? '🌐 HTML' : '📄 Raw text'}
                         </button>
                     ))}
+                    <button onClick={() => setTab('metrics')}
+                        className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${tab === 'metrics' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+                        📊 Metrics
+                        {broadcastId && <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse"/>}
+                    </button>
                 </div>
                 <button onClick={handleDownload}
                     className="ml-2 px-4 py-1.5 rounded-lg text-xs font-bold bg-green-600 hover:bg-green-700 text-white transition-all shadow-sm">
@@ -169,6 +181,108 @@ export default function OutputPanel({
                     {rawText}
                 </pre>
             )}
+
+            {/* Metrics tab — Resend broadcast analytics */}
+            {tab === 'metrics' && (
+                <div className="w-full border rounded-2xl bg-card p-6 flex flex-col gap-6">
+                    {/* Header */}
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h3 className="font-bold text-sm">📊 Campaign Metrics</h3>
+                            {broadcastId
+                                ? <p className="text-[10px] text-muted-foreground mt-0.5">Broadcast ID: <span className="font-mono">{broadcastId}</span></p>
+                                : <p className="text-[10px] text-muted-foreground mt-0.5">Send the newsletter first to see metrics</p>
+                            }
+                        </div>
+                        {broadcastId && (
+                            <div className="flex items-center gap-1.5 text-[10px] text-orange-400">
+                                <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse"/>
+                                Auto-refreshing every 20s
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Send error */}
+                    {sendError && (
+                        <div className="px-4 py-2.5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">
+                            ❌ {sendError}
+                        </div>
+                    )}
+
+                    {/* Waiting state */}
+                    {!broadcastId && !sendError && (
+                        <div className="flex flex-col items-center gap-3 py-10 text-muted-foreground">
+                            <span className="text-4xl">📨</span>
+                            <p className="text-sm">Click <strong>Send via Resend</strong> to send your newsletter and track metrics here.</p>
+                            <p className="text-[10px] opacity-60">Requires RESEND_API_KEY and RESEND_AUDIENCE_ID in .env.local</p>
+                        </div>
+                    )}
+
+                    {/* Metric cards */}
+                    {metrics && (
+                        <>
+                            {/* Main KPIs */}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                <MetricCard label="Delivered" value={metrics.delivered} icon="📬" color="blue" />
+                                <MetricCard label="Open Rate" value={`${metrics.openRate}%`} icon="👁" color="green"
+                                    sub={`${metrics.opened} unique opens`} />
+                                <MetricCard label="Click Rate" value={`${metrics.clickRate}%`} icon="🖱️" color="purple"
+                                    sub={`${metrics.clicked} unique clicks`} />
+                                <MetricCard label="Bounced" value={metrics.bounced} icon="↩️" color="red" />
+                                <MetricCard label="Unsubscribed" value={metrics.unsubscribed} icon="🚫" color="yellow" />
+                                <MetricCard label="Complaints" value={metrics.complained} icon="⚠️" color="orange" />
+                            </div>
+                            <p className="text-[10px] text-muted-foreground text-right">
+                                Last updated: {new Date(metrics.lastUpdated).toLocaleTimeString()}
+                                {' · '}Metrics via Resend webhooks
+                            </p>
+                            <p className="text-[10px] text-muted-foreground/60 text-center">
+                                ℹ️ Resend doesn&apos;t expose aggregate stats via REST API — metrics accumulate via webhooks.
+                                Configure webhook URL in Resend dashboard → Webhooks → add <code className="font-mono">/api/newsletter-metrics</code>
+                            </p>
+                        </>
+                    )}
+
+                    {/* Sent but no metrics yet */}
+                    {broadcastId && !metrics && (
+                        <div className="flex flex-col items-center gap-3 py-8 text-muted-foreground">
+                            <span className="w-6 h-6 border-2 border-orange-400/30 border-t-orange-400 animate-spin rounded-full"/>
+                            <p className="text-sm">Newsletter sent! Waiting for delivery events...</p>
+                            <p className="text-[10px] opacity-60">Metrics appear as recipients open/click. Webhook must be configured in Resend dashboard.</p>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ── Metric card sub-component ─────────────────────────────────────────────────
+function MetricCard({
+    label, value, icon, color, sub
+}: {
+    label: string;
+    value: string | number;
+    icon: string;
+    color: 'blue' | 'green' | 'purple' | 'red' | 'yellow' | 'orange';
+    sub?: string;
+}) {
+    const colorMap: Record<string, string> = {
+        blue:   'bg-blue-500/10   border-blue-500/20   text-blue-400',
+        green:  'bg-green-500/10  border-green-500/20  text-green-400',
+        purple: 'bg-purple-500/10 border-purple-500/20 text-purple-400',
+        red:    'bg-red-500/10    border-red-500/20    text-red-400',
+        yellow: 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400',
+        orange: 'bg-orange-500/10 border-orange-500/20 text-orange-400',
+    };
+    return (
+        <div className={`flex flex-col gap-1 p-4 rounded-xl border ${colorMap[color]}`}>
+            <div className="flex items-center gap-1.5">
+                <span>{icon}</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">{label}</span>
+            </div>
+            <span className="text-2xl font-black tabular-nums">{value}</span>
+            {sub && <span className="text-[10px] opacity-60">{sub}</span>}
         </div>
     );
 }

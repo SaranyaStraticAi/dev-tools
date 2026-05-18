@@ -5,7 +5,7 @@
 // Extracted from page.tsx so the page itself stays clean and readable.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
     NewsletterType, RedditPost, SAMPLE_REDDIT_POSTS,
     WEEKLY_SYSTEM_PROMPT, WEEKLY_USER_TEMPLATE,
@@ -13,6 +13,9 @@ import {
 } from '../constants';
 import { parseNewsletter, renderTemplate, processPuzzleTokens } from '../components/emailUtils';
 import { formatPosts } from '../components/utils';
+import type { BroadcastMetrics } from '@/app/api/newsletter-metrics/route';
+
+export type SendStatus = 'idle' | 'sending' | 'sent' | 'error';
 
 export function useNewsletterPage() {
     const [type, setType] = useState<NewsletterType>('weekly');
@@ -53,6 +56,16 @@ export function useNewsletterPage() {
     const [step,      setStep]      = useState('');
     const [error,     setError]     = useState('');
 
+    // ── Resend state ──────────────────────────────────────────────────────────
+    const [broadcastId,  setBroadcastId]  = useState<string | null>(null);
+    const [segments,     setSegments]     = useState<any[]>([]);
+    const [selectedSegs, setSelectedSegs] = useState<string[]>([]);
+    const [showSendModal, setShowSendModal] = useState(false);
+    const [sendStatus,   setSendStatus]   = useState<SendStatus>('idle');
+    const [sendError,    setSendError]    = useState('');
+    const [metrics,      setMetrics]      = useState<BroadcastMetrics | null>(null);
+    const metricsInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+
     // ── On mount: load prompts + templates from Azure Blob ───────────────────
     useEffect(() => {
         (async () => {
@@ -71,18 +84,84 @@ export function useNewsletterPage() {
                     if (p.publishedAt)    setLastPublishedAt(p.publishedAt);
                     setAzureSource(true);
                     if (!p.weeklyTemplate || !p.puzzleTemplate) {
-                        setBlobLoadError('⚠️ Templates missing from blob — publish from dev-tools to fix');
+                        setBlobLoadError('Templates missing from blob — publish from dev-tools to fix');
                     }
                 } else {
-                    setBlobLoadError('⚠️ Blob has no prompts yet — publish once to initialise');
+                    setBlobLoadError('Blob has no prompts yet — publish once to initialise');
                 }
             } catch (e: any) {
-                setBlobLoadError(`⚠️ Could not load from Azure: ${e.message}`);
+                setBlobLoadError(`Could not load from Azure: ${e.message}`);
             } finally {
                 setPromptsLoading(false);
             }
         })();
     }, []);
+
+    // ── Fetch segments on mount ──────────────────────────────────────────────
+    useEffect(() => {
+        (async () => {
+            try {
+                const res = await fetch('/api/resend-segments');
+                const data = await res.json();
+                if (res.ok && data.segments) {
+                    setSegments(data.segments);
+                }
+            } catch (e) {
+                console.warn('[fetchSegments] error', e);
+            }
+        })();
+    }, []);
+
+    // ── Auto-poll metrics every 20s while a broadcast is live ─────────────────
+    useEffect(() => {
+        if (!broadcastId || broadcastId === 'emails-send' || sendStatus !== 'sent') {
+            if (metricsInterval.current) {
+                clearInterval(metricsInterval.current);
+                metricsInterval.current = null;
+            }
+            return;
+        }
+        fetchMetrics(broadcastId);
+        metricsInterval.current = setInterval(() => fetchMetrics(broadcastId), 20_000);
+        return () => {
+            if (metricsInterval.current) clearInterval(metricsInterval.current);
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [broadcastId, sendStatus]);
+
+    // ── Fetch metrics from our API ────────────────────────────────────────────
+    const fetchMetrics = async (id: string) => {
+        try {
+            const res  = await fetch(`/api/newsletter-metrics?broadcastId=${id}`);
+            const data = await res.json();
+            if (res.ok && data.metrics) setMetrics(data.metrics);
+        } catch (e) {
+            console.warn('[fetchMetrics] error', e);
+        }
+    };
+
+    // ── Send newsletter via Resend ────────────────────────────────────────────
+    const handleSendViaResend = async () => {
+        if (!emailHtml) { setSendError('Generate a newsletter first'); return; }
+        const subject = rawText ? parseNewsletter(rawText).subject : 'Vibe Trader Newsletter';
+
+        setSendStatus('sending'); setSendError(''); setBroadcastId(null); setMetrics(null);
+        try {
+            const res  = await fetch('/api/send-newsletter', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ html: emailHtml, subject, segmentIds: selectedSegs }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error ?? 'Send failed');
+            setBroadcastId(data.broadcastId);
+            setSendStatus('sent');
+        } catch (e: any) {
+            setSendError(e.message ?? 'Unknown error');
+            setSendStatus('error');
+            setTimeout(() => setSendStatus('idle'), 5000);
+        }
+    };
 
     // ── Publish current prompts + templates to Azure ──────────────────────────
     const publishToAzure = async () => {
@@ -119,7 +198,6 @@ export function useNewsletterPage() {
     const handleTemplateChange = (val: string) => {
         if (templateType === 'weekly') setWeeklyTemplate(val);
         else setPuzzleTemplate(val);
-        // If there's already a generated result for this type, re-render live
         if (rawText && templateType === type && type === 'weekly') {
             setEmailHtml(renderTemplate(val, parseNewsletter(rawText), 'weekly', bannerUrl));
         }
@@ -143,12 +221,13 @@ export function useNewsletterPage() {
             return;
         }
         setType(chosenType); setLoading(true); setError(''); setRawText(''); setEmailHtml(''); setBannerUrl('');
+        setSendStatus('idle'); setBroadcastId(null); setMetrics(null); setSendError('');
         const sys    = chosenType === 'weekly' ? weeklySystem : puzzleSystem;
         const tmpl   = chosenType === 'weekly' ? weeklyUser   : puzzleUser;
         const today  = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
         const prompt = tmpl.replace('{date}', today).replace('{posts}', formatPosts(posts));
         try {
-            setStep('🤖 Writing newsletter...');
+            setStep('Writing newsletter...');
             const res  = await fetch('/api/newsletter-generate', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ systemPrompt: sys, userPrompt: prompt }),
@@ -159,15 +238,11 @@ export function useNewsletterPage() {
             setRawText(raw);
 
             let parsed = parseNewsletter(raw);
-            if (chosenType === 'puzzle') {
-                parsed = processPuzzleTokens(parsed);
-            }
-            
+            if (chosenType === 'puzzle') parsed = processPuzzleTokens(parsed);
+
             let finalBannerUrl = '';
-            
-            // 2. Generate banner PNG and upload to Azure
             if (chosenType === 'weekly' && parsed.subject) {
-                setStep('🖼️ Generating banner image...');
+                setStep('Generating banner image...');
                 try {
                     const bannerRes = await fetch('/api/generate-banner', {
                         method: 'POST',
@@ -184,7 +259,7 @@ export function useNewsletterPage() {
                 }
             }
 
-            setStep('🌐 Building HTML...');
+            setStep('Building HTML...');
             const htmlTmpl = chosenType === 'weekly' ? weeklyTemplate : puzzleTemplate;
             setEmailHtml(renderTemplate(htmlTmpl, parsed, chosenType, finalBannerUrl));
         } catch (e: any) { setError(e.message); }
@@ -214,9 +289,7 @@ export function useNewsletterPage() {
 
     // ── Derived values ────────────────────────────────────────────────────────
     let parsed = rawText ? parseNewsletter(rawText) : null;
-    if (parsed && type === 'puzzle') {
-        parsed = processPuzzleTokens(parsed);
-    }
+    if (parsed && type === 'puzzle') parsed = processPuzzleTokens(parsed);
 
     return {
         // Types
@@ -245,5 +318,10 @@ export function useNewsletterPage() {
         rawText, emailHtml, loading, step, error,
         parsed,
         handleGenerate, downloadHtml,
+        // Resend
+        broadcastId, sendStatus, sendError, metrics,
+        handleSendViaResend, fetchMetrics,
+        segments, selectedSegs, setSelectedSegs,
+        showSendModal, setShowSendModal,
     };
 }
