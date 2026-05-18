@@ -40,7 +40,7 @@ export default function NewsletterTesterPage() {
 
     const {
         // types
-        type, templateType, setTemplateType,
+        type, setType, templateType, setTemplateType,
         // prompts
         weeklySystem, setWeeklySystem,
         weeklyUser,   setWeeklyUser,
@@ -145,6 +145,7 @@ export default function NewsletterTesterPage() {
                 sendStatus={sendStatus}
                 hasHtml={!!emailHtml}
                 onGenerate={handleGenerate}
+                onTypeSwitch={setType}
                 onTogglePrompts={() => setShowPrompts(v => !v)}
                 onPublish={publishToAzure}
                 onSend={() => setShowSendModal(true)}
@@ -269,6 +270,7 @@ export default function NewsletterTesterPage() {
             {/* ── Version History ──────────────────────────────────────────── */}
             <VersionHistory
                 apiRoute="/api/newsletter-prompts"
+                newsletterType={type}
                 onRestore={restoreVersion}
                 className="w-full max-w-3xl"
             />

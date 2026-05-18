@@ -102,10 +102,9 @@ export function useNewsletterPage() {
         (async () => {
             try {
                 const res = await fetch('/api/resend-segments');
+                if (!res.ok) return; // silently skip if resend isn't configured
                 const data = await res.json();
-                if (res.ok && data.segments) {
-                    setSegments(data.segments);
-                }
+                if (data.segments) setSegments(data.segments);
             } catch (e) {
                 console.warn('[fetchSegments] error', e);
             }
@@ -170,7 +169,9 @@ export function useNewsletterPage() {
             const res = await fetch('/api/newsletter-prompts', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ weeklySystem, weeklyUser, puzzleSystem, puzzleUser, weeklyTemplate, puzzleTemplate }),
+                // changedType tells the backend which newsletter tab is active
+                // so it only creates a history snapshot for that type.
+                body: JSON.stringify({ weeklySystem, weeklyUser, puzzleSystem, puzzleUser, weeklyTemplate, puzzleTemplate, changedType: type }),
             });
             if (!res.ok) throw new Error('Publish failed');
             setPublishStatus('success'); setAzureSource(true);
@@ -293,7 +294,7 @@ export function useNewsletterPage() {
 
     return {
         // Types
-        type, templateType, setTemplateType,
+        type, setType, templateType, setTemplateType,
         // Prompts
         weeklySystem, setWeeklySystem,
         weeklyUser,   setWeeklyUser,
