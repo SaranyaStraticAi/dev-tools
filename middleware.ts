@@ -23,7 +23,7 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/api/user-reports') ||
     pathname.startsWith('/api/generate-image') ||
     pathname.startsWith('/api/generate-banner') ||
-    pathname.startsWith('/api/generate-video') ||   // ← added
+    pathname.startsWith('/api/generate-video') ||
     pathname.startsWith('/api/prompt') ||
     pathname.startsWith('/api/prompt-config') ||
     pathname.startsWith('/api/newsletter-generate') ||
@@ -37,7 +37,8 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/api/link-tracker') ||
     pathname.startsWith('/api/news-source') ||
     pathname.startsWith('/api/commissions') ||
-    pathname.startsWith('/api/auth');
+    pathname.startsWith('/api/auth') ||
+    pathname.startsWith('/api/edu-content');   // ← edu content tester
 
   const isGrafanaApi = pathname.startsWith('/api/') && !isLocalApi;
 

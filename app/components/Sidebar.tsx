@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image, Link2, Network, LayoutGrid, ChevronDown, Mail, Video } from 'lucide-react';
+import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image, Link2, Network, LayoutGrid, ChevronDown, Mail, Video, GraduationCap } from 'lucide-react';
 import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
 import { useState, useEffect } from 'react';
 
@@ -59,9 +59,9 @@ const navGroups = [
     label: 'Marketing',
     items: [
       { name: 'Newsletter Tester',   href: '/newsletter-tester',   icon: Mail },
+      { name: 'Edu Content Tester',  href: '/edu-content',         icon: GraduationCap },
       { name: 'Image Generator',     href: '/image-generator',     icon: Image },
       { name: 'Video Generator',     href: '/video-generator',     icon: Video },
-      
       { name: 'Link Tracker',        href: '/link-tracker',        icon: Link2 },
       { name: 'Prompt Tester',       href: '/prompt',              icon: Code },
     ],
@@ -75,7 +75,6 @@ const navGroups = [
 ];
 
 
-
 function CollapsibleNavGroup({
   label,
   defaultOpen,
@@ -86,7 +85,6 @@ function CollapsibleNavGroup({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  // If route changes into this group later, auto-expand it.
   useEffect(() => { if (defaultOpen) setOpen(true); }, [defaultOpen]);
 
   return (
@@ -127,9 +125,7 @@ export default function AppSidebar() {
   }, []);
 
   const handleLogin = () => {
-    instance.loginPopup(loginRequest).catch(e => {
-      console.error(e);
-    });
+    instance.loginPopup(loginRequest).catch(e => { console.error(e); });
   };
 
   const handleLogout = () => {
@@ -148,9 +144,7 @@ export default function AppSidebar() {
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex flex-col gap-1 px-2 py-2">
           <h2 className="text-lg font-bold">Dev Tools</h2>
-          <p className="text-xs text-muted-foreground">
-            Database & Auth Tools
-          </p>
+          <p className="text-xs text-muted-foreground">Database & Auth Tools</p>
         </div>
       </SidebarHeader>
 
@@ -158,21 +152,13 @@ export default function AppSidebar() {
         {navGroups.map((group) => {
           const groupHasActive = group.items.some((i) => i.href === pathname);
           return (
-            <CollapsibleNavGroup
-              key={group.label}
-              label={group.label}
-              defaultOpen={groupHasActive}
-            >
+            <CollapsibleNavGroup key={group.label} label={group.label} defaultOpen={groupHasActive}>
               <SidebarMenu>
                 {group.items.map((item) => {
                   const isActive = pathname === item.href;
                   return (
                     <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={isActive}
-                        tooltip={item.name}
-                      >
+                      <SidebarMenuButton asChild isActive={isActive} tooltip={item.name}>
                         <Link href={item.href}>
                           <item.icon />
                           <span>{item.name}</span>
@@ -190,9 +176,7 @@ export default function AppSidebar() {
       <SidebarFooter className="border-t border-sidebar-border">
         {currentAccount ? (
           <div className="flex flex-col gap-2 px-2 py-2">
-            <div className="text-sm text-muted-foreground truncate font-medium">
-              {currentAccount}
-            </div>
+            <div className="text-sm text-muted-foreground truncate font-medium">{currentAccount}</div>
             <button
               onClick={handleLogout}
               className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors group"
@@ -218,6 +202,3 @@ export default function AppSidebar() {
     </Sidebar>
   );
 }
-
-
-
