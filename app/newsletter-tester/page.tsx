@@ -20,6 +20,7 @@ import TemplateEditor from './components/TemplateEditor';
 import OutputPanel    from './components/OutputPanel';
 import ActionBar      from './components/ActionBar';
 import PromptEditor   from './components/PromptEditor';
+import VersionHistory from '@/components/VersionHistory';
 
 export default function NewsletterTesterPage() {
     const {
@@ -40,6 +41,7 @@ export default function NewsletterTesterPage() {
         azureSource, lastPublishedAt,
         blobLoadError,
         publishToAzure,
+        restoreVersion,
         // templates
         weeklyTemplate, puzzleTemplate,
         handleTemplateChange, reloadTemplateFromAzure,
@@ -163,6 +165,13 @@ export default function NewsletterTesterPage() {
                     />
                 </div>
             )}
+
+            {/* ── Version History ──────────────────────────────────────────── */}
+            <VersionHistory
+                apiRoute="/api/newsletter-prompts"
+                onRestore={restoreVersion}
+                className="w-full max-w-3xl"
+            />
 
         </div>
     );

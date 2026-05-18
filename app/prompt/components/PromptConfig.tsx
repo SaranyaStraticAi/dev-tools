@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Film, BarChart2, Upload, CheckCircle2, AlertCircle } from 'lucide-react';
 import { DEFAULT_SYSTEM_PROMPT, DEFAULT_USER_TEMPLATE, STATS_SYSTEM_PROMPT, STATS_USER_TEMPLATE } from '../constants';
+import VersionHistory from '@/components/VersionHistory';
 
 type Mode = 'cinematic' | 'stats';
 
@@ -18,6 +19,8 @@ interface PromptConfigProps {
     cinematicUser: string;
     statsSystem: string;
     statsUser: string;
+    // Restore callback from version history
+    onRestore: (prompts: Record<string, any>) => void;
 }
 
 export default function PromptConfig({
@@ -31,6 +34,7 @@ export default function PromptConfig({
     cinematicUser,
     statsSystem,
     statsUser,
+    onRestore,
 }: PromptConfigProps) {
     const [publishing, setPublishing] = useState(false);
     const [publishStatus, setPublishStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -178,6 +182,12 @@ export default function PromptConfig({
                     Reset Template
                 </button>
             </div>
+
+            {/* ── Version History ──────────────────────────────────────────── */}
+            <VersionHistory
+                apiRoute="/api/prompt-config"
+                onRestore={onRestore}
+            />
         </div>
     );
 }
