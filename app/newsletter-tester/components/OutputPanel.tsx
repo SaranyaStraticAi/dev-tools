@@ -53,11 +53,17 @@ export default function OutputPanel({
         // Make the body of the iframe editable
         doc.body.contentEditable = 'true';
         
+        // Strip the preview-only <script> block before syncing to editedHtml.
+        // The script is injected into srcDoc for tester interactivity only —
+        // it must never appear in the HTML tab or download.
+        const getCleanHtml = () => {
+            const raw = doc.body.innerHTML;
+            return raw.replace(/<script[\s\S]*?<\/script>/gi, '').trim();
+        };
+
         // Listen for changes robustly
         const handleInput = () => {
-            // We read the body innerHTML because renderTemplate returns a <div> wrapper,
-            // so we don't want the <html><head><body> tags that the browser adds back in.
-            setEditedHtml(doc.body.innerHTML);
+            setEditedHtml(getCleanHtml());
         };
         
         doc.body.addEventListener('input', handleInput);
@@ -69,8 +75,10 @@ export default function OutputPanel({
     };
 
     const handleDownload = () => {
-        if (!editedHtml) return;
-        const blob = new Blob([editedHtml], { type: 'text/html' });
+        // Always download the original clean emailHtml — never editedHtml which
+        // may contain the tester preview script injected into the iframe srcDoc.
+        if (!emailHtml) return;
+        const blob = new Blob([emailHtml], { type: 'text/html' });
         const url  = URL.createObjectURL(blob);
         const a    = document.createElement('a');
         a.href     = url;
