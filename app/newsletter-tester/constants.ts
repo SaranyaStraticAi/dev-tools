@@ -198,14 +198,17 @@ D) ...
 [Leaderboard line]
 [Reply hook — "Reply with your answer — first 3 correct get featured next week"]
 [[Submit your answer →]]
+ANSWER: [correct letter only — A, B, C, or D]
+EXPLANATION: [one sentence explaining why that answer is correct]
 
 STRICT RULES:
 - Real currency pair (e.g. EUR/USD, GBP/JPY, USD/JPY)
 - Real account size (e.g. $5,000 / $10,000 / $25,000)
 - 4 answer choices — one correct, three plausible-but-wrong
 - Subject must be unique — never repeat previous puzzle subjects
-- Never give the answer in the email
-- Body setup: 80–120 words only`;
+- Never give the answer INSIDE the BODY section — only in the ANSWER field
+- Body setup: 80–120 words only
+- ANSWER must be exactly one letter: A, B, C, or D`;
 
 // ── User prompt templates ─────────────────────────────────────────────────────
 export const WEEKLY_USER_TEMPLATE = `Today is {date}.
