@@ -143,36 +143,88 @@ function parsePuzzleBody(body: string) {
     return result;
 }
 
-function puzzleOptionBox(letter: string, text: string, correctAnswer: string, explanation: string): string {
-    const formatted = text.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
-    const encodedExplanation = encodeURIComponent(explanation);
-    return `<table width="100%" cellpadding="0" cellspacing="0" style="margin:12px 0;background:#eef0f6;border-radius:8px;" class="puzzle-option">
-      <tr><td style="padding:12px;font-size:14px;color:#333;">${formatted}</td></tr>
-      <tr><td align="center" style="padding:10px;">
-        <a href="https://www.vibetrader.com/puzzle?option=${letter}&correct=${correctAnswer}&explanation=${encodedExplanation}" 
-           onclick="if(typeof checkAnswer === 'function') { event.preventDefault(); checkAnswer(this, '${letter}', '${correctAnswer}'); }"
-           style="background:#4b3fa0;color:#fff;text-decoration:none;padding:10px 20px;border-radius:20px;display:inline-block;font-weight:bold;">Select Option ${letter}</a>
+// ── Option box — 100% script-free, email-safe ────────────────────────────────
+// The correct answer is base64-encoded in the URL so /puzzle-answer page can
+// decode it without any server call. No onclick, no JS — safe for HubSpot/Resend.
+function puzzleOptionBox(letter: string, text: string, correctAnswer: string): string {
+    const formatted = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+    const encoded   = correctAnswer ? Buffer.from(correctAnswer).toString('base64') : '';
+    const href      = `https://vibetrader.com/puzzle-answer?option=${letter}${encoded ? `&ans=${encodeURIComponent(encoded)}` : ''}`;
+    return `<table class="vt-opt" data-letter="${letter}" width="100%" cellpadding="0" cellspacing="0"
+      style="margin:12px 0;background:#eef0f6;border-radius:8px;border:2px solid transparent;">
+      <tr><td style="padding:12px 14px;font-size:14px;color:#333;line-height:1.5;">
+        <strong style="color:#4b3fa0;">${letter})</strong>&nbsp;${formatted}
+      </td></tr>
+      <tr><td align="center" style="padding:4px 10px 12px;">
+        <a class="vt-btn" data-letter="${letter}" href="${href}"
+          style="background:#4b3fa0;color:#fff;text-decoration:none;padding:10px 24px;border-radius:20px;font-weight:bold;font-size:14px;display:inline-block;">
+          Select Option ${letter}
+        </a>
       </td></tr>
     </table>`;
 }
 
+// ── Preview-only interactive script — injected into iframe srcDoc by OutputPanel.
+// NEVER put this in emailHtml — email clients and HubSpot reject <script> tags.
+export function buildPuzzlePreviewScript(correctAnswer: string): string {
+    return `<script>
+(function(){
+  var C=${JSON.stringify(correctAnswer)};
+  function wire(){
+    document.querySelectorAll('.vt-btn').forEach(function(link){
+      link.addEventListener('click',function(e){
+        e.preventDefault();
+        var chosen=(link.getAttribute('data-letter')||'').toUpperCase();
+        var right=C&&chosen===C;
+        document.querySelectorAll('.vt-opt').forEach(function(box){
+          box.style.background='#eef0f6';
+          box.style.border='2px solid transparent';
+          var badge=box.querySelector('.vt-badge');if(badge)badge.remove();
+          var b=box.querySelector('.vt-btn');
+          if(b){b.style.background='#4b3fa0';b.textContent='Select Option '+b.getAttribute('data-letter');}
+        });
+        var box=link.closest('.vt-opt');
+        if(box){
+          box.style.background=right?'#d1fae5':'#fee2e2';
+          box.style.border='2px solid '+(right?'#34d399':'#f87171');
+          var badge=document.createElement('div');
+          badge.className='vt-badge';
+          badge.style.cssText='font-size:13px;font-weight:bold;padding:6px 0 4px;text-align:center;color:'+(right?'#065f46':'#991b1b');
+          badge.textContent=right?'\u2705 Correct! Well done.':(C?'\u274c Wrong \u2014 the answer is '+C+'.':'\u274c Incorrect.');
+          box.appendChild(badge);
+        }
+        link.style.background=right?'#059669':'#dc2626';
+        link.textContent=right?'\u2714 Correct!':'\u2716 Wrong';
+      });
+    });
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',wire);}else{wire();}
+})();
+<\/script>`;
+}
+
 export function processPuzzleTokens(parsed: Record<string, string>): Record<string, string> {
     if (!parsed.body) return parsed;
-    
-    const correctAnswer = (parsed.answer || '').trim().toUpperCase();
-    const explanation = parsed.explanation || '';
-    
-    const p = parsePuzzleBody(parsed.body);
-    const setupHtml   = p.setup.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
-    const optionsHtml = p.options.map(o => puzzleOptionBox(o.letter, o.text, correctAnswer, explanation)).join('');
-    const leaderHtml  = p.leaderboard ? `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #D8C9F3;border-radius:6px;margin:15px 0;"><tr><td style="font-size:14px;padding:10px;">&#127942; Last Week's Winner</td></tr><tr><td style="font-size:13px;color:#555;padding:0 10px 10px;">${p.leaderboard}</td></tr></table>` : '';
+
+    const correctAnswer = (parsed.answer || '').trim().toUpperCase().replace(/[^A-D]/g, '');
+    const explanation   = (parsed.explanation || '').trim();
+
+    const p           = parsePuzzleBody(parsed.body);
+    const setupHtml   = p.setup.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+    // Clean email-safe option boxes — NO <script>, NO onclick
+    const optionsHtml = p.options.map(o => puzzleOptionBox(o.letter, o.text, correctAnswer)).join('');
+    const leaderHtml  = p.leaderboard
+        ? `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #D8C9F3;border-radius:6px;margin:15px 0;"><tr><td style="font-size:14px;padding:10px;">&#127942; Last Week's Winner</td></tr><tr><td style="font-size:13px;color:#555;padding:0 10px 10px;">${p.leaderboard}</td></tr></table>`
+        : '';
     const replyHtml   = p.replyHook ? `<p style="font-size:14px;color:#333;margin:10px 0;">${p.replyHook}</p>` : '';
 
     return {
         ...parsed,
-        setup: setupHtml,
-        options: optionsHtml,
-        leaderboard: leaderHtml,
-        reply_hook: replyHtml
+        setup:          setupHtml,
+        options:        optionsHtml,   // ← clean HTML, no <script>
+        leaderboard:    leaderHtml,
+        reply_hook:     replyHtml,
+        _correctAnswer: correctAnswer, // ← passed to OutputPanel for preview script + banner
+        _explanation:   explanation,
     };
 }
