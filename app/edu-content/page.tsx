@@ -154,12 +154,47 @@ export default function EduContentPage() {
             if (cfg.error) throw new Error(cfg.error);
 
             const cleanPrompt = extractImagePrompt(lessonData.lesson);
-            const imgRes = await fetch(cfg.url, {
-                method: 'POST',
-                headers: { 'api-key': cfg.apiKey, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ model: cfg.deployment, prompt: cleanPrompt, n: 1, size: '1024x1024' }),
-            });
-            if (!imgRes.ok) throw new Error(`Image API ${imgRes.status}: ${await imgRes.text()}`);
+            let imgRes: Response | null = null;
+            let lastErrorMsg = '';
+
+            // Retry loop up to 3 attempts with exponential backoff
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    if (attempt > 1) {
+                        const delay = attempt === 2 ? 4000 : 8000;
+                        setStepMsg(`🎨 Azure DALL-E busy (429). Retrying in ${delay / 1000}s (Attempt ${attempt}/3)…`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        setStepMsg('🎨 Generating visual card via GPT-Image-2… (this takes ~30s)');
+                    }
+
+                    imgRes = await fetch(cfg.url, {
+                        method: 'POST',
+                        headers: { 'api-key': cfg.apiKey, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ model: cfg.deployment, prompt: cleanPrompt, n: 1, size: '1024x1024' }),
+                        signal: AbortSignal.timeout(45000),
+                    });
+
+                    if (imgRes.ok) {
+                        break;
+                    } else {
+                        const errText = await imgRes.text();
+                        lastErrorMsg = `Image API ${imgRes.status}: ${errText}`;
+                        // If it's a 429, we definitely want to retry
+                        if (imgRes.status !== 429) {
+                            throw new Error(lastErrorMsg);
+                        }
+                    }
+                } catch (e: any) {
+                    lastErrorMsg = e.message || 'Unknown network error';
+                    if (attempt === 3) {
+                        throw new Error(lastErrorMsg);
+                    }
+                }
+            }
+
+            if (!imgRes || !imgRes.ok) {
+                throw new Error(lastErrorMsg || 'Image generation failed');
+            }
 
             const imgData = await imgRes.json();
             const item    = imgData.data?.[0];

@@ -117,13 +117,47 @@ export default function PromptTesterPage() {
             const config = await configRes.json();
             if (!configRes.ok) throw new Error(config.error || 'Config fetch failed');
 
-            const imageRes = await fetch(config.url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'api-key': config.apiKey },
-                body: JSON.stringify({ model: config.deployment, prompt: promptData.text, n: 1, size: '1024x1024' }),
-            });
+            let imageRes: Response | null = null;
+            let lastErrorMsg = '';
+
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    if (attempt > 1) {
+                        const delay = attempt === 2 ? 4000 : 8000;
+                        setLoadingStep(`🎨 Azure DALL-E busy (429). Retrying in ${delay / 1000}s (Attempt ${attempt}/3)…`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        setLoadingStep('🎨 Generating image... (1–3 mins)');
+                    }
+
+                    imageRes = await fetch(config.url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'api-key': config.apiKey },
+                        body: JSON.stringify({ model: config.deployment, prompt: promptData.text, n: 1, size: '1024x1024' }),
+                        signal: AbortSignal.timeout(45000),
+                    });
+
+                    if (imageRes.ok) {
+                        break;
+                    } else {
+                        const errData = await imageRes.json();
+                        lastErrorMsg = errData.error?.message || `Azure error ${imageRes.status}`;
+                        if (imageRes.status !== 429) {
+                            throw new Error(lastErrorMsg);
+                        }
+                    }
+                } catch (e: any) {
+                    lastErrorMsg = e.message || 'Unknown network error';
+                    if (attempt === 3) {
+                        throw new Error(lastErrorMsg);
+                    }
+                }
+            }
+
+            if (!imageRes || !imageRes.ok) {
+                throw new Error(lastErrorMsg || 'Image generation failed');
+            }
+
             const imageData = await imageRes.json();
-            if (!imageRes.ok) throw new Error(imageData.error?.message || `Azure error ${imageRes.status}`);
 
             const imgItem = imageData.data?.[0];
             if (!imgItem) throw new Error('No image returned');
