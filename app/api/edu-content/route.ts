@@ -105,9 +105,9 @@ export async function POST(req: NextRequest) {
 
         // ── 3. Return image API config (keys stay server-side) ────────────────
         if (step === 'image-config') {
-            const apiKey     = process.env.AZURE_API_KEY    || '';
-            const endpoint   = process.env.AZURE_ENDPOINT   || '';
-            const deployment = process.env.AZURE_OPENAI_IMAGE_DEPLOYMENT_NAME || 'gpt-image-2';
+            const apiKey     = process.env.AZURE_IMAGE_API_KEY || process.env.AZURE_API_KEY || '';
+            const endpoint   = process.env.AZURE_IMAGE_ENDPOINT || process.env.AZURE_ENDPOINT || '';
+            const deployment = process.env.AZURE_IMAGE_DEPLOYMENT || process.env.AZURE_OPENAI_IMAGE_DEPLOYMENT_NAME || 'gpt-image-2';
             if (!apiKey || !endpoint)
                 return NextResponse.json({ error: 'Image API not configured' }, { status: 500 });
             return NextResponse.json({
