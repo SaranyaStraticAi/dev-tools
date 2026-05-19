@@ -10,7 +10,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { NewsletterType } from '../constants';
-import { parseNewsletter } from './emailUtils';
+import { parseNewsletter, buildPuzzlePreviewScript } from './emailUtils';
 import type { BroadcastMetrics } from '@/app/api/newsletter-metrics/route';
 
 type ParsedNewsletter = ReturnType<typeof parseNewsletter>;
@@ -159,6 +159,10 @@ export default function OutputPanel({
 </head>
 <body>
     ${emailHtml}
+    ${newsletterType === 'puzzle' && parsed._correctAnswer
+        ? buildPuzzlePreviewScript(parsed._correctAnswer)
+        : ''
+    }
 </body>
 </html>`} 
                         onLoad={handleIframeLoad}
