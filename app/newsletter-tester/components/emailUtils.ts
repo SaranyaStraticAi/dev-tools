@@ -144,12 +144,12 @@ function parsePuzzleBody(body: string) {
 }
 
 // ── Option box — 100% script-free, email-safe ────────────────────────────────
-// The correct answer is base64-encoded in the URL so /puzzle-answer page can
-// decode it without any server call. No onclick, no JS — safe for HubSpot/Resend.
-function puzzleOptionBox(letter: string, text: string, correctAnswer: string): string {
+// Links to vibetrader.com/puzzle?option=A&correct=C&explanation=...
+// The existing /puzzle page on the landing site reads these params and shows ✅/❌.
+// No onclick, no JS — safe for HubSpot, Resend, Gmail, Outlook.
+function puzzleOptionBox(letter: string, text: string, correctAnswer: string, explanation: string): string {
     const formatted = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
-    const encoded   = correctAnswer ? Buffer.from(correctAnswer).toString('base64') : '';
-    const href      = `https://vibetrader.com/puzzle-answer?option=${letter}${encoded ? `&ans=${encodeURIComponent(encoded)}` : ''}`;
+    const href = `https://vibetrader.com/puzzle?option=${encodeURIComponent(letter)}&correct=${encodeURIComponent(correctAnswer)}&explanation=${encodeURIComponent(explanation)}`;
     return `<table class="vt-opt" data-letter="${letter}" width="100%" cellpadding="0" cellspacing="0"
       style="margin:12px 0;background:#eef0f6;border-radius:8px;border:2px solid transparent;">
       <tr><td style="padding:12px 14px;font-size:14px;color:#333;line-height:1.5;">
@@ -212,7 +212,7 @@ export function processPuzzleTokens(parsed: Record<string, string>): Record<stri
     const p           = parsePuzzleBody(parsed.body);
     const setupHtml   = p.setup.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
     // Clean email-safe option boxes — NO <script>, NO onclick
-    const optionsHtml = p.options.map(o => puzzleOptionBox(o.letter, o.text, correctAnswer)).join('');
+    const optionsHtml = p.options.map(o => puzzleOptionBox(o.letter, o.text, correctAnswer, explanation)).join('');
     const leaderHtml  = p.leaderboard
         ? `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #D8C9F3;border-radius:6px;margin:15px 0;"><tr><td style="font-size:14px;padding:10px;">&#127942; Last Week's Winner</td></tr><tr><td style="font-size:13px;color:#555;padding:0 10px 10px;">${p.leaderboard}</td></tr></table>`
         : '';
