@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const maxDuration = 59;
+
 const AZURE_OPENAI_ENDPOINT   = process.env.AZURE_OPENAI_ENDPOINT  || '';
 const AZURE_OPENAI_API_KEY    = process.env.AZURE_OPENAI_API_KEY   || '';
 const AZURE_OPENAI_DEPLOYMENT = process.env.AZURE_OPENAI_DEPLOYMENT_RAG || 'gpt-4.1-rag-summary';

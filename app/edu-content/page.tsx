@@ -157,14 +157,21 @@ export default function EduContentPage() {
             let imgRes: Response | null = null;
             let lastErrorMsg = '';
 
-            // Retry loop up to 3 attempts with exponential backoff
-            for (let attempt = 1; attempt <= 3; attempt++) {
+            // Retry loop — up to 3 attempts with long waits for EngineOverloaded
+            const MAX_ATTEMPTS = 3;
+            const RETRY_DELAYS = [90000, 90000]; // 90s between each attempt
+
+            for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
                 try {
                     if (attempt > 1) {
-                        const delay = attempt === 2 ? 4000 : 8000;
-                        setStepMsg(`🎨 Azure DALL-E busy (429). Retrying in ${delay / 1000}s (Attempt ${attempt}/3)…`);
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                        setStepMsg('🎨 Generating visual card via GPT-Image-2… (this takes ~30s)');
+                        const delay = RETRY_DELAYS[attempt - 2] ?? 90000;
+                        const delaySec = delay / 1000;
+                        // Countdown display
+                        for (let remaining = delaySec; remaining > 0; remaining -= 5) {
+                            setStepMsg(`🎨 Azure busy (429). Retrying in ${remaining}s… (Attempt ${attempt}/${MAX_ATTEMPTS})`);
+                            await new Promise(resolve => setTimeout(resolve, Math.min(5000, remaining * 1000)));
+                        }
+                        setStepMsg(`🎨 Attempt ${attempt}/${MAX_ATTEMPTS} — Generating visual card…`);
                     }
 
                     imgRes = await fetch(cfg.url, {
@@ -174,26 +181,30 @@ export default function EduContentPage() {
                         signal: AbortSignal.timeout(360000),
                     });
 
-                    if (imgRes.ok) {
-                        break;
-                    } else {
-                        const errText = await imgRes.text();
-                        lastErrorMsg = `Image API ${imgRes.status}: ${errText}`;
-                        // If it's a 429, we definitely want to retry
-                        if (imgRes.status !== 429) {
-                            throw new Error(lastErrorMsg);
-                        }
-                    }
+                    if (imgRes.ok) break;
+
+                    const errText = await imgRes.text();
+                    lastErrorMsg = `Image API ${imgRes.status}: ${errText}`;
+
+                    // Only retry on 429, throw immediately on anything else
+                    if (imgRes.status !== 429) throw new Error(lastErrorMsg);
+
+                    // If this was the last attempt, throw
+                    if (attempt === MAX_ATTEMPTS) throw new Error(lastErrorMsg);
+
                 } catch (e: any) {
-                    lastErrorMsg = e.message || 'Unknown network error';
-                    if (attempt === 3) {
-                        throw new Error(lastErrorMsg);
+                    // If it's not a 429-related retry error, throw immediately
+                    if (!e.message?.includes('429') && attempt < MAX_ATTEMPTS) {
+                        lastErrorMsg = e.message || 'Unknown network error';
+                        if (attempt === MAX_ATTEMPTS) throw new Error(lastErrorMsg);
+                    } else {
+                        throw e;
                     }
                 }
             }
 
             if (!imgRes || !imgRes.ok) {
-                throw new Error(lastErrorMsg || 'Image generation failed');
+                throw new Error(lastErrorMsg || 'Image generation failed after all retries');
             }
 
             const imgData = await imgRes.json();
