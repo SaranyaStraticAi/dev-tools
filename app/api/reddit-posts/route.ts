@@ -13,60 +13,60 @@ export async function GET(req: NextRequest) {
     
     const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-    let res: Response | null = null;
-    let lastError: any = null;
+    let data: any = null;
+    const errors: string[] = [];
 
-    // 1. Try Direct Fetch (works great locally, but might be blocked on cloud platforms like Vercel)
-    try {
-        res = await fetch(targetUrl, {
-            headers: { 'User-Agent': userAgent },
-        });
-        if (!res.ok) {
-            res = null;
+    const fetchSources = [
+        {
+            name: 'Direct Fetch',
+            url: targetUrl,
+        },
+        {
+            name: 'Codetabs Proxy',
+            url: `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
+        },
+        {
+            name: 'Corsproxy.io',
+            url: `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+        },
+        {
+            name: 'Allorigins Proxy',
+            url: `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
         }
-    } catch (err: any) {
-        lastError = err;
-    }
+    ];
 
-    // 2. Try Codetabs Proxy
-    if (!res) {
-        const codetabsUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`;
+    for (const source of fetchSources) {
         try {
-            res = await fetch(codetabsUrl, {
+            const res = await fetch(source.url, {
                 headers: { 'User-Agent': userAgent },
+                cache: 'no-store',
             });
             if (!res.ok) {
-                res = null;
+                throw new Error(`HTTP status ${res.status}`);
             }
+            const text = await res.text();
+            if (!text || text.trim() === '') {
+                throw new Error('Empty response body');
+            }
+            const parsed = JSON.parse(text);
+            if (!parsed || !parsed.data || !parsed.data.children) {
+                throw new Error('Invalid Reddit JSON structure (missing data.children)');
+            }
+            data = parsed;
+            break;
         } catch (err: any) {
-            lastError = err;
+            errors.push(`${source.name}: ${err.message}`);
         }
     }
 
-    // 3. Try Corsproxy.io as a last resort
-    if (!res) {
-        const corsproxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
-        try {
-            res = await fetch(corsproxyUrl, {
-                headers: { 'User-Agent': userAgent },
-            });
-            if (!res.ok) {
-                res = null;
-            }
-        } catch (err: any) {
-            lastError = err;
-        }
+    if (!data) {
+        return NextResponse.json({ 
+            error: 'Failed to fetch Reddit posts from all sources.', 
+            details: errors.join('; ') 
+        }, { status: 502 });
     }
 
-    if (!res) {
-        return NextResponse.json({ error: `Reddit Proxy/Direct fetch failed. Last error: ${lastError?.message || 'unknown status'}` }, { status: 502 });
-    }
     try {
-        const data = await res.json();
-        
-        if (!data || !data.data || !data.data.children) {
-             return NextResponse.json({ error: 'Invalid response from Reddit' }, { status: 502 });
-        }
 
         const posts = (data.data.children as any[]).map((item, i) => {
             const p = item.data;
