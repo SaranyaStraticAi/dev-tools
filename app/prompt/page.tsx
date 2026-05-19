@@ -133,7 +133,7 @@ export default function PromptTesterPage() {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'api-key': config.apiKey },
                         body: JSON.stringify({ model: config.deployment, prompt: promptData.text, n: 1, size: '1024x1024' }),
-                        signal: AbortSignal.timeout(45000),
+                        signal: AbortSignal.timeout(120000),
                     });
 
                     if (imageRes.ok) {

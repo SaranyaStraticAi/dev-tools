@@ -171,7 +171,7 @@ export default function EduContentPage() {
                         method: 'POST',
                         headers: { 'api-key': cfg.apiKey, 'Content-Type': 'application/json' },
                         body: JSON.stringify({ model: cfg.deployment, prompt: cleanPrompt, n: 1, size: '1024x1024' }),
-                        signal: AbortSignal.timeout(45000),
+                        signal: AbortSignal.timeout(120000),
                     });
 
                     if (imgRes.ok) {
