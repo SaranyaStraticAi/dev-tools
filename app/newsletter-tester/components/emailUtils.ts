@@ -143,12 +143,15 @@ function parsePuzzleBody(body: string) {
     return result;
 }
 
-function puzzleOptionBox(letter: string, text: string): string {
+function puzzleOptionBox(letter: string, text: string, correctAnswer: string, explanation: string): string {
     const formatted = text.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
-    return `<table width="100%" cellpadding="0" cellspacing="0" style="margin:12px 0;background:#eef0f6;border-radius:8px;">
+    const encodedExplanation = encodeURIComponent(explanation);
+    return `<table width="100%" cellpadding="0" cellspacing="0" style="margin:12px 0;background:#eef0f6;border-radius:8px;" class="puzzle-option">
       <tr><td style="padding:12px;font-size:14px;color:#333;">${formatted}</td></tr>
       <tr><td align="center" style="padding:10px;">
-        <a href="https://www.vibetrader.com/puzzle?option=${letter}" style="background:#4b3fa0;color:#fff;text-decoration:none;padding:10px 20px;border-radius:20px;display:inline-block;font-weight:bold;">Select Option ${letter}</a>
+        <a href="https://www.vibetrader.com/puzzle?option=${letter}&correct=${correctAnswer}&explanation=${encodedExplanation}" 
+           onclick="if(typeof checkAnswer === 'function') { event.preventDefault(); checkAnswer(this, '${letter}', '${correctAnswer}'); }"
+           style="background:#4b3fa0;color:#fff;text-decoration:none;padding:10px 20px;border-radius:20px;display:inline-block;font-weight:bold;">Select Option ${letter}</a>
       </td></tr>
     </table>`;
 }
@@ -156,9 +159,12 @@ function puzzleOptionBox(letter: string, text: string): string {
 export function processPuzzleTokens(parsed: Record<string, string>): Record<string, string> {
     if (!parsed.body) return parsed;
     
+    const correctAnswer = (parsed.answer || '').trim().toUpperCase();
+    const explanation = parsed.explanation || '';
+    
     const p = parsePuzzleBody(parsed.body);
     const setupHtml   = p.setup.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
-    const optionsHtml = p.options.map(o => puzzleOptionBox(o.letter, o.text)).join('');
+    const optionsHtml = p.options.map(o => puzzleOptionBox(o.letter, o.text, correctAnswer, explanation)).join('');
     const leaderHtml  = p.leaderboard ? `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #D8C9F3;border-radius:6px;margin:15px 0;"><tr><td style="font-size:14px;padding:10px;">&#127942; Last Week's Winner</td></tr><tr><td style="font-size:13px;color:#555;padding:0 10px 10px;">${p.leaderboard}</td></tr></table>` : '';
     const replyHtml   = p.replyHook ? `<p style="font-size:14px;color:#333;margin:10px 0;">${p.replyHook}</p>` : '';
 
