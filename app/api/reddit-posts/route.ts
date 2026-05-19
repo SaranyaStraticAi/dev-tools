@@ -11,20 +11,57 @@ export async function GET(req: NextRequest) {
     // The target Reddit URL
     const targetUrl = `https://www.reddit.com/r/${subreddit}/top.json?t=${timeframe}&limit=${limit}`;
     
-    // Use a public proxy to bypass the Vercel IP block
-    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+    const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
+    let res: Response | null = null;
+    let lastError: any = null;
+
+    // 1. Try Direct Fetch (works great locally, but might be blocked on cloud platforms like Vercel)
     try {
-        const res = await fetch(proxyUrl, {
-            headers: { 
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' 
-            },
+        res = await fetch(targetUrl, {
+            headers: { 'User-Agent': userAgent },
         });
-
         if (!res.ok) {
-            return NextResponse.json({ error: `Reddit Proxy returned ${res.status}` }, { status: 502 });
+            res = null;
         }
+    } catch (err: any) {
+        lastError = err;
+    }
 
+    // 2. Try Codetabs Proxy
+    if (!res) {
+        const codetabsUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`;
+        try {
+            res = await fetch(codetabsUrl, {
+                headers: { 'User-Agent': userAgent },
+            });
+            if (!res.ok) {
+                res = null;
+            }
+        } catch (err: any) {
+            lastError = err;
+        }
+    }
+
+    // 3. Try Corsproxy.io as a last resort
+    if (!res) {
+        const corsproxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+        try {
+            res = await fetch(corsproxyUrl, {
+                headers: { 'User-Agent': userAgent },
+            });
+            if (!res.ok) {
+                res = null;
+            }
+        } catch (err: any) {
+            lastError = err;
+        }
+    }
+
+    if (!res) {
+        return NextResponse.json({ error: `Reddit Proxy/Direct fetch failed. Last error: ${lastError?.message || 'unknown status'}` }, { status: 502 });
+    }
+    try {
         const data = await res.json();
         
         if (!data || !data.data || !data.data.children) {
