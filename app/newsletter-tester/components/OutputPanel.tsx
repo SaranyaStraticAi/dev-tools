@@ -44,6 +44,11 @@ export default function OutputPanel({
         setEditedHtml(emailHtml);
     }, [emailHtml]);
 
+    // Ref to the MutationObserver watching the iframe body (so we can
+    // temporarily disconnect it while we programmatically set innerHTML)
+    const observerRef  = useRef<MutationObserver | null>(null);
+    const isPushingRef = useRef(false);  // true while we're setting innerHTML ourselves
+
     const handleIframeLoad = () => {
         const iframe = iframeRef.current;
         if (!iframe) return;
@@ -52,38 +57,60 @@ export default function OutputPanel({
 
         // Make the body of the iframe editable
         doc.body.contentEditable = 'true';
-        
-        // Strip the preview-only <script> block before syncing to editedHtml.
-        // The script is injected into srcDoc for tester interactivity only —
-        // it must never appear in the HTML tab or download.
-        const getCleanHtml = () => {
-            const raw = doc.body.innerHTML;
-            return raw.replace(/<script[\s\S]*?<\/script>/gi, '').trim();
-        };
 
-        // Listen for changes robustly
+        // Strip the preview-only <script> block before syncing to editedHtml.
+        const getCleanHtml = () =>
+            doc.body.innerHTML.replace(/<script[\s\S]*?<\/script>/gi, '').trim();
+
         const handleInput = () => {
+            // Ignore changes WE made programmatically
+            if (isPushingRef.current) return;
             setEditedHtml(getCleanHtml());
         };
-        
+
         doc.body.addEventListener('input', handleInput);
         doc.body.addEventListener('keyup', handleInput);
 
-        // Use a MutationObserver to safely capture when whole blocks/tables are deleted
+        // Disconnect any previous observer before creating a new one
+        observerRef.current?.disconnect();
         const observer = new MutationObserver(handleInput);
         observer.observe(doc.body, { childList: true, subtree: true, characterData: true });
+        observerRef.current = observer;
+    };
+
+    // Push HTML string into the live iframe body without reloading the frame.
+    // Uses isPushingRef to suppress the MutationObserver callback while we write.
+    const pushToIframe = (html: string) => {
+        const iframe = iframeRef.current;
+        if (!iframe) return;
+        const doc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (!doc || !doc.body) return;
+
+        isPushingRef.current = true;
+        doc.body.innerHTML = html;
+        // Re-apply contentEditable because setting innerHTML resets it
+        doc.body.contentEditable = 'true';
+        isPushingRef.current = false;
+    };
+
+    // Called when the user edits the HTML textarea directly
+    const handleHtmlEdit = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        const newHtml = e.target.value;
+        setEditedHtml(newHtml);
+        pushToIframe(newHtml);
     };
 
     const handleDownload = () => {
-        // Always download the original clean emailHtml — never editedHtml which
-        // may contain the tester preview script injected into the iframe srcDoc.
-        if (!emailHtml) return;
-        const blob = new Blob([emailHtml], { type: 'text/html' });
+        // Use editedHtml so that any in-iframe or textarea edits are included.
+        // editedHtml already has the puzzle preview <script> stripped.
+        const html = editedHtml || emailHtml;
+        if (!html) return;
+        const blob = new Blob([html], { type: 'text/html' });
         const url  = URL.createObjectURL(blob);
         const a    = document.createElement('a');
         a.href     = url;
         a.download = `${new Date().toISOString().slice(0,10)}_${newsletterType === 'weekly' ? 'thursday' : 'tuesday'}_${newsletterType}.html`;
-        a.click(); 
+        a.click();
         URL.revokeObjectURL(url);
     };
 
@@ -180,11 +207,19 @@ export default function OutputPanel({
                 </div>
             </div>
 
-            {/* HTML tab — raw HTML source */}
+            {/* HTML tab — editable HTML source that live-syncs back to the iframe */}
             {tab === 'template' && (
-                <pre className="w-full p-5 border rounded-2xl bg-card font-mono text-[10px] leading-relaxed overflow-auto max-h-[720px] whitespace-pre-wrap text-muted-foreground">
-                    {editedHtml}
-                </pre>
+                <div className="w-full flex flex-col gap-2">
+                    <p className="text-[10px] text-muted-foreground px-1">
+                        ✏️ Edit the HTML below — changes are reflected in the Preview iframe instantly.
+                    </p>
+                    <textarea
+                        value={editedHtml}
+                        onChange={handleHtmlEdit}
+                        spellCheck={false}
+                        className="w-full p-5 border rounded-2xl bg-card font-mono text-[10px] leading-relaxed overflow-auto h-[720px] whitespace-pre resize-none outline-none focus:ring-2 focus:ring-purple-500/40 text-muted-foreground"
+                    />
+                </div>
             )}
 
             {/* Raw tab — plain AI output text */}
