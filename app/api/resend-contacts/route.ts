@@ -10,13 +10,9 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 // ── GET — list contacts ───────────────────────────────────────────────────────
 export async function GET() {
     try {
-        const id = process.env.RESEND_AUDIENCE_ID;
-        if (!id) return NextResponse.json({ error: 'RESEND_AUDIENCE_ID not set' }, { status: 500 });
-
-        console.log('[resend-contacts] fetching list for:', id);
+        console.log('[resend-contacts] fetching global list');
         
-        // Try listing by audience first, if it fails or returns empty, it might be a segment
-        const result = await resend.contacts.list({ audienceId: id });
+        const result = await resend.contacts.list();
 
         if (result.error) {
             console.error('[resend-contacts] list error:', result.error);
@@ -42,17 +38,11 @@ export async function POST(req: NextRequest) {
             unsubscribed?: boolean;
         };
 
-        const audienceId = process.env.RESEND_AUDIENCE_ID;
-        if (!audienceId) {
-            return NextResponse.json({ error: 'RESEND_AUDIENCE_ID not set' }, { status: 500 });
-        }
-
         const result = await resend.contacts.create({
             email:        body.email,
             firstName:    body.firstName  ?? '',
             lastName:     body.lastName   ?? '',
             unsubscribed: body.unsubscribed ?? false,
-            audienceId,
         });
 
         if (result.error) {

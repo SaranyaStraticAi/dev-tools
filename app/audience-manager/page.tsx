@@ -14,8 +14,9 @@ interface Contact {
 }
 
 interface Segment {
-    id:   string;
-    name: string;
+    id:        string;
+    name:      string;
+    isDefault?: boolean;
 }
 
 type SortKey   = 'email' | 'first_name' | 'created_at';
@@ -381,7 +382,9 @@ export default function AudienceManagerPage() {
                                     }`}
                                     onClick={() => setSelectedSeg(seg.id)}
                                 >
-                                    <span className="truncate">{seg.name}</span>
+                                    <span className="truncate">
+                                        📁 {seg.name}
+                                    </span>
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();
@@ -436,7 +439,9 @@ export default function AudienceManagerPage() {
                         {showAddForm && (
                             <form onSubmit={handleAddContact}
                                 className="border border-orange-500/30 bg-orange-500/5 rounded-2xl p-4 flex flex-col gap-3 animate-in slide-in-from-top-2">
-                                <h3 className="font-bold text-sm text-orange-400">➕ New Contact (Will be added to selected segment)</h3>
+                                <h3 className="font-bold text-sm text-orange-400">
+                                    ➕ New Contact {selectedSeg ? `(Will be added to "${segments.find(s => s.id === selectedSeg)?.name}" segment)` : ''}
+                                </h3>
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <input required value={newEmail} onChange={e => setNewEmail(e.target.value)}
                                         placeholder="email@example.com *"
