@@ -114,6 +114,10 @@ export default function NewsletterTesterPage() {
                         className="text-[10px] font-bold px-2.5 py-1 rounded-lg border border-orange-500/30 text-orange-400 hover:bg-orange-500/10 transition-all">
                         👥 Manage Audience →
                     </a>
+                    <a href="/email-campaigns"
+                        className="text-[10px] font-bold px-2.5 py-1 rounded-lg border border-purple-500/30 text-purple-400 hover:bg-purple-500/10 transition-all">
+                        📧 Email Campaigns →
+                    </a>
                 </div>
             </div>
 
