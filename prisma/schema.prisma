@@ -272,3 +272,20 @@ model marketing_link_visitors {
 
   @@id([link_id, visitor_id])
 }
+
+model email_campaigns {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subject       String
+  body          String?  // HTML content of the email
+  type          String   // e.g. "weekly", "puzzle"
+  sent_at       DateTime @default(now()) @db.Timestamp(6)
+  broadcast_ids String[] // Resend broadcast IDs
+  segment_ids   String[] // Resend segment IDs
+  delivered     Int      @default(0)
+  opened        Int      @default(0)
+  clicked       Int      @default(0)
+  bounced       Int      @default(0)
+  complained    Int      @default(0)
+  unsubscribed  Int      @default(0)
+}
+

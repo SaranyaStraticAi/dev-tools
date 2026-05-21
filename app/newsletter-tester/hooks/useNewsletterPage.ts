@@ -149,7 +149,7 @@ export function useNewsletterPage() {
             const res  = await fetch('/api/send-newsletter', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ html: emailHtml, subject, segmentIds: selectedSegs }),
+                body: JSON.stringify({ html: emailHtml, subject, segmentIds: selectedSegs, type }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error ?? 'Send failed');

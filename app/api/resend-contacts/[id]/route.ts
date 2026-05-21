@@ -20,14 +20,8 @@ export async function PATCH(
             unsubscribed?: boolean;
         };
 
-        const audienceId = process.env.RESEND_AUDIENCE_ID;
-        if (!audienceId) {
-            return NextResponse.json({ error: 'RESEND_AUDIENCE_ID not set' }, { status: 500 });
-        }
-
         const result = await resend.contacts.update({
             id,
-            audienceId,
             firstName:    body.firstName,
             lastName:     body.lastName,
             unsubscribed: body.unsubscribed,
