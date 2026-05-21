@@ -37,6 +37,7 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/api/link-tracker') ||
     pathname.startsWith('/api/news-source') ||
     pathname.startsWith('/api/commissions') ||
+    pathname.startsWith('/api/email-campaigns') ||
     pathname.startsWith('/api/auth') ||
     pathname.startsWith('/api/edu-content');   // ← edu content tester
 
