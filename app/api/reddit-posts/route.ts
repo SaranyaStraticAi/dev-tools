@@ -13,8 +13,7 @@ export async function GET(req: NextRequest) {
     
     const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-    let data: any = null;
-    const errors: string[] = [];
+    const TIMEOUT_MS = 8000; // 8s per source — well within Vercel's 15s limit
 
     const fetchSources = [
         {
@@ -35,34 +34,44 @@ export async function GET(req: NextRequest) {
         }
     ];
 
-    for (const source of fetchSources) {
+    // Helper: fetch with a per-source timeout + Reddit JSON validation
+    async function trySource(source: { name: string; url: string }): Promise<any> {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
         try {
             const res = await fetch(source.url, {
                 headers: { 'User-Agent': userAgent },
                 cache: 'no-store',
+                signal: controller.signal,
             });
-            if (!res.ok) {
-                throw new Error(`HTTP status ${res.status}`);
-            }
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const text = await res.text();
-            if (!text || text.trim() === '') {
-                throw new Error('Empty response body');
-            }
+            if (!text || text.trim() === '') throw new Error('Empty response');
             const parsed = JSON.parse(text);
-            if (!parsed || !parsed.data || !parsed.data.children) {
-                throw new Error('Invalid Reddit JSON structure (missing data.children)');
-            }
-            data = parsed;
-            break;
-        } catch (err: any) {
-            errors.push(`${source.name}: ${err.message}`);
+            if (!parsed?.data?.children) throw new Error('Invalid Reddit JSON structure');
+            return parsed;
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    // Fire all sources simultaneously — take the first one that resolves successfully
+    let data: any = null;
+    let aggregateError = 'All sources failed';
+
+    try {
+        data = await Promise.any(fetchSources.map(s => trySource(s)));
+    } catch (err: any) {
+        // AggregateError from Promise.any — collect individual messages
+        if (err?.errors) {
+            aggregateError = (err.errors as Error[]).map((e, i) => `${fetchSources[i]?.name}: ${e.message}`).join('; ');
         }
     }
 
     if (!data) {
         return NextResponse.json({ 
             error: 'Failed to fetch Reddit posts from all sources.', 
-            details: errors.join('; ') 
+            details: aggregateError,
         }, { status: 502 });
     }
 
