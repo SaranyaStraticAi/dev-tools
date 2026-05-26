@@ -72,7 +72,11 @@ export function renderTemplate(
     // 1.5 Handle virtual "list" tokens (e.g. {sources_list} replaces all SOURCE1, SOURCE2... items)
     const buildList = (prefix: string, formatter: (v: string) => string) => {
         return Object.entries(parsed)
-            .filter(([k]) => k.startsWith(prefix))
+            .filter(([k, v]) => {
+                if (!k.startsWith(prefix)) return false;
+                const val = v.trim().toLowerCase();
+                return val !== '' && val !== 'none' && val !== '[none]';
+            })
             .sort((a, b) => a[0].localeCompare(b[0]))
             .map(([_, v]) => formatter(v))
             .join('');

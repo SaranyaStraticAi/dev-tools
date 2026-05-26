@@ -11,17 +11,18 @@ interface ActionBarProps {
     publishStatus: 'idle' | 'success' | 'error';
     sendStatus:    SendStatus;
     hasHtml:       boolean;
-    onGenerate:      (type: NewsletterType) => void;
-    onTypeSwitch:    (type: NewsletterType) => void;
-    onTogglePrompts: () => void;
-    onPublish:       () => void;
-    onSend:          () => void;
+    onGeneratePipeline: (rediscover?: boolean) => void;
+    onGeneratePuzzle:   () => void;
+    onTypeSwitch:       (type: NewsletterType) => void;
+    onTogglePrompts:    () => void;
+    onPublish:          () => void;
+    onSend:             () => void;
 }
 
 export default function ActionBar({
     activeType, loading, showPrompts, publishing, publishStatus,
     sendStatus, hasHtml,
-    onGenerate, onTypeSwitch, onTogglePrompts, onPublish, onSend,
+    onGeneratePipeline, onGeneratePuzzle, onTypeSwitch, onTogglePrompts, onPublish, onSend,
 }: ActionBarProps) {
 
     const sendLabel = () => {
@@ -41,11 +42,11 @@ export default function ActionBar({
 
     return (
         <div className="flex items-center gap-3 flex-wrap justify-center">
-            <button onClick={() => { onTypeSwitch('weekly'); onGenerate('weekly'); }} disabled={loading}
-                className={`px-8 py-4 rounded-2xl font-bold text-sm transition-all shadow-lg active:scale-95 flex items-center gap-2 disabled:opacity-60 ${activeType==='weekly'&&loading ? 'bg-green-700 text-white cursor-wait' : 'bg-green-600 hover:bg-green-700 text-white'}`}>
-                {activeType==='weekly'&&loading ? <span className="w-4 h-4 border-2 border-white/30 border-t-white animate-spin rounded-full"/> : '📅'} Thursday Weekly
+            <button onClick={() => { onTypeSwitch('weekly'); onGeneratePipeline(false); }} disabled={loading}
+                className={`px-8 py-4 rounded-2xl font-bold text-sm transition-all shadow-lg active:scale-95 flex items-center gap-2 disabled:opacity-60 ${activeType==='weekly'&&loading ? 'bg-emerald-800 text-white cursor-wait' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}>
+                {activeType==='weekly'&&loading ? <span className="w-4 h-4 border-2 border-white/30 border-t-white animate-spin rounded-full"/> : '🚀'} Thursday Weekly
             </button>
-            <button onClick={() => { onTypeSwitch('puzzle'); onGenerate('puzzle'); }} disabled={loading}
+            <button onClick={() => { onTypeSwitch('puzzle'); onGeneratePuzzle(); }} disabled={loading}
                 className={`px-8 py-4 rounded-2xl font-bold text-sm transition-all shadow-lg active:scale-95 flex items-center gap-2 disabled:opacity-60 ${activeType==='puzzle'&&loading ? 'bg-purple-700 text-white cursor-wait' : 'bg-purple-600 hover:bg-purple-700 text-white'}`}>
                 {activeType==='puzzle'&&loading ? <span className="w-4 h-4 border-2 border-white/30 border-t-white animate-spin rounded-full"/> : '🧩'} Tuesday Puzzle
             </button>

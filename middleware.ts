@@ -33,12 +33,14 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/api/resend-segments') ||
     pathname.startsWith('/api/send-newsletter') ||
     pathname.startsWith('/api/newsletter-metrics') ||
+    pathname.startsWith('/api/newsletter-pipeline') ||
     pathname.startsWith('/api/marketing-links') ||
     pathname.startsWith('/api/link-tracker') ||
     pathname.startsWith('/api/news-source') ||
     pathname.startsWith('/api/commissions') ||
     pathname.startsWith('/api/email-campaigns') ||
     pathname.startsWith('/api/auth') ||
+    pathname.startsWith('/api/newsrag') ||
     pathname.startsWith('/api/edu-content');   // ← edu content tester
 
   const isGrafanaApi = pathname.startsWith('/api/') && !isLocalApi;

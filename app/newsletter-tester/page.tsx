@@ -23,6 +23,7 @@ import OutputPanel    from './components/OutputPanel';
 import ActionBar      from './components/ActionBar';
 import PromptEditor   from './components/PromptEditor';
 import VersionHistory from '@/components/VersionHistory';
+import PipelineLog    from './components/PipelineLog';
 
 export default function NewsletterTesterPage() {
     const { accounts } = useMsal();
@@ -49,7 +50,8 @@ export default function NewsletterTesterPage() {
         showPrompts,  setShowPrompts,
         // reddit
         posts, setPosts,
-        fetchingReddit, redditFetchedAt, redditError,
+        fetchingReddit, redditFetchedAt, redditError, redditFromBlob,
+        redditSubsSource, redditSubsUsed,
         fetchLiveReddit, resetReddit,
         // azure
         promptsLoading, publishing, publishStatus,
@@ -63,12 +65,14 @@ export default function NewsletterTesterPage() {
         // output
         rawText, emailHtml, loading, step, error,
         parsed,
-        handleGenerate, downloadHtml,
+        handleGenerate, handleGeneratePipeline, downloadHtml,
         // resend
         broadcastId, sendStatus, sendError, metrics,
         handleSendViaResend,
         segments, selectedSegs, setSelectedSegs,
         showSendModal, setShowSendModal,
+        // pipeline log
+        pipelineLog,
     } = useNewsletterPage();
 
     if (!mounted) return null;
@@ -133,7 +137,10 @@ export default function NewsletterTesterPage() {
                 posts={posts}
                 fetchingReddit={fetchingReddit}
                 redditFetchedAt={redditFetchedAt}
+                redditFromBlob={redditFromBlob}
                 redditError={redditError}
+                redditSubsSource={redditSubsSource}
+                redditSubsUsed={redditSubsUsed}
                 onFetchLive={fetchLiveReddit}
                 onResetSamples={resetReddit}
                 onPostsChange={setPosts}
@@ -148,7 +155,8 @@ export default function NewsletterTesterPage() {
                 publishStatus={publishStatus}
                 sendStatus={sendStatus}
                 hasHtml={!!emailHtml}
-                onGenerate={handleGenerate}
+                onGeneratePipeline={handleGeneratePipeline}
+                onGeneratePuzzle={() => handleGenerate('puzzle')}
                 onTypeSwitch={setType}
                 onTogglePrompts={() => setShowPrompts(v => !v)}
                 onPublish={publishToAzure}
@@ -200,6 +208,14 @@ export default function NewsletterTesterPage() {
                     sendError={sendError}
                 />
             )}
+
+            {/* ── Pipeline Process Log (Full) ──────────────── */}
+            <PipelineLog entries={pipelineLog} title="Pipeline Process Log (Full)" promptMode="full" />
+            
+            <div className="h-4" />
+
+            {/* ── Pipeline Process Log (Compressed) ──────────────── */}
+            <PipelineLog entries={pipelineLog} title="Compressed Pipeline Log" promptMode="compressed" />
 
             {/* ── Prompt editor drawer ─────────────────────────────────────── */}
             {showPrompts && (

@@ -1,9 +1,9 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image, Link2, Network, LayoutGrid, ChevronDown, Mail, Video, GraduationCap } from 'lucide-react';
+import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image, Link2, Network, LayoutGrid, ChevronDown, Mail, Video, GraduationCap, Download, Brain, Newspaper, Edit, ShieldCheck } from 'lucide-react';
 import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
 import { useState, useEffect } from 'react';
 
@@ -64,6 +64,19 @@ const navGroups = [
       { name: 'Video Generator',     href: '/video-generator',     icon: Video },
       { name: 'Link Tracker',        href: '/link-tracker',        icon: Link2 },
       { name: 'Prompt Tester',       href: '/prompt',              icon: Code },
+    ],
+  },
+  {
+    label: 'Newsletter Pipeline',
+    items: [
+      { name: '01: Reddit Discoverer',   href: '/newsletter-tester/reddit-discover', icon: Search },
+      { name: '02: Subreddit Selector',  href: '/newsletter-tester/pick-subreddits',  icon: Layers },
+      { name: '03: Reddit Post Fetcher', href: '/newsletter-tester/fetch-posts',      icon: Download },
+      { name: '04: AI Deep Analysis',    href: '/newsletter-tester/deep-analysis',    icon: Brain },
+      { name: '05: Market News Fetcher', href: '/newsletter-tester/news-context',     icon: Newspaper },
+      { name: '06: Newsletter Writer',   href: '/newsletter-tester/newsletter-writer', icon: Edit },
+      { name: '07: Compliance Reviewer', href: '/newsletter-tester/compliance-review', icon: ShieldCheck },
+      { name: '08: Newsletter Banner',   href: '/newsletter-tester/generate-banner',   icon: Image },
     ],
   },
   {
