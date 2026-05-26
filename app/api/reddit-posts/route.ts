@@ -22,10 +22,10 @@ import { BlobServiceClient } from '@azure/storage-blob';
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
 
-const BLOB_CONTAINER         = 'newsletter-prompts';
-const BLOB_POSTS_NAME        = 'reddit-posts-cache.json';
-const BLOB_SUBS_NAME         = 'reddit-discovered-subs.json';
-const SUBS_CACHE_TTL_MS      = 7 * 24 * 60 * 60 * 1000; // 7 days
+const BLOB_CONTAINER = 'newsletter-prompts';
+const BLOB_POSTS_NAME = 'reddit-posts-cache.json';
+const BLOB_SUBS_NAME = 'reddit-discovered-subs.json';
+const SUBS_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // Safety fallback — only used if Reddit search AND LLM both fail completely
 const FALLBACK_SUBS = ['Forex', 'Daytrading', 'trading', 'algotrading', 'technicalanalysis'];
@@ -50,7 +50,7 @@ async function writeBlob(name: string, payload: object): Promise<void> {
     try {
         const container = getContainerClient();
         await container.createIfNotExists({ access: 'blob' });
-        const str  = JSON.stringify(payload);
+        const str = JSON.stringify(payload);
         const blob = container.getBlockBlobClient(name);
         await blob.upload(Buffer.from(str), Buffer.byteLength(str), {
             blobHTTPHeaders: { blobContentType: 'application/json' },
@@ -62,15 +62,15 @@ async function writeBlob(name: string, payload: object): Promise<void> {
 // ── Azure OpenAI helper ───────────────────────────────────────────────────────
 
 function getAzureConfig() {
-    const apiKey     = process.env.AZURE_OPENAI_API_KEY || '';
-    const endpoint   = process.env.AZURE_OPENAI_ENDPOINT || '';
+    const apiKey = process.env.AZURE_OPENAI_API_KEY || '';
+    const endpoint = process.env.AZURE_OPENAI_ENDPOINT || '';
     const deployment = process.env.AZURE_OPENAI_DEPLOYMENT
-                    || process.env.AZURE_OPENAI_DEPLOYMENT_RAG
-                    || 'gpt-4.1-rag-summary';
+        || process.env.AZURE_OPENAI_DEPLOYMENT_RAG
+        || 'gpt-4.1-rag-summary';
     const apiVersion = process.env.AZURE_OPENAI_API_VERSION || '2024-02-01';
     let resourceName = process.env.AZURE_OPENAI_RESOURCE_NAME || '';
     if (!resourceName && endpoint) {
-        try { resourceName = new URL(endpoint).hostname.split('.')[0]; } catch {}
+        try { resourceName = new URL(endpoint).hostname.split('.')[0]; } catch { }
     }
     return { apiKey, resourceName, deployment, apiVersion };
 }
@@ -79,11 +79,11 @@ async function callAzureOpenAI(system: string, user: string): Promise<string> {
     const { apiKey, resourceName, deployment, apiVersion } = getAzureConfig();
     if (!apiKey || !resourceName) throw new Error('Azure OpenAI credentials missing');
     const url = `https://${resourceName}.openai.azure.com/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
-    const res  = await fetch(url, {
-        method:  'POST',
+    const res = await fetch(url, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
-        body:    JSON.stringify({
-            messages:    [{ role: 'system', content: system }, { role: 'user', content: user }],
+        body: JSON.stringify({
+            messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
             temperature: 0.1,
         }),
     });
@@ -97,7 +97,7 @@ async function callAzureOpenAI(system: string, user: string): Promise<string> {
 
 async function discoverCommunities(): Promise<Array<{ name: string; subscribers: number; description: string }>> {
     const topics = ['forex trading', 'day trading', 'algorithmic trading', 'technical analysis trading'];
-    const found  = new Map<string, { name: string; subscribers: number; description: string }>();
+    const found = new Map<string, { name: string; subscribers: number; description: string }>();
 
     await Promise.allSettled(topics.map(async (topic) => {
         try {
@@ -106,8 +106,8 @@ async function discoverCommunities(): Promise<Array<{ name: string; subscribers:
             const timer = setTimeout(() => controller.abort(), 8000);
             const res = await fetch(url, {
                 headers: { 'User-Agent': USER_AGENT },
-                cache:   'no-store',
-                signal:  controller.signal,
+                cache: 'no-store',
+                signal: controller.signal,
             });
             clearTimeout(timer);
             if (!res.ok) return;
@@ -116,8 +116,8 @@ async function discoverCommunities(): Promise<Array<{ name: string; subscribers:
                 const d = item.data;
                 if (d?.display_name && d?.subscribers > 500 && !found.has(d.display_name)) {
                     found.set(d.display_name, {
-                        name:        d.display_name as string,
-                        subscribers: d.subscribers  as number,
+                        name: d.display_name as string,
+                        subscribers: d.subscribers as number,
                         description: ((d.public_description || d.title || '') as string).slice(0, 150),
                     });
                 }
@@ -158,9 +158,9 @@ ${candidateList}
 
 Return ONLY a JSON array of subreddit name strings.`;
 
-    const raw     = await callAzureOpenAI(system, user);
+    const raw = await callAzureOpenAI(system, user);
     const cleaned = raw.replace(/```json|```/g, '').trim();
-    const parsed  = JSON.parse(cleaned);
+    const parsed = JSON.parse(cleaned);
 
     if (!Array.isArray(parsed) || parsed.length < 2) throw new Error('LLM returned invalid list');
     return parsed.filter((s): s is string => typeof s === 'string' && s.length > 0);
@@ -199,8 +199,8 @@ async function getSubreddits(forceRediscover: boolean): Promise<{ subs: string[]
 
         // Save to blob for 7 days
         await writeBlob(BLOB_SUBS_NAME, {
-            subs:         picked,
-            source:       'llm-picked',
+            subs: picked,
+            source: 'llm-picked',
             discoveredAt: new Date().toISOString(),
             candidateCount: communities.length,
         });
@@ -218,7 +218,7 @@ async function getSubreddits(forceRediscover: boolean): Promise<{ subs: string[]
 
 async function fetchSubreddit(subreddit: string, timeframe: string, perSubLimit: number): Promise<any[]> {
     const targetUrl = `https://www.reddit.com/r/${subreddit}/top.json?t=${timeframe}&limit=${perSubLimit}`;
-    const sources   = [
+    const sources = [
         targetUrl,
         `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
         `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
@@ -231,8 +231,8 @@ async function fetchSubreddit(subreddit: string, timeframe: string, perSubLimit:
             const timer = setTimeout(() => controller.abort(), 8000);
             const res = await fetch(url, {
                 headers: { 'User-Agent': USER_AGENT },
-                cache:   'no-store',
-                signal:  controller.signal,
+                cache: 'no-store',
+                signal: controller.signal,
             });
             clearTimeout(timer);
             if (!res.ok) continue;
@@ -245,15 +245,15 @@ async function fetchSubreddit(subreddit: string, timeframe: string, perSubLimit:
                 const p = item.data;
                 return {
                     subreddit,
-                    title:       p.title                  as string,
-                    selftext:    (p.selftext as string)   || '',
-                    upvotes:     p.ups                    as number,
-                    comments:    p.num_comments           as number,
-                    author:      p.author                 as string,
-                    flair:       (p.link_flair_text as string) || 'General',
-                    url:         `https://reddit.com${p.permalink as string}`,
+                    title: p.title as string,
+                    selftext: (p.selftext as string) || '',
+                    upvotes: p.ups as number,
+                    comments: p.num_comments as number,
+                    author: p.author as string,
+                    flair: (p.link_flair_text as string) || 'General',
+                    url: `https://reddit.com${p.permalink as string}`,
                     created_utc: new Date((p.created_utc as number) * 1000)
-                                    .toISOString().replace('T', ' ').slice(0, 16) + ' UTC',
+                        .toISOString().replace('T', ' ').slice(0, 16) + ' UTC',
                 };
             });
         } catch { /* try next source */ }
@@ -264,12 +264,12 @@ async function fetchSubreddit(subreddit: string, timeframe: string, perSubLimit:
 // ── GET ───────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
-    const { searchParams }  = new URL(req.url);
-    const cached            = searchParams.get('cached')      === '1';
-    const forceRediscover   = searchParams.get('rediscover')  === '1';
-    const timeframe         = searchParams.get('t')           || 'week';
-    const finalLimit        = parseInt(searchParams.get('limit')  || '10', 10);
-    const perSubLimit       = parseInt(searchParams.get('perSub') || '25', 10);
+    const { searchParams } = new URL(req.url);
+    const cached = searchParams.get('cached') === '1';
+    const forceRediscover = searchParams.get('rediscover') === '1';
+    const timeframe = searchParams.get('t') || 'week';
+    const finalLimit = parseInt(searchParams.get('limit') || '10', 10);
+    const perSubLimit = parseInt(searchParams.get('perSub') || '25', 10);
 
     // Return cached posts from blob
     if (cached) {
@@ -296,9 +296,9 @@ export async function GET(req: NextRequest) {
         subreddits.map(sub => fetchSubreddit(sub, timeframe, perSubLimit))
     );
 
-    const allPosts: any[]      = [];
+    const allPosts: any[] = [];
     const fetchedFrom: string[] = [];
-    const failedFrom:  string[] = [];
+    const failedFrom: string[] = [];
 
     results.forEach((result, i) => {
         if (result.status === 'fulfilled' && result.value.length > 0) {
@@ -317,7 +317,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Deduplicate by title, sort by upvotes, take top N
-    const seen   = new Set<string>();
+    const seen = new Set<string>();
     const unique = allPosts.filter(p => {
         const key = p.title.trim().toLowerCase();
         if (seen.has(key)) return false;
@@ -330,13 +330,13 @@ export async function GET(req: NextRequest) {
         .map((p, i) => ({ rank: i + 1, ...p }));
 
     const response = {
-        posts:            top,
-        fetchedAt:        new Date().toISOString(),
+        posts: top,
+        fetchedAt: new Date().toISOString(),
         fetchedFrom,
         failedFrom,
-        totalCandidates:  unique.length,
+        totalCandidates: unique.length,
         subredditsSource: subsSource,
-        subredditsUsed:   subreddits,
+        subredditsUsed: subreddits,
     };
 
     // Auto-save to blob in background
