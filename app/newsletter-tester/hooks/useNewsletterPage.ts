@@ -14,6 +14,7 @@ import {
 import { parseNewsletter, renderTemplate, processPuzzleTokens } from '../components/emailUtils';
 import { formatPosts } from '../components/utils';
 import type { BroadcastMetrics } from '@/app/api/newsletter-metrics/route';
+import type { PipelineLogEntry } from '../components/PipelineLog';
 
 export type SendStatus = 'idle' | 'sending' | 'sent' | 'error';
 
@@ -28,10 +29,13 @@ export function useNewsletterPage() {
     const [showPrompts,  setShowPrompts]  = useState(false);
 
     // ── Reddit posts state ────────────────────────────────────────────────────
-    const [posts,           setPosts]           = useState<RedditPost[]>(SAMPLE_REDDIT_POSTS);
-    const [fetchingReddit,  setFetchingReddit]  = useState(false);
-    const [redditFetchedAt, setRedditFetchedAt] = useState<string | undefined>(undefined);
-    const [redditError,     setRedditError]     = useState('');
+    const [posts,             setPosts]             = useState<RedditPost[]>(SAMPLE_REDDIT_POSTS);
+    const [fetchingReddit,    setFetchingReddit]    = useState(false);
+    const [redditFetchedAt,   setRedditFetchedAt]   = useState<string | undefined>(undefined);
+    const [redditError,       setRedditError]       = useState('');
+    const [redditFromBlob,    setRedditFromBlob]    = useState(false);
+    const [redditSubsSource,  setRedditSubsSource]  = useState<string | undefined>(undefined);
+    const [redditSubsUsed,    setRedditSubsUsed]    = useState<string[]>([]);
 
     // ── Azure sync state ──────────────────────────────────────────────────────
     const [promptsLoading,  setPromptsLoading]  = useState(true);
@@ -65,6 +69,10 @@ export function useNewsletterPage() {
     const [sendError,    setSendError]    = useState('');
     const [metrics,      setMetrics]      = useState<BroadcastMetrics | null>(null);
     const metricsInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    // ── Pipeline log — persists after run so user can inspect every step ──────
+    const [pipelineLog, setPipelineLog] = useState<PipelineLogEntry[]>([]);
+    const pipelineLogRef = useRef<PipelineLogEntry[]>([]);
 
     // ── On mount: load prompts + templates from Azure Blob ───────────────────
     useEffect(() => {
@@ -107,6 +115,26 @@ export function useNewsletterPage() {
                 if (data.segments) setSegments(data.segments);
             } catch (e) {
                 console.warn('[fetchSegments] error', e);
+            }
+        })();
+    }, []);
+
+    // ── On mount: load cached Reddit posts from Azure Blob ───────────────────
+    // If blob has cached posts from a previous "Fetch Live Reddit", use those
+    // instead of the hardcoded sample data. Falls back to samples silently.
+    useEffect(() => {
+        (async () => {
+            try {
+                const res  = await fetch('/api/reddit-posts?cached=1');
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data.exists && Array.isArray(data.posts) && data.posts.length > 0) {
+                    setPosts(data.posts);
+                    setRedditFetchedAt(data.fetchedAt);
+                    setRedditFromBlob(true);
+                }
+            } catch (e) {
+                console.warn('[reddit-blob-load] failed, using sample data:', e);
             }
         })();
     }, []);
@@ -184,18 +212,192 @@ export function useNewsletterPage() {
     };
 
     // ── Fetch live Reddit posts ───────────────────────────────────────────────
-    const fetchLiveReddit = async () => {
+    // rediscover=true → bypass 7-day blob cache, force fresh Reddit search + LLM pick
+    const fetchLiveReddit = async (rediscover = false) => {
         setFetchingReddit(true); setRedditError('');
         try {
-            const res  = await fetch('/api/reddit-posts?subreddit=Forex&t=week&limit=10');
+            const qs  = `limit=10&perSub=25${rediscover ? '&rediscover=1' : ''}`;
+            const res  = await fetch(`/api/reddit-posts?${qs}`);
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Fetch failed');
-            setPosts(data.posts); setRedditFetchedAt(data.fetchedAt);
+            setPosts(data.posts);
+            setRedditFetchedAt(data.fetchedAt);
+            setRedditFromBlob(false);
+            setRedditSubsSource(data.subredditsSource);
+            setRedditSubsUsed(data.subredditsUsed || []);
         } catch (e: any) { setRedditError(e.message); }
         finally { setFetchingReddit(false); }
     };
 
-    // ── Handle inline template edits (re-renders preview live) ───────────────
+    // ── Generate newsletter via FULL PIPELINE (7-tool SSE) ───────────────────
+    // This replaces handleGenerate for the weekly newsletter.
+    // Calls /api/newsletter-pipeline, reads the SSE stream, updates step
+    // messages in real time, and populates all the same state as before.
+    const handleGeneratePipeline = async (rediscover = false) => {
+        const tmplToUse = weeklyTemplate;
+        if (!tmplToUse || tmplToUse.startsWith('<!--')) {
+            setError('Template not loaded from Azure yet. Wait for blob to load or publish first.');
+            return;
+        }
+        setType('weekly');
+        setLoading(true);
+        setError('');
+        setRawText('');
+        setEmailHtml('');
+        setBannerUrl('');
+        setSendStatus('idle');
+        setBroadcastId(null);
+        setMetrics(null);
+        setSendError('');
+
+        // Reset pipeline log for this new run
+        const initialLog: PipelineLogEntry[] = [];
+        pipelineLogRef.current = initialLog;
+        setPipelineLog([]);
+
+        try {
+            const res = await fetch('/api/newsletter-pipeline', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ rediscover }),
+            });
+
+            if (!res.ok || !res.body) {
+                throw new Error(`Pipeline request failed: ${res.status}`);
+            }
+
+            const reader  = res.body.getReader();
+            const decoder = new TextDecoder();
+            let   buffer  = '';
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+
+                // Process all complete SSE events in the buffer
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || ''; // keep incomplete last line
+
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    try {
+                        const event = JSON.parse(line.slice(6));
+
+                        // ── Step metadata for the pipeline log ────────────────
+                        const STEP_META: Record<string, { label: string; icon: string }> = {
+                            discover: { label: 'Discover Subreddits',       icon: '🔍' },
+                            pick:     { label: 'AI Pick Best Subreddits',   icon: '🤖' },
+                            fetch:    { label: 'Fetch Reddit Posts',        icon: '📥' },
+                            analyze:  { label: 'Deep Analysis (AI)',        icon: '🧠' },
+                            news:     { label: 'Fetch Market News',         icon: '📰' },
+                            write:    { label: 'Write Newsletter (AI)',     icon: '✍️' },
+                            review:   { label: 'Compliance Review',         icon: '🛡️' },
+                            banner:   { label: 'Generate Banner Image',     icon: '🖼️' },
+                            complete: { label: 'Pipeline Complete',         icon: '✅' },
+                        };
+
+                        // Update step label in real time
+                        const stepLabels: Record<string, string> = {
+                            discover: '🔍 Searching Reddit for communities...',
+                            pick:     '🤖 AI picking relevant subreddits...',
+                            fetch:    '📥 Fetching posts from all subreddits...',
+                            analyze:  '🧠 Reading all posts + comment threads...',
+                            news:     '📰 Fetching market news context...',
+                            write:    '✍️ Writing Thursday newsletter...',
+                            review:   '🛡️ Reviewing for compliance...',
+                            banner:   '🖼️ Generating banner image...',
+                            complete: '✅ Newsletter ready',
+                            error:    '❌ Pipeline error',
+                        };
+                        if (event.step && stepLabels[event.step]) {
+                            setStep(event.status === 'done'
+                                ? stepLabels[event.step].replace('...', ' ✓')
+                                : stepLabels[event.step],
+                            );
+                        }
+
+                        // ── Update pipeline log ───────────────────────────────
+                        if (event.step && STEP_META[event.step]) {
+                            const meta = STEP_META[event.step];
+                            const now  = new Date().toISOString();
+                            const log  = pipelineLogRef.current;
+                            const existing = log.findIndex(e => e.step === event.step);
+
+                            if (event.status === 'pending') {
+                                // Add a new pending entry
+                                const newEntry: PipelineLogEntry = {
+                                    step:      event.step,
+                                    label:     meta.label,
+                                    icon:      meta.icon,
+                                    status:    'pending',
+                                    startedAt: now,
+                                };
+                                const updated = existing >= 0
+                                    ? log.map((e, i) => i === existing ? newEntry : e)
+                                    : [...log, newEntry];
+                                pipelineLogRef.current = updated;
+                                setPipelineLog([...updated]);
+                            } else if (event.status === 'done') {
+                                // Mark existing entry as done, attach data
+                                const updated = log.map(e =>
+                                    e.step === event.step
+                                        ? { ...e, status: 'done' as const, completedAt: now, data: event.data || {} }
+                                        : e
+                                );
+                                // If no pending entry existed yet (e.g. complete event), add it
+                                const finalLog = updated.some(e => e.step === event.step)
+                                    ? updated
+                                    : [...updated, { step: event.step, label: meta.label, icon: meta.icon, status: 'done' as const, startedAt: now, completedAt: now, data: event.data || {} }];
+                                pipelineLogRef.current = finalLog;
+                                setPipelineLog([...finalLog]);
+                            } else if (event.status === 'error') {
+                                const updated = log.map(e =>
+                                    e.step === event.step
+                                        ? { ...e, status: 'error' as const, completedAt: now }
+                                        : e
+                                );
+                                pipelineLogRef.current = updated;
+                                setPipelineLog([...updated]);
+                            }
+                        }
+
+                        // On completion — populate all state
+                        if (event.step === 'complete' && event.data?.result) {
+                            const result = event.data.result;
+                            const raw    = result.rawText as string;
+                            setRawText(raw);
+
+                            // Update Reddit panel posts with what the pipeline used
+                            if (result.usedPosts?.length) {
+                                setPosts(result.usedPosts);
+                                setRedditFetchedAt(new Date().toISOString());
+                                setRedditFromBlob(false);
+                                setRedditSubsSource('llm-picked');
+                                setRedditSubsUsed(result.subredditsUsed || []);
+                            }
+
+                            // Build the HTML email
+                            setStep('Building HTML...');
+                            let parsed = parseNewsletter(raw);
+                            const finalBannerUrl = result.bannerUrl || '';
+                            if (finalBannerUrl) setBannerUrl(finalBannerUrl);
+                            setEmailHtml(renderTemplate(weeklyTemplate, parsed, 'weekly', finalBannerUrl));
+                        }
+
+                        if (event.step === 'error') {
+                            setError(event.message);
+                        }
+                    } catch { /* malformed SSE line — skip */ }
+                }
+            }
+        } catch (e: any) {
+            setError(e.message || 'Pipeline failed');
+        } finally {
+            setLoading(false);
+            setStep('');
+        }
+    };
     const handleTemplateChange = (val: string) => {
         if (templateType === 'weekly') setWeeklyTemplate(val);
         else setPuzzleTemplate(val);
@@ -226,7 +428,49 @@ export function useNewsletterPage() {
         const sys    = chosenType === 'weekly' ? weeklySystem : puzzleSystem;
         const tmpl   = chosenType === 'weekly' ? weeklyUser   : puzzleUser;
         const today  = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-        const prompt = tmpl.replace('{date}', today).replace('{posts}', formatPosts(posts));
+        let prompt = tmpl.replace('{date}', today).replace('{posts}', formatPosts(posts));
+
+        if (chosenType === 'weekly') {
+            try {
+                // 1. Pre-flight Topic Extraction
+                setStep('Extracting key topic from Reddit...');
+                const topicRes = await fetch('/api/newsletter-generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        systemPrompt: "You are a data extractor. Reply with ONLY the name of the primary currency pair, asset, or macroeconomic event mentioned in the text (e.g. XAU/USD, EUR/USD, CPI). If none, reply 'Forex Market'.",
+                        userPrompt: formatPosts(posts)
+                    })
+                });
+                const topicData = await topicRes.json();
+                if (!topicRes.ok) throw new Error(topicData.error || 'Topic extraction failed');
+                const extractedTopic = topicData.text.trim();
+
+                // 2. Fetch Targeted NewsRAG Context
+                setStep(`Fetching news for ${extractedTopic}...`);
+                const newsRes = await fetch('/api/newsrag', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: extractedTopic, limit: 3, use_cache: true, format: 'json' })
+                });
+                
+                if (!newsRes.ok) throw new Error(`NewsRAG API returned ${newsRes.status}`);
+                const newsData = await newsRes.json();
+
+                // Build the external sources string using NewsRAG's summary + referenceLinks
+                const externalSources = `
+MARKET SUMMARY FOR ${extractedTopic}:
+${newsData.summary || 'No summary available.'}
+
+SOURCES:
+${newsData.referenceLinks?.map((l: any) => `- ${l.title}: ${l.url}`).join('\n') || 'None'}
+`;
+                prompt = prompt.replace('{external_sources}', externalSources.trim());
+            } catch (e) {
+                console.warn('Failed to fetch targeted news:', e);
+                prompt = prompt.replace('{external_sources}', 'No external sources available');
+            }
+        }
         try {
             setStep('Writing newsletter...');
             const res  = await fetch('/api/newsletter-generate', {
@@ -245,10 +489,13 @@ export function useNewsletterPage() {
             if (chosenType === 'weekly' && parsed.subject) {
                 setStep('Generating banner image...');
                 try {
+                    // Use newsletter_title (short 4-5 word title) for banner image text
+                    // so the banner is visually distinct from the full email subject line.
+                    const bannerTitle = parsed.newsletter_title?.trim() || parsed.subject;
                     const bannerRes = await fetch('/api/generate-banner', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ subject: parsed.subject })
+                        body: JSON.stringify({ subject: bannerTitle })
                     });
                     if (bannerRes.ok) {
                         const bannerData = await bannerRes.json();
@@ -303,9 +550,17 @@ export function useNewsletterPage() {
         showPrompts,  setShowPrompts,
         // Reddit
         posts, setPosts,
-        fetchingReddit, redditFetchedAt, redditError,
+        fetchingReddit, redditFetchedAt, redditError, redditFromBlob,
+        redditSubsSource, redditSubsUsed,
         fetchLiveReddit,
-        resetReddit: () => { setPosts(SAMPLE_REDDIT_POSTS); setRedditFetchedAt(undefined); setRedditError(''); },
+        resetReddit: () => {
+            setPosts(SAMPLE_REDDIT_POSTS);
+            setRedditFetchedAt(undefined);
+            setRedditError('');
+            setRedditFromBlob(false);
+            setRedditSubsSource(undefined);
+            setRedditSubsUsed([]);
+        },
         // Azure
         promptsLoading, publishing, publishStatus,
         azureSource, lastPublishedAt,
@@ -318,11 +573,13 @@ export function useNewsletterPage() {
         // Output
         rawText, emailHtml, loading, step, error,
         parsed,
-        handleGenerate, downloadHtml,
+        handleGenerate, handleGeneratePipeline, downloadHtml,
         // Resend
         broadcastId, sendStatus, sendError, metrics,
         handleSendViaResend, fetchMetrics,
         segments, selectedSegs, setSelectedSegs,
         showSendModal, setShowSendModal,
+        // Pipeline log
+        pipelineLog,
     };
 }

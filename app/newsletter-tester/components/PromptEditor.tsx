@@ -6,6 +6,7 @@ import {
     WEEKLY_SYSTEM_PROMPT, WEEKLY_USER_TEMPLATE,
     PUZZLE_SYSTEM_PROMPT, PUZZLE_USER_TEMPLATE,
 } from '../constants';
+import { formatPosts } from './utils';
 
 interface PromptEditorProps {
     weeklySystem: string;
@@ -44,9 +45,7 @@ export default function PromptEditor({
 
     // Actual runtime values for each token
     const todayStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    const postsStr = posts.map(p =>
-        `#${p.rank} [${p.flair}] ${p.title}\n   Upvotes: ${p.upvotes} | Comments: ${p.comments} | Posted: ${p.created_utc}\n   URL: ${p.url}`
-    ).join('\n\n');
+    const postsStr = formatPosts(posts);
 
     return (
         <div className="w-full border rounded-2xl bg-card shadow-lg overflow-hidden">

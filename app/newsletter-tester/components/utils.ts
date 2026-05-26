@@ -8,11 +8,20 @@ import { RedditPost } from '../constants';
  * that gets injected into the AI user prompt via {posts}.
  */
 export function formatPosts(posts: RedditPost[]): string {
-    return posts.map(p =>
-        `#${p.rank} [${p.flair}] ${p.title}\n` +
-        `   Upvotes: ${p.upvotes} | Comments: ${p.comments} | Posted: ${p.created_utc}\n` +
-        `   URL: ${p.url}`
-    ).join('\n\n');
+    return posts.map(p => {
+        const src = p.subreddit ? ` (r/${p.subreddit})` : '';
+        let text = `#${p.rank} [${p.flair}]${src} ${p.title}\n`;
+        if (p.selftext && p.selftext.trim()) {
+            const body = p.selftext.trim();
+            const truncated = body.length > 800 ? body.slice(0, 800) + '...' : body;
+            // Indent content lines slightly so they look nested under the title
+            const indented = truncated.split('\n').map(line => `   ${line}`).join('\n');
+            text += `${indented}\n`;
+        }
+        text += `   Upvotes: ${p.upvotes} | Comments: ${p.comments} | Posted: ${p.created_utc}\n` +
+                `   URL: ${p.url}`;
+        return text;
+    }).join('\n\n');
 }
 
 // ── Template token lists ──────────────────────────────────────────────────────
