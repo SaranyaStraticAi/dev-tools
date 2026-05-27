@@ -1,6 +1,6 @@
 // Tool 4 — redditDeepAnalysisTool
-// Fetches full comment threads for ALL posts, sends everything to AI.
-// AI reads every post + every comment and identifies the dominant trader pain.
+// Fetches full comment threads for posts in small batches with delays.
+// Batching prevents Reddit rate limiting that occurs when all requests fire at once.
 
 import { fetchWithTimeout, USER_AGENT, callAI, parseJSON } from './base';
 import type { RedditPostRaw } from './03-redditFetchPostsTool';
@@ -69,19 +69,48 @@ function formatPost(post: PostWithComments, index: number): string {
     return `${header}${body}${commentBlock}`;
 }
 
+// Process posts in small batches with a delay between each batch.
+// This avoids hammering Reddit with 100 simultaneous requests which triggers rate limiting.
+async function fetchCommentsInBatches(
+    posts: RedditPostRaw[],
+    batchSize = 5,
+    delayMs   = 600,
+): Promise<PostWithComments[]> {
+    const results: PostWithComments[] = [];
+
+    for (let i = 0; i < posts.length; i += batchSize) {
+        const batch = posts.slice(i, i + batchSize);
+
+        // Fire this batch in parallel — small enough that Reddit won't block
+        const batchResults = await Promise.all(
+            batch.map(async (post): Promise<PostWithComments> => {
+                const topComments = await fetchComments(post);
+                return { ...post, topComments };
+            }),
+        );
+
+        results.push(...batchResults);
+        console.log(`[redditDeepAnalysisTool] Batch ${Math.floor(i / batchSize) + 1}: fetched comments for posts ${i + 1}–${i + batch.length}`);
+
+        // Wait between batches — skip delay after the last batch
+        const isLastBatch = i + batchSize >= posts.length;
+        if (!isLastBatch) {
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+    }
+
+    return results;
+}
+
 export async function redditDeepAnalysisTool(posts: RedditPostRaw[]): Promise<DeepAnalysisResult> {
     if (posts.length === 0) throw new Error('No posts to analyze');
 
-    // Cap at top 100 by upvotes — enough signal, avoids content filter overload
-    const topPosts = posts.slice(0, 100);
-    console.log(`[redditDeepAnalysisTool] Fetching comments for top ${topPosts.length} posts (from ${posts.length} total)...`);
+    // Cap at top 40 by upvotes — 40 posts × ~15 comments each is plenty of signal.
+    // Was 100 before which caused rate limiting. 40 is the sweet spot.
+    const topPosts = posts.slice(0, 40);
+    console.log(`[redditDeepAnalysisTool] Fetching comments for top ${topPosts.length} posts (from ${posts.length} total) in batches of 5...`);
 
-    const postsWithComments: PostWithComments[] = await Promise.all(
-        topPosts.map(async (post): Promise<PostWithComments> => {
-            const topComments = await fetchComments(post);
-            return { ...post, topComments };
-        }),
-    );
+    const postsWithComments = await fetchCommentsInBatches(topPosts, 5, 600);
 
     const totalComments = postsWithComments.reduce((sum, p) => sum + p.topComments.length, 0);
     console.log(`[redditDeepAnalysisTool] Fetched ${totalComments} comments across ${posts.length} posts`);
@@ -94,13 +123,15 @@ You have the COMPLETE Reddit dataset for this week — every post and every comm
 Find the dominant trader pain theme and return structured analysis as JSON.
 
 CRITICAL RULE for "currencyOrEvent" field:
-- Extract the ACTUAL asset or macro event that appears most in the posts and comments this week
+- First check: is the dominant pain theme PSYCHOLOGICAL or BEHAVIOURAL?
+  * If the pain is about emotions, discipline, revenge trading, FOMO, blown accounts, psychology, mindset, confidence, fear, greed, or prop firm rule-breaking → set currencyOrEvent to "forex market". Do NOT hunt for a ticker.
+  * Psychological pain has no specific instrument — using a random ticker produces irrelevant news.
+- Second check (only if pain is NOT psychological): extract the actual asset or macro event most discussed
 - Must be ONLY the asset name or event — maximum 4 words
-- Correct format examples: "EUR/USD", "GBP/JPY", "NFP", "FOMC", "gold", "US30", "NAS100", "crude oil"
+- Correct format: "EUR/USD", "GBP/JPY", "NFP", "FOMC", "gold", "US30", "NAS100", "crude oil"
 - Wrong format: "prop firm account blowups", "emotional trading after success", "funded account psychology"
-- If posts are about trading psychology with no specific asset → find the most mentioned instrument in the comments
 - If truly no specific asset is mentioned → use "forex market"
-- DO NOT default to any specific asset — read the actual data and extract what traders are discussing THIS week
+- DO NOT default to any specific asset — read the actual data
 
 Respond ONLY with valid JSON:
 {
@@ -134,7 +165,22 @@ No markdown, no backticks — raw JSON only.`;
         .filter((i: number) => i !== analysis.bestPostIndex && postsWithComments[i])
         .map((i: number) => postsWithComments[i]);
 
-    console.log(`[redditDeepAnalysisTool] Pain: "${analysis.dominantPainTheme}" | Intensity: ${analysis.emotionalIntensity}`);
+    // Post-processing override: if pain is psychological, force currencyOrEvent to "forex market"
+    // This prevents Tool 5 from searching for a random ticker that produces irrelevant news.
+    const PSYCH_KEYWORDS = [
+        'psycholog', 'emotion', 'discipline', 'revenge trad', 'fomo', 'blown account',
+        'mindset', 'fear', 'greed', 'confidence', 'prop firm rule', 'mental',
+        'anxiety', 'impulsive', 'overtrading', 'tilt', 'panic', 'frustrat',
+        'self-control', 'habit', 'behavior', 'behaviour', 'addiction',
+    ];
+    const painLower = (analysis.dominantPainTheme || '').toLowerCase();
+    const isPsychPain = PSYCH_KEYWORDS.some(kw => painLower.includes(kw));
+    if (isPsychPain) {
+        console.log(`[redditDeepAnalysisTool] Psychological pain detected — overriding currencyOrEvent from "${analysis.currencyOrEvent}" to "forex market"`);
+        analysis.currencyOrEvent = 'forex market';
+    }
+
+    console.log(`[redditDeepAnalysisTool] Pain: "${analysis.dominantPainTheme}" | Intensity: ${analysis.emotionalIntensity} | Currency: ${analysis.currencyOrEvent}`);
     return {
         dominantPainTheme: analysis.dominantPainTheme, emotionalIntensity: analysis.emotionalIntensity,
         keyPhrases: analysis.keyPhrases || [], currencyOrEvent: analysis.currencyOrEvent || 'Forex Market',

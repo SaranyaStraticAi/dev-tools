@@ -289,3 +289,13 @@ model email_campaigns {
   unsubscribed  Int      @default(0)
 }
 
+model saved_newsletters {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subject    String
+  body       String?  // HTML content of the newsletter
+  raw_text   String?  // Raw AI output text
+  type       String   // "weekly" or "puzzle"
+  created_at DateTime @default(now()) @db.Timestamp(6)
+}
+
+

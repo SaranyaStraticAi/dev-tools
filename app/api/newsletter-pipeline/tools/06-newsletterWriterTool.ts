@@ -55,13 +55,20 @@ export async function newsletterWriterTool(
     const allPosts: RedditPost[] = [toPost(analysis.bestPost, 1)];
     analysis.supportingPosts.forEach((p, i) => allPosts.push(toPost(p, i + 2)));
 
-    const externalSources = news.summary || news.referenceLinks.length > 0
-        ? [
-            news.summary ? `MARKET SUMMARY:\n${news.summary}` : '',
-            news.referenceLinks.length > 0
-                ? `SOURCES:\n${news.referenceLinks.map(l => `- ${l.title}: ${l.url}`).join('\n')}`
-                : '',
-          ].filter(Boolean).join('\n\n')
+    // Build external sources block — now includes actual article content from Tool 5 (v2)
+    // Each article gets its title, URL, and the fetched body text so the AI writer
+    // has real facts to work from, not just a headline it has to guess about.
+    const externalSources = news.referenceLinks.length > 0
+        ? news.referenceLinks.map((article, i) => {
+            const lines = [
+                `SOURCE ${i + 1}: ${article.title}`,
+                `URL: ${article.url}`,
+            ];
+            if (article.content && article.content.trim().length > 50) {
+                lines.push(`CONTENT:\n${article.content.trim()}`);
+            }
+            return lines.join('\n');
+        }).join('\n\n---\n\n')
         : 'No external sources available this week.';
 
     const analysisContext = [

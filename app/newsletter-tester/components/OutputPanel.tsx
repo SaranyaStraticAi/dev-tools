@@ -23,6 +23,9 @@ interface OutputPanelProps {
     broadcastId?:  string | null;
     metrics?:      BroadcastMetrics | null;
     sendError?:    string;
+    onSave?:       () => void;
+    saveStatus?:   'idle' | 'saving' | 'saved' | 'error';
+    saveError?:    string;
 }
 
 export default function OutputPanel({
@@ -33,6 +36,9 @@ export default function OutputPanel({
     broadcastId,
     metrics,
     sendError,
+    onSave,
+    saveStatus = 'idle',
+    saveError,
 }: OutputPanelProps) {
     const [tab, setTab] = useState<'preview' | 'template' | 'raw' | 'metrics'>('preview');
     const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
@@ -144,10 +150,35 @@ export default function OutputPanel({
                         {broadcastId && <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse"/>}
                     </button>
                 </div>
-                <button onClick={handleDownload}
-                    className="ml-2 px-4 py-1.5 rounded-lg text-xs font-bold bg-green-600 hover:bg-green-700 text-white transition-all shadow-sm">
-                    ⬇ Download .html
-                </button>
+                <div className="flex gap-2 items-center">
+                    {onSave && (
+                        <button onClick={onSave} disabled={saveStatus === 'saving'}
+                            className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 ${
+                                saveStatus === 'saved'
+                                    ? 'bg-blue-600 text-white'
+                                    : saveStatus === 'error'
+                                    ? 'bg-red-600 text-white'
+                                    : 'bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50'
+                            }`}>
+                            {saveStatus === 'saving' ? (
+                                <>
+                                    <span className="w-3 h-3 border border-white/30 border-t-white animate-spin rounded-full inline-block"/>
+                                    Saving...
+                                </>
+                            ) : saveStatus === 'saved' ? (
+                                '✓ Saved draft'
+                            ) : saveStatus === 'error' ? (
+                                '❌ Error saving'
+                            ) : (
+                                '💾 Save for Later'
+                            )}
+                        </button>
+                    )}
+                    <button onClick={handleDownload}
+                        className="px-4 py-1.5 rounded-lg text-xs font-bold bg-green-600 hover:bg-green-700 text-white transition-all shadow-sm">
+                        ⬇ Download .html
+                    </button>
+                </div>
             </div>
 
             {/* Preview tab — iframe rendering the email HTML */}

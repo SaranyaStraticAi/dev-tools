@@ -233,13 +233,13 @@ export function useNewsletterPage() {
     // This replaces handleGenerate for the weekly newsletter.
     // Calls /api/newsletter-pipeline, reads the SSE stream, updates step
     // messages in real time, and populates all the same state as before.
-    const handleGeneratePipeline = async (rediscover = false) => {
-        const tmplToUse = weeklyTemplate;
+    const handleGeneratePipeline = async (rediscover = false, pipelineType: NewsletterType = 'weekly') => {
+        const tmplToUse = pipelineType === 'weekly' ? weeklyTemplate : puzzleTemplate;
         if (!tmplToUse || tmplToUse.startsWith('<!--')) {
             setError('Template not loaded from Azure yet. Wait for blob to load or publish first.');
             return;
         }
-        setType('weekly');
+        setType(pipelineType);
         setLoading(true);
         setError('');
         setRawText('');
@@ -259,7 +259,7 @@ export function useNewsletterPage() {
             const res = await fetch('/api/newsletter-pipeline', {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ rediscover }),
+                body:    JSON.stringify({ rediscover, type: pipelineType }),
             });
 
             if (!res.ok || !res.body) {
@@ -380,9 +380,13 @@ export function useNewsletterPage() {
                             // Build the HTML email
                             setStep('Building HTML...');
                             let parsed = parseNewsletter(raw);
+                            if (pipelineType === 'puzzle') parsed = processPuzzleTokens(parsed);
+
                             const finalBannerUrl = result.bannerUrl || '';
                             if (finalBannerUrl) setBannerUrl(finalBannerUrl);
-                            setEmailHtml(renderTemplate(weeklyTemplate, parsed, 'weekly', finalBannerUrl));
+                            
+                            const finalTemplate = result.weeklyTemplate || tmplToUse;
+                            setEmailHtml(renderTemplate(finalTemplate, parsed, pipelineType, finalBannerUrl));
                         }
 
                         if (event.step === 'error') {
@@ -514,6 +518,42 @@ ${newsData.referenceLinks?.map((l: any) => `- ${l.title}: ${l.url}`).join('\n') 
         finally { setLoading(false); setStep(''); }
     };
 
+    // ── Save for Later draft state ───────────────────────────────────────────
+    const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+    const [saveError, setSaveError] = useState('');
+
+    const handleSaveNewsletter = async () => {
+        if (!emailHtml) {
+            setSaveError('Generate a newsletter first');
+            setSaveStatus('error');
+            return;
+        }
+        const subject = parsed?.subject || (type === 'weekly' ? 'Thursday Weekly Newsletter' : 'Tuesday Puzzle Newsletter');
+        
+        setSaveStatus('saving');
+        setSaveError('');
+        try {
+            const res = await fetch('/api/saved-newsletters', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    subject,
+                    body: emailHtml,
+                    rawText,
+                    type,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to save newsletter');
+            setSaveStatus('saved');
+            setTimeout(() => setSaveStatus('idle'), 3000);
+        } catch (e: any) {
+            setSaveError(e.message || 'Unknown error');
+            setSaveStatus('error');
+            setTimeout(() => setSaveStatus('idle'), 5000);
+        }
+    };
+
     // ── Restore a past version into editor state ──────────────────────────────
     const restoreVersion = (prompts: Record<string, any>) => {
         if (prompts.weeklySystem)   setWeeklySystem(prompts.weeklySystem);
@@ -574,6 +614,7 @@ ${newsData.referenceLinks?.map((l: any) => `- ${l.title}: ${l.url}`).join('\n') 
         rawText, emailHtml, loading, step, error,
         parsed,
         handleGenerate, handleGeneratePipeline, downloadHtml,
+        saveStatus, saveError, handleSaveNewsletter,
         // Resend
         broadcastId, sendStatus, sendError, metrics,
         handleSendViaResend, fetchMetrics,

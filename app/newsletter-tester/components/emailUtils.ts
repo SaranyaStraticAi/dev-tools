@@ -155,16 +155,29 @@ function puzzleOptionBox(letter: string, text: string, correctAnswer: string, ex
     const formatted = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
     const href = `https://vibetrader.com/puzzle?option=${encodeURIComponent(letter)}&correct=${encodeURIComponent(correctAnswer)}&explanation=${encodeURIComponent(explanation)}`;
     return `<table class="vt-opt" data-letter="${letter}" width="100%" cellpadding="0" cellspacing="0"
-      style="margin:12px 0;background:#eef0f6;border-radius:8px;border:2px solid transparent;">
-      <tr><td style="padding:12px 14px;font-size:14px;color:#333;line-height:1.5;">
-        <strong style="color:#4b3fa0;">${letter})</strong>&nbsp;${formatted}
-      </td></tr>
-      <tr><td align="center" style="padding:4px 10px 12px;">
-        <a class="vt-btn" data-letter="${letter}" href="${href}"
-          style="background:#4b3fa0;color:#fff;text-decoration:none;padding:10px 24px;border-radius:20px;font-weight:bold;font-size:14px;display:inline-block;">
-          Select Option ${letter}
-        </a>
-      </td></tr>
+      style="margin:12px 0;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;border-left:4px solid #b624e0;">
+      <tr>
+        <td style="padding:16px;vertical-align:middle;">
+          <table cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="padding-right:12px;vertical-align:middle;">
+                <div style="width:18px;height:18px;border-radius:50%;border:2px solid #94a3b8;background:#ffffff;display:inline-block;vertical-align:middle;">
+                  <div style="width:8px;height:8px;border-radius:50%;background:#94a3b8;margin:5px auto 0;"></div>
+                </div>
+              </td>
+              <td style="vertical-align:middle;font-size:15px;color:#1e293b;line-height:1.5;">
+                ${formatted}
+              </td>
+            </tr>
+          </table>
+        </td>
+        <td align="right" style="padding:16px;vertical-align:middle;width:130px;min-width:130px;">
+          <a class="vt-btn" data-letter="${letter}" href="${href}"
+            style="background:linear-gradient(90deg, #0056D2 0%, #B624E0 100%);color:#ffffff;text-decoration:none;padding:10px 16px;border-radius:20px;font-weight:bold;font-size:13px;display:inline-block;text-align:center;box-shadow:0 2px 6px rgba(0,86,210,0.15);">
+            Select Option ${letter}
+          </a>
+        </td>
+      </tr>
     </table>`;
 }
 
@@ -181,16 +194,18 @@ export function buildPuzzlePreviewScript(correctAnswer: string): string {
         var chosen=(link.getAttribute('data-letter')||'').toUpperCase();
         var right=C&&chosen===C;
         document.querySelectorAll('.vt-opt').forEach(function(box){
-          box.style.background='#eef0f6';
-          box.style.border='2px solid transparent';
+          box.style.background='#f8fafc';
+          box.style.border='1px solid #e2e8f0';
+          box.style.borderLeft='4px solid #b624e0';
           var badge=box.querySelector('.vt-badge');if(badge)badge.remove();
           var b=box.querySelector('.vt-btn');
-          if(b){b.style.background='#4b3fa0';b.textContent='Select Option '+b.getAttribute('data-letter');}
+          if(b){b.style.background='linear-gradient(90deg, #0056D2 0%, #B624E0 100%)';b.textContent='Select Option '+b.getAttribute('data-letter');}
         });
         var box=link.closest('.vt-opt');
         if(box){
           box.style.background=right?'#d1fae5':'#fee2e2';
-          box.style.border='2px solid '+(right?'#34d399':'#f87171');
+          box.style.border='1px solid '+(right?'#34d399':'#f87171');
+          box.style.borderLeft='4px solid '+(right?'#059669':'#dc2626');
           var badge=document.createElement('div');
           badge.className='vt-badge';
           badge.style.cssText='font-size:13px;font-weight:bold;padding:6px 0 4px;text-align:center;color:'+(right?'#065f46':'#991b1b');
