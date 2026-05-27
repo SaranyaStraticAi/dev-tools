@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useMsal } from "@azure/msal-react";
-import { ArrowLeft, Mail, Calendar, Users, Trash2, Loader2, Eye, RefreshCw, BarChart2 } from 'lucide-react';
+import { ArrowLeft, Mail, Calendar, Users, Trash2, Loader2, Eye, RefreshCw, BarChart2, Clock, XCircle } from 'lucide-react';
 import type { BroadcastMetrics } from '@/app/api/newsletter-metrics/route';
 
 interface EmailCampaign {
@@ -19,6 +19,8 @@ interface EmailCampaign {
     bounced:       number;
     complained:    number;
     unsubscribed:  number;
+    status?:       string;
+    scheduled_at?: string | null;
 }
 
 interface Segment {
@@ -148,6 +150,46 @@ export default function EmailCampaignsPage() {
         };
     }, []);
 
+    // Handle cancel scheduled campaign
+    const handleCancelCampaign = async (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!confirm('Are you sure you want to cancel this scheduled newsletter?')) return;
+
+        try {
+            const res = await fetch(`/api/email-campaigns`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error ?? 'Failed to cancel');
+            
+            // update local state
+            setCampaigns(prev => prev.map(c => c.id === id ? { ...c, status: 'cancelled' } : c));
+            if (selectedCampaign?.id === id) {
+                setSelectedCampaign(prev => prev ? { ...prev, status: 'cancelled' } : null);
+            }
+        } catch (err: any) {
+            alert(err.message);
+        }
+    };
+
+    const getCountdown = (dateString?: string | null) => {
+        if (!dateString) return '';
+        const diff = new Date(dateString).getTime() - Date.now();
+        if (diff <= 0) return 'Sent';
+        const h = Math.floor(diff / (1000 * 60 * 60));
+        const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        if (h === 0 && m === 0) return 'Sending in <1m';
+        return `Sends in ${h}h ${m}m`;
+    };
+
+    const isCampaignScheduled = (camp: EmailCampaign) => {
+        if (camp.status !== 'scheduled') return false;
+        if (!camp.scheduled_at) return false;
+        return new Date(camp.scheduled_at).getTime() > Date.now();
+    };
+
     // Handle delete campaign
     const handleDeleteCampaign = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -261,7 +303,7 @@ export default function EmailCampaignsPage() {
                                         >
                                             <div className="flex items-start justify-between gap-4">
                                                 <div className="flex flex-col gap-1 min-w-0">
-                                                    <span className="text-base font-bold truncate group-hover:text-purple-400 transition-colors">
+                                                    <span className={`text-base font-bold truncate transition-colors ${camp.status === 'cancelled' ? 'line-through text-muted-foreground' : 'group-hover:text-purple-400'}`}>
                                                         {camp.subject}
                                                     </span>
                                                     <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
@@ -285,6 +327,30 @@ export default function EmailCampaignsPage() {
                                                     }`}>
                                                         {camp.type}
                                                     </span>
+                                                    {isCampaignScheduled(camp) && (
+                                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-500/15 text-blue-400 flex items-center gap-1">
+                                                            <Clock className="w-3 h-3" /> {getCountdown(camp.scheduled_at)}
+                                                        </span>
+                                                    )}
+                                                    {!isCampaignScheduled(camp) && camp.status === 'scheduled' && (
+                                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-green-500/15 text-green-400 flex items-center gap-1">
+                                                            <Mail className="w-3 h-3" /> Sent
+                                                        </span>
+                                                    )}
+                                                    {camp.status === 'cancelled' && (
+                                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-muted text-muted-foreground flex items-center gap-1">
+                                                            <XCircle className="w-3 h-3" /> Cancelled
+                                                        </span>
+                                                    )}
+                                                    {isCampaignScheduled(camp) && (
+                                                        <button
+                                                            onClick={(e) => handleCancelCampaign(camp.id, e)}
+                                                            className="px-2 py-1 bg-red-500/10 text-red-500 text-[10px] font-bold rounded-lg hover:bg-red-500/20 transition-all opacity-0 group-hover:opacity-100"
+                                                            title="Cancel scheduled send"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    )}
                                                     <button
                                                         onClick={(e) => handleDeleteCampaign(camp.id, e)}
                                                         className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"

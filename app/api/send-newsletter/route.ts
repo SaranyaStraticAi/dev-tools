@@ -121,7 +121,9 @@ export async function POST(req: NextRequest) {
                     type: type || 'weekly',
                     broadcast_ids: finalBroadcastIds,
                     segment_ids: segmentIds || [],
-                }
+                    status: scheduledAt ? 'scheduled' : 'sent',
+                    scheduled_at: scheduledAt ? new Date(scheduledAt) : null,
+                } as any,
             });
             campaignId = campaign.id;
             console.log(`[send-newsletter] saved campaign ${campaignId} to DB`);
