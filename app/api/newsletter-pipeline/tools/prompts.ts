@@ -105,9 +105,45 @@ NEVER invent features. ONLY reference features that appear here.
 
 === HOW TO USE THIS DOCUMENT ===
 Step 1: Identify this week's dominant pain from the analysis.
-Step 2: Scan below and find the matching feature entry.
-Step 3: Write SECTION4_BODY using the feature description — accurately, specifically, no vague claims.
+Step 2: Use the PAIN-TO-FEATURE PRIORITY MAP below to find the right feature.
+Step 3: Write SECTION4_BODY using that feature's description — accurately, specifically, no vague claims.
 Step 4: If no feature directly solves the pain, pick the closest one and connect it honestly.
+
+=== PAIN-TO-FEATURE PRIORITY MAP ===
+Use this to pick the RIGHT feature for SECTION4_BODY. Do not guess — follow this map.
+
+PAIN: Blown accounts / overleveraging / sizing up after losses / not knowing lot size / margin calls
+→ USE: FEATURE 2 — Built-In Risk Management Engine
+
+PAIN: Revenge trading / can't follow rules under pressure / know the rules but break them
+→ USE: FEATURE 2 — Built-In Risk Management Engine (risk rules enforced automatically, not willpower)
+
+PAIN: Bad stop loss placement / getting stopped out before the move / SL too tight or too wide
+→ USE: FEATURE 1 — AI Market Analyst (gives exact ATR-based SL level)
+
+PAIN: Missing entries / too many indicators / don't know what to trust / indicator overload
+→ USE: FEATURE 1 — AI Market Analyst (synthesises everything into one read)
+
+PAIN: Don't review trades / repeat same mistakes / never journal / no post-trade reflection
+→ USE: FEATURE 9 — Trade Journal + Pre/Post Trade Questionnaire
+
+PAIN: Trade impulsively / no plan before entering / FOMO entries
+→ USE: FEATURE 9 — Trade Journal (pre-trade questions force a plan before entry)
+
+PAIN: Don't know win rate / not sure if profitable / no performance data
+→ USE: FEATURE 10 — Performance Analytics Dashboard
+
+PAIN: No trading system / react to price / no rules
+→ USE: FEATURE 11 — Strategy Library + AI Strategy Builder
+
+PAIN: Can't code a strategy / want to automate / strategy idea but don't know how
+→ USE: FEATURE 4 — MQL Designer
+
+PAIN: Strategy works on paper but don't know if it has edge / scared to go live
+→ USE: FEATURE 5 — Strategy Backtesting
+
+PAIN: Confused about NFP/FOMC/macro / stopped out by news / trading blind before events
+→ USE: FEATURE 3 — AI News Analyst
 
 ─────────────────────────────────────────────────────────
 FEATURE 1 — AI Market Analyst
@@ -125,17 +161,24 @@ Solves these pains:
 How to write about it: The platform's built-in analyst reads every indicator and gives one clear, actionable read — entry, SL, TP, position size — instead of making the trader wade through 10 charts.
 
 ─────────────────────────────────────────────────────────
-FEATURE 2 — SMC Analyst (Smart Money Concepts)
+FEATURE 2 — Built-In Risk Management Engine
 ─────────────────────────────────────────────────────────
-What it is: A specialist AI agent for institutional-style market structure analysis.
-What it detects: Order Blocks (bullish/bearish), Fair Value Gaps (FVGs), Buy-Side and Sell-Side Liquidity pools, Break of Structure (BOS), Change of Character (CHoCH), Swing Highs/Lows (PH/PL).
-Visual overlays on chart: FVGs in green/red boxes, Order Blocks in purple, Liquidity as violet/pink dashed lines, BOS in orange, CHoCH as turquoise diamond — all drawn directly on the live chart.
+What it is: A built-in risk calculation engine that runs every time you ask for a trade setup. It enforces disciplined position sizing and risk rules automatically — before you ever enter a trade.
+What it calculates:
+  - Exact position size in lots based on account equity and chosen risk % (default 1–2%)
+  - Stop loss level calculated from ATR (Average True Range) — so SL is based on market volatility, not guesswork
+  - Take profit level based on a defined R:R ratio (e.g. 1:2, 1:3)
+  - Maximum risk per trade capped — the AI will not suggest a position that violates your risk parameters
+  - Real-time margin level monitoring — balance, equity, free margin always visible on the dashboard
+Why this matters: The most common reason traders blow accounts is not bad analysis — it is overleveraging and ignoring position sizing. This engine makes proper risk management the default, not an afterthought.
 Solves these pains:
-  - "I've watched ICT/SMC videos but can't identify the zones myself"
-  - "I keep getting stopped out right before the move — it's always a stop hunt"
-  - "I don't know where institutions are positioned"
-  - "Order blocks look like normal candles to me"
-How to write about it: The platform auto-detects and draws every SMC zone on the live chart in real time — so the trader sees the institutional picture without spending hours manually marking charts.
+  - "I keep blowing accounts even when my analysis is right"
+  - "I don't know how many lots to trade without risking too much"
+  - "I size up after a loss to recover faster — and it always makes it worse"
+  - "I know the rules but I don't follow them under pressure"
+  - "Revenge trading has wiped out weeks of gains in one session"
+  - "I don't know my actual risk per trade — I just pick a number"
+How to write about it: The platform removes the discretion that causes blown accounts — before every trade it calculates exactly how many lots to trade, where the stop goes (based on ATR, not emotion), and what R:R you are accepting. The trader's job becomes confirming the setup, not inventing the numbers under pressure.
 
 ─────────────────────────────────────────────────────────
 FEATURE 3 — AI News Analyst

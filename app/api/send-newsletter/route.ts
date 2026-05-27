@@ -10,11 +10,12 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST(req: NextRequest) {
     try {
-        const { html, subject, segmentIds, type } = await req.json() as {
+        const { html, subject, segmentIds, type, scheduledAt } = await req.json() as {
             html: string;
             subject: string;
             segmentIds?: string[];
             type?: string;
+            scheduledAt?: string;  // ISO 8601 or natural language e.g. "tomorrow at 9am"
         };
 
         if (!html || !subject) {
@@ -58,8 +59,10 @@ export async function POST(req: NextRequest) {
                     return NextResponse.json({ error: 'No broadcastId returned from Resend' }, { status: 500 });
                 }
 
-                console.log(`[send-newsletter] sending broadcast ${broadcastId}`);
-                const sendRes = await resend.broadcasts.send(broadcastId);
+                console.log(`[send-newsletter] sending broadcast ${broadcastId}${scheduledAt ? ` scheduled at ${scheduledAt}` : ''}`);
+                const sendRes = await resend.broadcasts.send(broadcastId, {
+                    ...(scheduledAt ? { scheduledAt } : {}),
+                });
 
                 if (sendRes.error) {
                     console.error('[send-newsletter] broadcast send error:', sendRes.error);
@@ -93,8 +96,11 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ error: 'No broadcastId returned from Resend' }, { status: 500 });
             }
 
-            // Step 2 — send immediately
-            const sendRes = await resend.broadcasts.send(broadcastId);
+            // Step 2 — send immediately or scheduled
+            console.log(`[send-newsletter] sending broadcast ${broadcastId}${scheduledAt ? ` scheduled at ${scheduledAt}` : ' immediately'}`);
+            const sendRes = await resend.broadcasts.send(broadcastId, {
+                ...(scheduledAt ? { scheduledAt } : {}),
+            });
 
             if (sendRes.error) {
                 console.error('[send-newsletter] send error:', sendRes.error);
@@ -126,7 +132,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
             broadcastId: finalBroadcastIds[0],
             campaignId,
-            status: 'sent',
+            status: scheduledAt ? 'scheduled' : 'sent',
+            scheduledAt: scheduledAt ?? null,
             count: finalBroadcastIds.length
         });
     } catch (err: any) {
