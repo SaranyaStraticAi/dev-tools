@@ -11,6 +11,55 @@ import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const CLERK_PAGE_SIZE = 500;
+// We throttle to 4 requests per second to stay under Resend's 5 reqs/sec free-tier limit,
+// leaving headroom for other app requests (like listing segments) not to hit 429.
+const BATCH_SIZE = 4; 
+const DELAY_BETWEEN_BATCHES_MS = 1000;
+
+// Helper to wrap Resend calls with retry logic for 429 (Too Many Requests)
+async function callResendWithRetry<T>(fn: () => Promise<T>, retries = 5, delayMs = 1500): Promise<T> {
+    try {
+        const res = await fn();
+        const err = (res as any)?.error;
+        if (err && (err.statusCode === 429 || err.status === 429 || String(err.message).toLowerCase().includes('rate limit') || String(err.message).toLowerCase().includes('too many requests'))) {
+            if (retries > 0) {
+                console.warn(`[sync-clerk-to-resend] ⚠️ 429 rate limit hit. Retrying in ${delayMs}ms... (Retries left: ${retries})`);
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+                return callResendWithRetry(fn, retries - 1, delayMs * 2);
+            }
+        }
+        return res;
+    } catch (e: any) {
+        const is429 = e.statusCode === 429 || e.status === 429 || String(e.message).toLowerCase().includes('rate limit') || String(e.message).toLowerCase().includes('too many requests');
+        if (is429 && retries > 0) {
+            console.warn(`[sync-clerk-to-resend] ⚠️ 429 rate limit hit (thrown). Retrying in ${delayMs}ms... (Retries left: ${retries})`);
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+            return callResendWithRetry(fn, retries - 1, delayMs * 2);
+        }
+        throw e;
+    }
+}
+
+// Helper to run promises in chunks with a rate-limit delay
+async function runBatches<T, R>(
+    items: T[],
+    batchSize: number,
+    delayMs: number,
+    fn: (item: T) => Promise<R>
+): Promise<R[]> {
+    const results: R[] = [];
+    for (let i = 0; i < items.length; i += batchSize) {
+        const batch = items.slice(i, i + batchSize);
+        const batchResults = await Promise.all(batch.map(fn));
+        results.push(...batchResults);
+        
+        // Wait between batches to respect rate limits
+        if (i + batchSize < items.length && delayMs > 0) {
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+    }
+    return results;
+}
 
 // ── Fetch ALL users from Clerk Live instance (paginated) ──────────────────────
 async function fetchAllClerkUsers() {
@@ -47,12 +96,20 @@ async function fetchAllClerkUsers() {
 // ── Fetch ALL existing Resend contacts → build email → contactId map ──────────
 async function fetchAllResendContacts(): Promise<Map<string, string>> {
     const emailToId = new Map<string, string>();
+    const audienceId = process.env.RESEND_AUDIENCE_ID;
+    if (!audienceId) {
+        console.warn('[sync-clerk-to-resend] RESEND_AUDIENCE_ID is not set in env');
+        return emailToId;
+    }
 
     try {
-        // Resend contacts.list() — may be paginated; fetch page by page
-        let page = 1;
+        let after: string | undefined = undefined;
         while (true) {
-            const result = await resend.contacts.list();
+            const result = await callResendWithRetry(() => resend.contacts.list({
+                audienceId,
+                limit: 100,
+                ...(after ? { after } : {}),
+            }));
             const contacts: any[] = (result.data as any)?.data ?? result.data ?? [];
 
             if (!Array.isArray(contacts) || contacts.length === 0) break;
@@ -63,9 +120,10 @@ async function fetchAllResendContacts(): Promise<Map<string, string>> {
                 }
             }
 
-            // Resend doesn't paginate contacts.list in the SDK easily — break after one pass
-            // The SDK returns all contacts (up to their limit)
-            break;
+            if (contacts.length < 100) break;
+            const lastContact = contacts[contacts.length - 1];
+            if (!lastContact?.id) break;
+            after = lastContact.id;
         }
 
         console.log(`[sync-clerk-to-resend] Found ${emailToId.size} existing Resend contacts`);
@@ -85,6 +143,12 @@ async function addContactToSegment(contactId: string, segmentId: string): Promis
             segmentId,
         });
         if (addRes && !addRes.error) return true;
+        if (addRes?.error) {
+            const err = addRes.error;
+            if (err.statusCode === 429 || err.status === 429 || String(err.message).toLowerCase().includes('rate limit') || String(err.message).toLowerCase().includes('too many requests')) {
+                throw err; // throw to trigger retry in callResendWithRetry
+            }
+        }
 
         // Fallback: direct REST call
         const resp = await fetch(`https://api.resend.com/contacts/${contactId}/segments/${segmentId}`, {
@@ -94,8 +158,14 @@ async function addContactToSegment(contactId: string, segmentId: string): Promis
                 'Content-Type': 'application/json',
             },
         });
+        if (resp.status === 429) {
+            throw new Error('429 rate limit exceeded');
+        }
         return resp.ok;
-    } catch {
+    } catch (e) {
+        if (e instanceof Error && (String(e.message).toLowerCase().includes('rate limit') || String(e.message).toLowerCase().includes('429'))) {
+            throw e;
+        }
         return false;
     }
 }
@@ -105,6 +175,11 @@ export async function POST(req: NextRequest) {
         const body = await req.json().catch(() => ({})) as {
             segmentId?: string;
         };
+
+        const audienceId = process.env.RESEND_AUDIENCE_ID;
+        if (!audienceId) {
+            return NextResponse.json({ error: 'RESEND_AUDIENCE_ID is not set' }, { status: 500 });
+        }
 
         // ── Step 1: Fetch all Clerk Live users ────────────────────────────────
         console.log('[sync-clerk-to-resend] Fetching all Clerk Live users...');
@@ -122,7 +197,7 @@ export async function POST(req: NextRequest) {
         // ── Step 2: Fetch existing Resend contacts to get their IDs ───────────
         const existingContacts = await fetchAllResendContacts();
 
-        // ── Step 3: Upsert each Clerk user into Resend ────────────────────────
+        // ── Step 3: Upsert each Clerk user into Resend (Batched in parallel) ──
         let created    = 0;
         let alreadyExisted = 0;
         const errors: string[] = [];
@@ -130,27 +205,27 @@ export async function POST(req: NextRequest) {
         // contactIds = ALL IDs that should be in the segment (new + existing)
         const contactIds: string[] = [];
 
-        for (const user of allUsers) {
+        console.log(`[sync-clerk-to-resend] Processing ${allUsers.length} users...`);
+
+        await runBatches(allUsers, BATCH_SIZE, DELAY_BETWEEN_BATCHES_MS, async (user) => {
             const existingId = existingContacts.get(user.email);
 
             if (existingId) {
-                // Already in Resend — just collect the ID for segment sync
                 contactIds.push(existingId);
                 alreadyExisted++;
-                continue;
+                return;
             }
 
-            // Not in Resend yet — create
             try {
-                const result = await resend.contacts.create({
+                const result = await callResendWithRetry(() => resend.contacts.create({
                     email:        user.email,
                     firstName:    user.firstName,
                     lastName:     user.lastName,
                     unsubscribed: false,
-                });
+                    audienceId,
+                }));
 
                 if (result.error) {
-                    // Race condition: contact was just created between our list and now
                     if (result.error.message?.toLowerCase().includes('already exists')) {
                         alreadyExisted++;
                     } else {
@@ -163,25 +238,30 @@ export async function POST(req: NextRequest) {
             } catch (e: any) {
                 errors.push(`${user.email}: ${e.message}`);
             }
-        }
+        });
 
         console.log(`[sync-clerk-to-resend] Created: ${created} new, already existed: ${alreadyExisted}, errors: ${errors.length}`);
 
-        // ── Step 4: Add ALL contact IDs to the segment ────────────────────────
+        // ── Step 4: Add ALL contact IDs to the segment (Batched in parallel) ──
         let addedToSegment  = 0;
         const segmentErrors: string[] = [];
 
-        if (body.segmentId && contactIds.length > 0) {
-            console.log(`[sync-clerk-to-resend] Adding ${contactIds.length} contacts to segment ${body.segmentId}...`);
+        const targetSegmentId = body.segmentId;
+        if (targetSegmentId && contactIds.length > 0) {
+            console.log(`[sync-clerk-to-resend] Adding ${contactIds.length} contacts to segment ${targetSegmentId}...`);
 
-            for (const contactId of contactIds) {
-                const ok = await addContactToSegment(contactId, body.segmentId);
-                if (ok) {
-                    addedToSegment++;
-                } else {
+            await runBatches(contactIds, BATCH_SIZE, DELAY_BETWEEN_BATCHES_MS, async (contactId) => {
+                try {
+                    const ok = await callResendWithRetry(() => addContactToSegment(contactId, targetSegmentId));
+                    if (ok) {
+                        addedToSegment++;
+                    } else {
+                        segmentErrors.push(contactId);
+                    }
+                } catch (e) {
                     segmentErrors.push(contactId);
                 }
-            }
+            });
 
             console.log(`[sync-clerk-to-resend] Added to segment: ${addedToSegment}, failed: ${segmentErrors.length}`);
         }
