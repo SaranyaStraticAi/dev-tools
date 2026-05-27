@@ -224,6 +224,42 @@ export default function AudienceManagerPage() {
         }
     };
 
+    // ── Bulk Remove/Delete Segment Contacts ───────────────────────────────────
+    const handleBulkDeleteContacts = async () => {
+        if (!selectedSeg) return;
+        const count = contacts.length;
+        if (count === 0) {
+            alert("No contacts in this segment to delete.");
+            return;
+        }
+
+        const confirmBulk = confirm(`Are you sure you want to clear all ${count} contacts in this segment?`);
+        if (!confirmBulk) return;
+
+        const deletePermanently = confirm(
+            "Do you want to PERMANENTLY DELETE these contacts from Resend as well?\n\n" +
+            "• Click OK to permanently delete these contacts from Resend completely.\n" +
+            "• Click Cancel to only remove them from this segment (they will remain in Resend)."
+        );
+
+        setLoading(true);
+        try {
+            const res = await fetch(`/api/resend-segments/${selectedSeg}/contacts`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ removeAll: true, deletePermanently }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error ?? 'Failed to delete contacts');
+            alert(`Bulk action complete! Succeeded: ${data.succeeded}, Failed: ${data.failed}`);
+            await fetchContacts();
+        } catch (e: any) {
+            alert(e.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // ── Toggle subscribe (Global) ──────────────────────────────────────────────
     const handleToggleSub = async (contact: Contact) => {
         setActionLoading(p => ({ ...p, [contact.id]: true }));
@@ -426,6 +462,15 @@ export default function AudienceManagerPage() {
                                     placeholder="🔍 Search contacts…"
                                     className="px-3 py-1.5 rounded-lg border bg-background text-sm w-full sm:w-56 focus:ring-1 focus:ring-ring outline-none"
                                 />
+                                {selectedSeg && contacts.length > 0 && (
+                                    <button
+                                        onClick={handleBulkDeleteContacts}
+                                        className="px-3 py-1.5 rounded-lg border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-500 text-sm font-bold transition-all flex items-center gap-1"
+                                        title="Clear all contacts from this segment"
+                                    >
+                                        🗑️ Clear Segment
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => setShowAddForm(v => !v)}
                                     className="px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold transition-all flex items-center gap-1"

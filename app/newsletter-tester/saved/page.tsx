@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useMsal } from "@azure/msal-react";
-import { ArrowLeft, Mail, Calendar, Trash2, Loader2, Eye, RefreshCw, Send, CheckCircle, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Mail, Calendar, Trash2, Loader2, Eye, RefreshCw, Send, CheckCircle, AlertCircle, Clock, Users, ChevronDown, ChevronUp, Pencil } from 'lucide-react';
 
 interface SavedNewsletter {
     id:         string;
@@ -43,9 +43,22 @@ export default function SavedNewslettersPage() {
     // Send state
     const [showSendModal, setShowSendModal] = useState(false);
     const [selectedSegs, setSelectedSegs] = useState<string[]>([]);
-    const [sendStatus, setSendStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+    const [sendStatus, setSendStatus] = useState<'idle' | 'sending' | 'sent' | 'scheduled' | 'error'>('idle');
     const [sendError, setSendError] = useState('');
     const [broadcastId, setBroadcastId] = useState<string | null>(null);
+    // Scheduling state
+    const [scheduleMode, setScheduleMode] = useState<'now' | 'later'>('now');
+    const [scheduledAt, setScheduledAt] = useState('');  // datetime-local value
+
+    // Clerk → Resend sync state
+    const [showSyncPanel, setShowSyncPanel] = useState(false);
+    const [syncSegmentId, setSyncSegmentId] = useState('');
+    const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'done' | 'error'>('idle');
+    const [syncResult, setSyncResult] = useState<{
+        total: number; created: number; alreadyExisted: number;
+        addedToSegment: number; errors: string[];
+    } | null>(null);
+    const [syncError, setSyncError] = useState('');
 
     // Fetch saved drafts
     const fetchDrafts = useCallback(async () => {
@@ -109,6 +122,27 @@ export default function SavedNewslettersPage() {
             return;
         }
 
+        // Validate schedule time is in the future (and within 72h)
+        let isoScheduledAt: string | undefined;
+        if (scheduleMode === 'later') {
+            if (!scheduledAt) {
+                setSendError('Please pick a date and time to schedule.');
+                return;
+            }
+            const scheduledDate = new Date(scheduledAt);
+            const now = new Date();
+            const diffHours = (scheduledDate.getTime() - now.getTime()) / 3_600_000;
+            if (diffHours <= 0) {
+                setSendError('Scheduled time must be in the future.');
+                return;
+            }
+            if (diffHours > 72) {
+                setSendError('Resend only supports scheduling up to 72 hours in advance.');
+                return;
+            }
+            isoScheduledAt = scheduledDate.toISOString();
+        }
+
         setSendStatus('sending');
         setSendError('');
         setBroadcastId(null);
@@ -122,21 +156,51 @@ export default function SavedNewslettersPage() {
                     subject: selectedDraft.subject,
                     segmentIds: selectedSegs,
                     type: selectedDraft.type,
+                    ...(isoScheduledAt ? { scheduledAt: isoScheduledAt } : {}),
                 }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error ?? 'Send failed');
             setBroadcastId(data.broadcastId);
-            setSendStatus('sent');
+            setSendStatus(data.status === 'scheduled' ? 'scheduled' : 'sent');
             setTimeout(() => {
                 setShowSendModal(false);
                 setSendStatus('idle');
-            }, 3000);
+                setScheduleMode('now');
+                setScheduledAt('');
+            }, 4000);
         } catch (e: any) {
             setSendError(e.message ?? 'Unknown error');
             setSendStatus('error');
         }
     };
+
+    // Clerk → Resend sync handler
+    const handleSyncClerkContacts = async () => {
+        setSyncStatus('syncing');
+        setSyncError('');
+        setSyncResult(null);
+        try {
+            const res = await fetch('/api/sync-clerk-to-resend', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    instance: 'live',  // always Live only
+                    ...(syncSegmentId ? { segmentId: syncSegmentId } : {}),
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error ?? 'Sync failed');
+            setSyncResult(data);
+            setSyncStatus('done');
+            // Refresh segments after sync
+            fetchSegments();
+        } catch (e: any) {
+            setSyncError(e.message ?? 'Unknown error');
+            setSyncStatus('error');
+        }
+    };
+
 
     if (!mounted) return null;
 
@@ -241,6 +305,15 @@ export default function SavedNewslettersPage() {
                                                     }`}>
                                                         {draft.type}
                                                     </span>
+                                                    {/* Edit button */}
+                                                    <a
+                                                        href={`/newsletter-tester/saved/${draft.id}/edit`}
+                                                        onClick={e => e.stopPropagation()}
+                                                        className="p-1.5 rounded-lg text-muted-foreground hover:text-indigo-400 hover:bg-indigo-500/10 opacity-0 group-hover:opacity-100 transition-all"
+                                                        title="Edit this draft"
+                                                    >
+                                                        <Pencil className="w-3.5 h-3.5" />
+                                                    </a>
                                                     <button
                                                         onClick={(e) => handleDeleteDraft(draft.id, e)}
                                                         className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all"
@@ -272,18 +345,30 @@ export default function SavedNewslettersPage() {
                                     </div>
                                 </div>
 
-                                {/* Send action button */}
-                                <button
-                                    onClick={() => {
-                                        setSelectedSegs([]);
-                                        setSendStatus('idle');
-                                        setSendError('');
-                                        setShowSendModal(true);
-                                    }}
-                                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg transition-all"
-                                >
-                                    <Send className="w-4 h-4" /> Send Newsletter Now
-                                </button>
+                                {/* Action buttons row */}
+                                <div className="flex gap-2">
+                                    {/* Edit button */}
+                                    <a
+                                        href={`/newsletter-tester/saved/${selectedDraft.id}/edit`}
+                                        className="flex-1 py-3 bg-muted hover:bg-muted/80 border font-bold rounded-xl text-sm flex items-center justify-center gap-2 transition-all"
+                                    >
+                                        <Pencil className="w-4 h-4" /> Edit Content
+                                    </a>
+                                    {/* Send button */}
+                                    <button
+                                        onClick={() => {
+                                            setSelectedSegs([]);
+                                            setSendStatus('idle');
+                                            setSendError('');
+                                            setScheduleMode('now');
+                                            setScheduledAt('');
+                                            setShowSendModal(true);
+                                        }}
+                                        className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg transition-all"
+                                    >
+                                        <Send className="w-4 h-4" /> Send Now
+                                    </button>
+                                </div>
 
                                 {/* Preview container */}
                                 <div className="flex flex-col gap-2">
@@ -314,20 +399,20 @@ export default function SavedNewslettersPage() {
                 {/* Send Wizard Modal */}
                 {showSendModal && selectedDraft && (
                     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
-                        <div className="bg-card border rounded-2xl p-6 max-w-md w-full flex flex-col gap-4 shadow-xl animate-in zoom-in-95">
+                    <div className="bg-card border rounded-2xl p-6 max-w-md w-full flex flex-col gap-4 shadow-xl animate-in zoom-in-95">
                             <div className="flex items-center justify-between">
-                                <h2 className="text-xl font-bold">Select Audience Segments</h2>
+                                <h2 className="text-xl font-bold">Send Newsletter</h2>
                                 <button onClick={() => setShowSendModal(false)} className="text-muted-foreground hover:text-foreground">✕</button>
                             </div>
                             <p className="text-xs text-muted-foreground">
                                 Select audience segments to target. If no segments are selected, it sends to the default Resend list.
                             </p>
 
-                            {/* Status Banner */}
+                            {/* Status Banners */}
                             {sendStatus === 'sending' && (
                                 <div className="flex items-center gap-2 px-3 py-2 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-lg text-xs">
                                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                    Sending newsletter...
+                                    {scheduleMode === 'later' ? 'Scheduling newsletter...' : 'Sending newsletter...'}
                                 </div>
                             )}
                             {sendStatus === 'sent' && (
@@ -336,15 +421,132 @@ export default function SavedNewslettersPage() {
                                     Sent successfully! Broadcast ID: {broadcastId}
                                 </div>
                             )}
+                            {sendStatus === 'scheduled' && (
+                                <div className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-lg text-xs">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    Scheduled! Broadcast ID: {broadcastId}
+                                </div>
+                            )}
                             {sendStatus === 'error' && (
                                 <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg text-xs">
                                     <AlertCircle className="w-3.5 h-3.5" />
                                     Error: {sendError}
                                 </div>
                             )}
-                            
+                            {/* Schedule Toggle */}
+                            <div className="flex flex-col gap-2">
+                                <span className="text-xs font-bold text-muted-foreground">When to Send</span>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setScheduleMode('now')}
+                                        className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ${
+                                            scheduleMode === 'now'
+                                                ? 'bg-indigo-500 text-white border-indigo-500 shadow-sm'
+                                                : 'border-muted hover:bg-muted'
+                                        }`}
+                                    >
+                                        <Send className="w-3 h-3" /> Send Now
+                                    </button>
+                                    <button
+                                        onClick={() => setScheduleMode('later')}
+                                        className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ${
+                                            scheduleMode === 'later'
+                                                ? 'bg-blue-500 text-white border-blue-500 shadow-sm'
+                                                : 'border-muted hover:bg-muted'
+                                        }`}
+                                    >
+                                        <Clock className="w-3 h-3" /> Schedule
+                                    </button>
+                                </div>
+                                {scheduleMode === 'later' && (
+                                    <div className="flex flex-col gap-1.5">
+                                        <input
+                                            type="datetime-local"
+                                            value={scheduledAt}
+                                            onChange={(e) => setScheduledAt(e.target.value)}
+                                            min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
+                                            max={new Date(Date.now() + 72 * 3_600_000).toISOString().slice(0, 16)}
+                                            className="w-full px-3 py-2 rounded-xl border bg-background text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-foreground"
+                                        />
+                                        <p className="text-[10px] text-muted-foreground">
+                                            ⏰ Resend supports scheduling up to <span className="font-semibold">72 hours</span> in advance.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* ── Clerk Sync Collapsible Panel ────────────────── */}
+                            <div className="border border-dashed rounded-xl overflow-hidden">
+                                <button
+                                    onClick={() => setShowSyncPanel(p => !p)}
+                                    className="w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-bold hover:bg-muted transition-colors"
+                                >
+                                    <span className="flex items-center gap-1.5">
+                                        <Users className="w-3.5 h-3.5 text-indigo-400" />
+                                        Sync Clerk Contacts → Resend
+                                    </span>
+                                    {showSyncPanel ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                </button>
+
+                                {showSyncPanel && (
+                                    <div className="px-4 pb-4 pt-2 flex flex-col gap-3 border-t">
+                                        <p className="text-[10px] text-muted-foreground">
+                                            Fetches all users from your <strong>Live</strong> Clerk instance and upserts them into your Resend audience. Optionally add them to a specific segment.
+                                        </p>
+
+                                        {/* Segment picker */}
+                                        <div className="flex flex-col gap-1">
+                                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Add to Segment (optional)</span>
+                                            <select
+                                                value={syncSegmentId}
+                                                onChange={e => setSyncSegmentId(e.target.value)}
+                                                className="w-full px-3 py-2 rounded-lg border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                            >
+                                                <option value="">— No segment (audience only) —</option>
+                                                {segments.map(seg => (
+                                                    <option key={seg.id} value={seg.id}>{seg.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {/* Sync result */}
+                                        {syncStatus === 'done' && syncResult && (
+                                            <div className="flex flex-col gap-1 px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-lg text-xs">
+                                                <span className="font-bold text-green-400 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Sync complete!</span>
+                                                <span className="text-muted-foreground">Total Clerk Live users: <strong>{syncResult.total}</strong></span>
+                                                <span className="text-muted-foreground">Newly added to Resend: <strong className="text-green-400">{syncResult.created}</strong></span>
+                                                <span className="text-muted-foreground">Already in Resend: <strong>{syncResult.alreadyExisted}</strong></span>
+                                                {syncResult.addedToSegment > 0 && (
+                                                    <span className="text-muted-foreground">✅ Added to segment: <strong className="text-indigo-400">{syncResult.addedToSegment}</strong> / {syncResult.total - syncResult.errors.length}</span>
+                                                )}
+                                                {syncResult.errors.length > 0 && (
+                                                    <span className="text-red-400">{syncResult.errors.length} error(s) — see console</span>
+                                                )}
+                                            </div>
+                                        )}
+                                        {syncStatus === 'error' && (
+                                            <div className="px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-lg text-xs text-red-400">
+                                                <AlertCircle className="w-3 h-3 inline mr-1" />{syncError}
+                                            </div>
+                                        )}
+
+                                        {/* Sync button */}
+                                        <button
+                                            onClick={handleSyncClerkContacts}
+                                            disabled={syncStatus === 'syncing'}
+                                            className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                                        >
+                                            {syncStatus === 'syncing'
+                                                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Syncing Clerk users...</>
+                                                : <><Users className="w-3.5 h-3.5" /> Run Sync Now</>
+                                            }
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
                             {/* Segments checkbox list */}
-                            <div className="flex flex-col gap-2 max-h-60 overflow-y-auto border-t border-b py-3 my-1">
+                            <div className="flex flex-col gap-2 max-h-48 overflow-y-auto border-t border-b py-3 my-1">
                                 {segments.map(seg => (
                                     <label key={seg.id} className="flex items-center gap-3 p-2.5 hover:bg-muted rounded-xl cursor-pointer transition-colors">
                                         <input
@@ -378,10 +580,20 @@ export default function SavedNewslettersPage() {
                                 </button>
                                 <button
                                     onClick={handleSendDraft}
-                                    disabled={sendStatus === 'sending' || sendStatus === 'sent'}
-                                    className="px-4 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold disabled:opacity-50 flex items-center gap-1.5 transition-colors shadow-sm"
+                                    disabled={sendStatus === 'sending' || sendStatus === 'sent' || sendStatus === 'scheduled'}
+                                    className={`px-4 py-2.5 text-white rounded-xl text-xs font-bold disabled:opacity-50 flex items-center gap-1.5 transition-colors shadow-sm ${
+                                        scheduleMode === 'later'
+                                            ? 'bg-blue-500 hover:bg-blue-600'
+                                            : 'bg-indigo-500 hover:bg-indigo-600'
+                                    }`}
                                 >
-                                    {sendStatus === 'sending' ? 'Sending...' : sendStatus === 'sent' ? 'Sent' : 'Confirm & Send'}
+                                    {sendStatus === 'sending'
+                                        ? (scheduleMode === 'later' ? 'Scheduling...' : 'Sending...')
+                                        : sendStatus === 'sent' ? 'Sent ✓'
+                                        : sendStatus === 'scheduled' ? 'Scheduled ✓'
+                                        : scheduleMode === 'later' ? <><Clock className="w-3 h-3" /> Schedule</>
+                                        : 'Confirm & Send'
+                                    }
                                 </button>
                             </div>
                         </div>
