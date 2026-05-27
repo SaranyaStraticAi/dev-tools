@@ -41,6 +41,7 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/api/email-campaigns') ||
     pathname.startsWith('/api/auth') ||
     pathname.startsWith('/api/newsrag') ||
+    pathname.startsWith('/api/saved-newsletters') ||
     pathname.startsWith('/api/edu-content');   // ← edu content tester
 
   const isGrafanaApi = pathname.startsWith('/api/') && !isLocalApi;

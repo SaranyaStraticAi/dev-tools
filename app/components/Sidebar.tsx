@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image, Link2, Network, LayoutGrid, ChevronDown, Mail, Video, GraduationCap, Download, Brain, Newspaper, Edit, ShieldCheck } from 'lucide-react';
+import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image, Link2, Network, LayoutGrid, ChevronDown, Mail, Video, GraduationCap, Download, Brain, Newspaper, Edit, ShieldCheck, Inbox } from 'lucide-react';
 import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
 import { useState, useEffect } from 'react';
 
@@ -59,6 +59,7 @@ const navGroups = [
     label: 'Marketing',
     items: [
       { name: 'Newsletter Tester',   href: '/newsletter-tester',   icon: Mail },
+      { name: 'Saved Newsletters',   href: '/newsletter-tester/saved', icon: Inbox },
       { name: 'Edu Content Tester',  href: '/edu-content',         icon: GraduationCap },
       { name: 'Image Generator',     href: '/image-generator',     icon: Image },
       { name: 'Video Generator',     href: '/video-generator',     icon: Video },

@@ -66,6 +66,7 @@ export default function NewsletterTesterPage() {
         rawText, emailHtml, loading, step, error,
         parsed,
         handleGenerate, handleGeneratePipeline, downloadHtml,
+        saveStatus, saveError, handleSaveNewsletter,
         // resend
         broadcastId, sendStatus, sendError, metrics,
         handleSendViaResend,
@@ -155,8 +156,8 @@ export default function NewsletterTesterPage() {
                 publishStatus={publishStatus}
                 sendStatus={sendStatus}
                 hasHtml={!!emailHtml}
-                onGeneratePipeline={handleGeneratePipeline}
-                onGeneratePuzzle={() => handleGenerate('puzzle')}
+                onGeneratePipeline={() => handleGeneratePipeline(false, 'weekly')}
+                onGeneratePuzzle={() => handleGeneratePipeline(false, 'puzzle')}
                 onTypeSwitch={setType}
                 onTogglePrompts={() => setShowPrompts(v => !v)}
                 onPublish={publishToAzure}
@@ -206,6 +207,9 @@ export default function NewsletterTesterPage() {
                     broadcastId={broadcastId}
                     metrics={metrics}
                     sendError={sendError}
+                    onSave={handleSaveNewsletter}
+                    saveStatus={saveStatus}
+                    saveError={saveError}
                 />
             )}
 
