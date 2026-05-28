@@ -44,6 +44,9 @@ export async function POST(req: NextRequest) {
                     html,
                     name: `Newsletter — ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
                     segmentId: segId,
+                    // ── Tracking — required for webhook events to fire ──────
+                    track_opens:  true,
+                    track_clicks: true,
                 };
 
                 console.log(`[send-newsletter] creating broadcast for segment ${segId} with payload:`, { ...payload, html: '...' });
@@ -81,6 +84,9 @@ export async function POST(req: NextRequest) {
                 html,
                 name: `Newsletter — ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
                 audienceId,
+                // ── Tracking — required for webhook events to fire ──────
+                track_opens:  true,
+                track_clicks: true,
             };
 
             console.log('[send-newsletter] creating broadcast with payload:', { ...payload, html: '...' });
