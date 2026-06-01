@@ -3,7 +3,7 @@
 // Uses a fast parallel proxy race to avoid Vercel timeouts and Reddit blocks.
 // Returns everything — no count limit. Tool 4 decides what matters.
 
-import { fetchWithTimeout, USER_AGENT } from './base';
+import { fetchWithTimeout, USER_AGENT, getRedditOAuthToken } from './base';
 
 export interface RedditPostRaw {
     id: string; subreddit: string; title: string; selftext: string;
@@ -12,22 +12,8 @@ export interface RedditPostRaw {
 }
 
 async function fetchOneSub(subreddit: string, timeframe: string): Promise<RedditPostRaw[]> {
-    const targetUrl = `https://www.reddit.com/r/${subreddit}/top.json?t=${timeframe}&limit=50`;
-    const sources = [
-        targetUrl,
-        `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
-        `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
-        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
-    ];
-
-    const fetchSource = async (src: string) => {
-        const res = await fetchWithTimeout(src, 8000, { headers: { 'User-Agent': USER_AGENT }, cache: 'no-store' });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const text = await res.text();
-        if (!text?.trim()) throw new Error('Empty response');
-        const parsed = JSON.parse(text);
+    const processRedditData = (parsed: any): RedditPostRaw[] => {
         if (!parsed?.data?.children?.length) throw new Error('No posts');
-        
         return (parsed.data.children as any[]).map((item: any): RedditPostRaw => {
             const p = item.data;
             return {
@@ -43,12 +29,26 @@ async function fetchOneSub(subreddit: string, timeframe: string): Promise<Reddit
         });
     };
 
-    try {
-        // Run all proxy sources in parallel and return the first one that succeeds.
-        return await Promise.any(sources.map(src => fetchSource(src)));
-    } catch (e) {
-        return []; // all proxies failed for this subreddit
+    const targetUrl = `https://www.reddit.com/r/${subreddit}/top.json?t=${timeframe}&limit=50`;
+    const sources = [
+        targetUrl,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+        `https://thingproxy.freeboard.io/fetch/${targetUrl}`
+    ];
+
+    for (const src of sources) {
+        try {
+            const res = await fetchWithTimeout(src, 10000, { headers: { 'User-Agent': USER_AGENT }, cache: 'no-store' });
+            if (!res.ok) continue; // Skip to next on 403/429
+            const text = await res.text();
+            if (!text?.trim()) continue;
+            const parsed = JSON.parse(text);
+            return processRedditData(parsed);
+        } catch (e) {
+            // Ignore parse errors / timeouts and try next source
+        }
     }
+    return []; // All failed for this subreddit
 }
 
 export async function redditFetchPostsTool(

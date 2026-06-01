@@ -3,7 +3,7 @@
 // Step B: Run queries in small batches via a fast parallel proxy race to avoid Reddit IP blocks and timeouts
 // Throws if Reddit returns 0 communities so the pipeline fails loudly.
 
-import { fetchWithTimeout, USER_AGENT, callAI, parseJSON } from './base';
+import { fetchWithTimeout, USER_AGENT, callAI, parseJSON, getRedditOAuthToken } from './base';
 
 export interface Community {
     name:        string;
@@ -34,39 +34,34 @@ export async function aiGenerateSearchQueries(): Promise<string[]> {
     return queries;
 }
 
-// ── Fast parallel proxy fetcher ──────────────────────────────────────────────
-// Instead of trying proxies sequentially (which causes 300s timeouts),
-// we fire them all in parallel and take the first successful response.
-async function fetchSubredditSearchFast(query: string): Promise<any> {
+// ── Gentle Proxy Fetcher ─────────────────────────────────────────────────────
+// We can't use OAuth, and firing too fast causes 429 Rate Limits from proxies.
+// Try allorigins gently. If it fails, try thingproxy.
+async function fetchSubredditSearchGentle(query: string): Promise<any> {
     const targetUrl = `https://www.reddit.com/subreddits/search.json?q=${encodeURIComponent(query)}&limit=25&sort=relevance`;
 
     const sources = [
         targetUrl, // Direct (fast 403 on Vercel, works locally)
         `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
-        `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
-        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`
+        `https://thingproxy.freeboard.io/fetch/${targetUrl}`
     ];
 
-    const fetchSource = async (src: string) => {
-        const res = await fetchWithTimeout(src, 8000, {
-            headers: { 'User-Agent': USER_AGENT },
-            cache:   'no-store',
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const text = await res.text();
-        if (!text?.trim()) throw new Error('Empty body');
-        const parsed = JSON.parse(text);
-        if (parsed?.data?.children) return parsed;
-        throw new Error('Invalid JSON structure');
-    };
-
-    try {
-        // Promise.any returns the FIRST resolved promise.
-        // If all reject, it throws an AggregateError.
-        return await Promise.any(sources.map(src => fetchSource(src)));
-    } catch (err) {
-        return null;
+    for (const src of sources) {
+        try {
+            const res = await fetchWithTimeout(src, 10000, {
+                headers: { 'User-Agent': USER_AGENT },
+                cache: 'no-store'
+            });
+            if (!res.ok) continue; // Skip to next proxy on 403/429
+            const text = await res.text();
+            if (!text?.trim()) continue;
+            const parsed = JSON.parse(text);
+            if (parsed?.data?.children) return parsed;
+        } catch (e) {
+            // Ignore timeout/parse errors and try next source
+        }
     }
+    return null;
 }
 
 export async function searchRedditCommunities(
@@ -74,8 +69,8 @@ export async function searchRedditCommunities(
     onQueryProgress?: (query: string, index: number, total: number, foundCount: number) => void,
 ): Promise<Map<string, Community>> {
     const found    = new Map<string, Community>();
-    const BATCH    = 5;   // 5 parallel requests at a time — slightly faster batching
-    const DELAY_MS = 500; // 500ms delay between batches
+    const BATCH    = 2;   // Reduced to 2 parallel to avoid 429 rate limit
+    const DELAY_MS = 1500; // 1.5s delay between batches to respect proxy limits
 
     for (let i = 0; i < queries.length; i += BATCH) {
         const batch = queries.slice(i, i + BATCH);
@@ -86,7 +81,7 @@ export async function searchRedditCommunities(
                 
                 if (onQueryProgress) onQueryProgress(query, globalIndex, queries.length, found.size);
 
-                const data = await fetchSubredditSearchFast(query);
+                const data = await fetchSubredditSearchGentle(query);
                 if (!data) {
                     console.warn(`[redditDiscoverTool] all proxy sources failed for "${query}"`);
                     return;
