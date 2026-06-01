@@ -53,3 +53,43 @@ export async function fetchWithTimeout(url: string, timeoutMs = 10000, options: 
         clearTimeout(timer);
     }
 }
+
+// ── Reddit OAuth ─────────────────────────────────────────────────────────────
+let cachedRedditToken: string | null = null;
+let tokenExpiry = 0;
+
+export async function getRedditOAuthToken(): Promise<string | null> {
+    const clientId = process.env.REDDIT_CLIENT_ID;
+    const clientSecret = process.env.REDDIT_CLIENT_SECRET;
+    if (!clientId || !clientSecret) return null;
+
+    if (cachedRedditToken && Date.now() < tokenExpiry) {
+        return cachedRedditToken;
+    }
+
+    try {
+        const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+        const res = await fetchWithTimeout('https://www.reddit.com/api/v1/access_token', 10000, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Basic ${auth}`,
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': USER_AGENT
+            },
+            body: 'grant_type=client_credentials'
+        });
+
+        if (!res.ok) throw new Error(`Reddit auth failed: ${res.status}`);
+        const data = await res.json();
+        
+        cachedRedditToken = data.access_token;
+        // Token typically lives for 3600 seconds, expire slightly early
+        tokenExpiry = Date.now() + ((data.expires_in - 300) * 1000);
+        console.log('[reddit auth] Got new OAuth token');
+        
+        return cachedRedditToken;
+    } catch (e) {
+        console.warn('[reddit auth] Failed to get token:', e);
+        return null;
+    }
+}
