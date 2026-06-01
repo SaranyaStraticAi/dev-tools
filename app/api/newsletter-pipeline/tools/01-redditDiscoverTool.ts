@@ -1,7 +1,7 @@
 // Tool 1 — redditDiscoverTool
 // Step A: AI decides what search queries to run — no hardcoded topics, no count limit
-// Step B: Run queries in small batches with delays to avoid Reddit rate limiting
-// Throws if Reddit returns 0 communities so the pipeline fails loudly, not silently.
+// Step B: Run queries in small batches via a fast parallel proxy race to avoid Reddit IP blocks and timeouts
+// Throws if Reddit returns 0 communities so the pipeline fails loudly.
 
 import { fetchWithTimeout, USER_AGENT, callAI, parseJSON } from './base';
 
@@ -34,44 +34,39 @@ export async function aiGenerateSearchQueries(): Promise<string[]> {
     return queries;
 }
 
-// No fallback list — if all proxy sources fail, the pipeline throws a clear error.
-
-// ── Try fetching a Reddit search URL through multiple proxy sources ────────────
-// Same pattern as Tool 3 (redditFetchPostsTool) which already works in production.
-async function fetchSubredditSearch(query: string): Promise<any | null> {
+// ── Fast parallel proxy fetcher ──────────────────────────────────────────────
+// Instead of trying proxies sequentially (which causes 300s timeouts),
+// we fire them all in parallel and take the first successful response.
+async function fetchSubredditSearchFast(query: string): Promise<any> {
     const targetUrl = `https://www.reddit.com/subreddits/search.json?q=${encodeURIComponent(query)}&limit=25&sort=relevance`;
 
     const sources = [
-        // 1. Direct — works locally, blocked by 403 on Vercel datacenter IPs
-        targetUrl,
-        // 2. allorigins — CORS-free public proxy, returns raw body
+        targetUrl, // Direct (fast 403 on Vercel, works locally)
         `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
-        // 3. corsproxy.io — another reliable public CORS proxy
         `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
-        // 4. codetabs — fallback
-        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`
     ];
 
-    for (const src of sources) {
-        try {
-            const res = await fetchWithTimeout(src, 12000, {
-                headers: { 'User-Agent': USER_AGENT },
-                cache:   'no-store',
-            });
-            if (!res.ok) {
-                console.warn(`[redditDiscoverTool] source returned ${res.status}: ${src.slice(0, 60)}`);
-                continue;
-            }
-            const text = await res.text();
-            if (!text?.trim()) continue;
-            const parsed = JSON.parse(text);
-            // Valid Reddit search response has data.children
-            if (parsed?.data?.children) return parsed;
-        } catch (e) {
-            console.warn(`[redditDiscoverTool] proxy failed (${src.slice(0, 60)}):`, (e as Error).message);
-        }
+    const fetchSource = async (src: string) => {
+        const res = await fetchWithTimeout(src, 8000, {
+            headers: { 'User-Agent': USER_AGENT },
+            cache:   'no-store',
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const text = await res.text();
+        if (!text?.trim()) throw new Error('Empty body');
+        const parsed = JSON.parse(text);
+        if (parsed?.data?.children) return parsed;
+        throw new Error('Invalid JSON structure');
+    };
+
+    try {
+        // Promise.any returns the FIRST resolved promise.
+        // If all reject, it throws an AggregateError.
+        return await Promise.any(sources.map(src => fetchSource(src)));
+    } catch (err) {
+        return null;
     }
-    return null; // all sources failed for this query
 }
 
 export async function searchRedditCommunities(
@@ -79,8 +74,8 @@ export async function searchRedditCommunities(
     onQueryProgress?: (query: string, index: number, total: number, foundCount: number) => void,
 ): Promise<Map<string, Community>> {
     const found    = new Map<string, Community>();
-    const BATCH    = 3;    // 3 parallel requests at a time
-    const DELAY_MS = 800;  // 800ms between batches
+    const BATCH    = 5;   // 5 parallel requests at a time — slightly faster batching
+    const DELAY_MS = 500; // 500ms delay between batches
 
     for (let i = 0; i < queries.length; i += BATCH) {
         const batch = queries.slice(i, i + BATCH);
@@ -88,14 +83,15 @@ export async function searchRedditCommunities(
             batch.map(async (query, batchIdx) => {
                 const globalIndex = i + batchIdx;
                 if (globalIndex >= queries.length) return;
-                if (onQueryProgress) {
-                    onQueryProgress(query, globalIndex, queries.length, found.size);
-                }
-                const data = await fetchSubredditSearch(query);
+                
+                if (onQueryProgress) onQueryProgress(query, globalIndex, queries.length, found.size);
+
+                const data = await fetchSubredditSearchFast(query);
                 if (!data) {
-                    console.warn(`[redditDiscoverTool] all sources failed for query "${query}"`);
+                    console.warn(`[redditDiscoverTool] all proxy sources failed for "${query}"`);
                     return;
                 }
+                
                 for (const item of (data.data.children || [])) {
                     const d = item.data;
                     if (!d?.display_name || found.has(d.display_name)) continue;
@@ -106,8 +102,9 @@ export async function searchRedditCommunities(
                         url:         `https://reddit.com/r/${d.display_name}`,
                     });
                 }
-            }),
+            })
         );
+        
         if (i + BATCH < queries.length) {
             await new Promise(resolve => setTimeout(resolve, DELAY_MS));
         }
@@ -117,13 +114,15 @@ export async function searchRedditCommunities(
 
 export async function redditDiscoverTool(): Promise<Community[]> {
     const queries = await aiGenerateSearchQueries();
-    const found   = await searchRedditCommunities(queries);
-    const all     = [...found.values()].sort((a, b) => b.subscribers - a.subscribers);
+    console.log(`[redditDiscoverTool] Running ${queries.length} AI queries via parallel proxy race...`);
+    
+    const found = await searchRedditCommunities(queries);
+    const all   = [...found.values()].sort((a, b) => b.subscribers - a.subscribers);
 
     if (all.length === 0) {
-        throw new Error('Reddit search returned 0 communities — all proxy sources failed. Check proxy availability.');
+        throw new Error('Reddit search returned 0 communities — all proxy sources failed.');
     }
 
-    console.log(`[redditDiscoverTool] Found ${all.length} unique communities via proxy`);
+    console.log(`[redditDiscoverTool] Found ${all.length} unique communities`);
     return all;
 }
