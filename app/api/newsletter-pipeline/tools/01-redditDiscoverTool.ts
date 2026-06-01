@@ -34,10 +34,53 @@ export async function aiGenerateSearchQueries(): Promise<string[]> {
     return queries;
 }
 
-export async function searchRedditCommunities(queries: string[], onQueryProgress?: (query: string, index: number, total: number, foundCount: number) => void): Promise<Map<string, Community>> {
+// No fallback list — if all proxy sources fail, the pipeline throws a clear error.
+
+// ── Try fetching a Reddit search URL through multiple proxy sources ────────────
+// Same pattern as Tool 3 (redditFetchPostsTool) which already works in production.
+async function fetchSubredditSearch(query: string): Promise<any | null> {
+    const targetUrl = `https://www.reddit.com/subreddits/search.json?q=${encodeURIComponent(query)}&limit=25&sort=relevance`;
+
+    const sources = [
+        // 1. Direct — works locally, blocked by 403 on Vercel datacenter IPs
+        targetUrl,
+        // 2. allorigins — CORS-free public proxy, returns raw body
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+        // 3. corsproxy.io — another reliable public CORS proxy
+        `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+        // 4. codetabs — fallback
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
+    ];
+
+    for (const src of sources) {
+        try {
+            const res = await fetchWithTimeout(src, 12000, {
+                headers: { 'User-Agent': USER_AGENT },
+                cache:   'no-store',
+            });
+            if (!res.ok) {
+                console.warn(`[redditDiscoverTool] source returned ${res.status}: ${src.slice(0, 60)}`);
+                continue;
+            }
+            const text = await res.text();
+            if (!text?.trim()) continue;
+            const parsed = JSON.parse(text);
+            // Valid Reddit search response has data.children
+            if (parsed?.data?.children) return parsed;
+        } catch (e) {
+            console.warn(`[redditDiscoverTool] proxy failed (${src.slice(0, 60)}):`, (e as Error).message);
+        }
+    }
+    return null; // all sources failed for this query
+}
+
+export async function searchRedditCommunities(
+    queries: string[],
+    onQueryProgress?: (query: string, index: number, total: number, foundCount: number) => void,
+): Promise<Map<string, Community>> {
     const found    = new Map<string, Community>();
-    const BATCH    = 3;    // 3 parallel requests at a time — gentle on Reddit
-    const DELAY_MS = 1000; // 1s between batches
+    const BATCH    = 3;    // 3 parallel requests at a time
+    const DELAY_MS = 800;  // 800ms between batches
 
     for (let i = 0; i < queries.length; i += BATCH) {
         const batch = queries.slice(i, i + BATCH);
@@ -45,32 +88,23 @@ export async function searchRedditCommunities(queries: string[], onQueryProgress
             batch.map(async (query, batchIdx) => {
                 const globalIndex = i + batchIdx;
                 if (globalIndex >= queries.length) return;
-                try {
-                    if (onQueryProgress) {
-                        onQueryProgress(query, globalIndex, queries.length, found.size);
-                    }
-                    const url = `https://www.reddit.com/subreddits/search.json?q=${encodeURIComponent(query)}&limit=25&sort=relevance`;
-                    const res = await fetchWithTimeout(url, 10000, {
-                        headers: { 'User-Agent': USER_AGENT },
-                        cache:   'no-store',
+                if (onQueryProgress) {
+                    onQueryProgress(query, globalIndex, queries.length, found.size);
+                }
+                const data = await fetchSubredditSearch(query);
+                if (!data) {
+                    console.warn(`[redditDiscoverTool] all sources failed for query "${query}"`);
+                    return;
+                }
+                for (const item of (data.data.children || [])) {
+                    const d = item.data;
+                    if (!d?.display_name || found.has(d.display_name)) continue;
+                    found.set(d.display_name, {
+                        name:        d.display_name as string,
+                        subscribers: (d.subscribers || 0) as number,
+                        description: ((d.public_description || d.title || '') as string).slice(0, 200),
+                        url:         `https://reddit.com/r/${d.display_name}`,
                     });
-                    if (!res.ok) {
-                        console.warn(`[redditDiscoverTool] Reddit returned ${res.status} for "${query}"`);
-                        return;
-                    }
-                    const data = await res.json();
-                    for (const item of (data?.data?.children || [])) {
-                        const d = item.data;
-                        if (!d?.display_name || found.has(d.display_name)) continue;
-                        found.set(d.display_name, {
-                            name:        d.display_name       as string,
-                            subscribers: (d.subscribers || 0)  as number,
-                            description: ((d.public_description || d.title || '') as string).slice(0, 200),
-                            url:         `https://reddit.com/r/${d.display_name}`,
-                        });
-                    }
-                } catch (e) {
-                    console.warn(`[redditDiscoverTool] query "${query}" failed:`, e);
                 }
             }),
         );
@@ -87,9 +121,9 @@ export async function redditDiscoverTool(): Promise<Community[]> {
     const all     = [...found.values()].sort((a, b) => b.subscribers - a.subscribers);
 
     if (all.length === 0) {
-        throw new Error('Reddit search returned 0 communities — Reddit may be rate limiting. Try again in a few minutes.');
+        throw new Error('Reddit search returned 0 communities — all proxy sources failed. Check proxy availability.');
     }
 
-    console.log(`[redditDiscoverTool] Found ${all.length} unique communities`);
+    console.log(`[redditDiscoverTool] Found ${all.length} unique communities via proxy`);
     return all;
 }
