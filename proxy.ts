@@ -1,11 +1,14 @@
+// proxy.ts — replaces deprecated middleware.ts (Next.js 16+)
+// After confirming this works, delete middleware.ts
+
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
-  const isExplicitProxy = pathname.startsWith('/grafana-proxy');
-  const isGrafanaAsset = pathname.startsWith('/public') || pathname.startsWith('/avatar');
+  const isExplicitProxy  = pathname.startsWith('/grafana-proxy');
+  const isGrafanaAsset   = pathname.startsWith('/public') || pathname.startsWith('/avatar');
   const isGrafanaDashboard = pathname.startsWith('/d/');
 
   const isLocalApi =
@@ -43,15 +46,15 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/api/newsrag') ||
     pathname.startsWith('/api/saved-newsletters') ||
     pathname.startsWith('/api/sync-clerk-to-resend') ||
-    pathname.startsWith('/api/edu-content');   // ← edu content tester
+    pathname.startsWith('/api/edu-content') ||
+    pathname.startsWith('/api/video-reel');
+    // /api/merge-clips removed — merge is now client-side via ffmpeg.wasm
 
   const isGrafanaApi = pathname.startsWith('/api/') && !isLocalApi;
 
   if (isExplicitProxy || isGrafanaAsset || isGrafanaApi || isGrafanaDashboard) {
     const grafanaUrl = process.env.NEXT_PUBLIC_GRAFANA_URL;
-    const apiToken = process.env.GRAFANA_API_TOKEN;
-
-    console.log('Grafana Proxy Request:', pathname);
+    const apiToken   = process.env.GRAFANA_API_TOKEN;
 
     if (!grafanaUrl || !apiToken) {
       console.error('Grafana configuration missing');
@@ -59,23 +62,17 @@ export function middleware(request: NextRequest) {
     }
 
     let targetPath = pathname;
-    if (isExplicitProxy) {
-      targetPath = pathname.replace('/grafana-proxy', '');
-    }
+    if (isExplicitProxy) targetPath = pathname.replace('/grafana-proxy', '');
 
     const url = new URL(`${grafanaUrl}${targetPath}`);
-    request.nextUrl.searchParams.forEach((value, key) => {
-      url.searchParams.set(key, value);
-    });
+    request.nextUrl.searchParams.forEach((value, key) => url.searchParams.set(key, value));
 
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set('Authorization', `Bearer ${apiToken}`);
     requestHeaders.set('Host', url.host);
     requestHeaders.set('Origin', url.origin);
 
-    return NextResponse.rewrite(url, {
-      request: { headers: requestHeaders },
-    });
+    return NextResponse.rewrite(url, { request: { headers: requestHeaders } });
   }
 }
 
