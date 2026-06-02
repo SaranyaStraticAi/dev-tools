@@ -20,35 +20,82 @@ export interface DeepAnalysisResult {
     prompts?:           { system: string; user: string; userTemplate?: string };
 }
 
-async function fetchComments(post: RedditPostRaw): Promise<string[]> {
-    const url = `https://www.reddit.com/r/${post.subreddit}/comments/${post.id}.json?limit=100&depth=3&sort=top`;
-    const sources = [
-        url,
-        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-        `https://corsproxy.io/?${encodeURIComponent(url)}`,
-    ];
-    for (const src of sources) {
-        try {
-            const res = await fetchWithTimeout(src, 10000, { headers: { 'User-Agent': USER_AGENT }, cache: 'no-store' });
-            if (!res.ok) continue;
-            const data = await res.json();
-            const commentListing = Array.isArray(data) ? data[1] : null;
-            if (!commentListing?.data?.children) continue;
-            const comments: string[] = [];
-            function extract(children: any[], depth = 0) {
-                for (const child of children) {
-                    if (child.kind !== 't1') continue;
-                    const c = child.data;
-                    if (!c.body || c.body === '[deleted]' || c.body === '[removed]') continue;
-                    const indent = depth > 0 ? '  '.repeat(depth) + '↳ ' : '';
-                    comments.push(`${indent}${c.author}: ${c.body.trim()}`);
-                    if (c.replies?.data?.children?.length) extract(c.replies.data.children, depth + 1);
-                }
-            }
-            extract(commentListing.data.children);
-            return comments;
-        } catch { /* try next */ }
+function decodeHtml(str: string): string {
+    return str
+        .replace(/&amp;/g,  '&')
+        .replace(/&lt;/g,   '<')
+        .replace(/&gt;/g,   '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g,  "'")
+        .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+        .trim();
+}
+
+function stripHtml(str: string): string {
+    return str.replace(/<[^>]+>/g, ' ').replace(/\s{2,}/g, ' ').trim();
+}
+
+function parseCommentsRss(xml: string): string[] {
+    const comments: string[] = [];
+    const entryRe = /<entry>([\s\S]*?)<\/entry>/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = entryRe.exec(xml)) !== null) {
+        const entry = match[1];
+
+        const author = entry.match(/<name>([\s\S]*?)<\/name>/)?.[1] ?? '';
+        const content = entry.match(/<content[^>]*>([\s\S]*?)<\/content>/)?.[1]
+                     ?? entry.match(/<summary[^>]*>([\s\S]*?)<\/summary>/)?.[1]
+                     ?? '';
+
+        const body = stripHtml(decodeHtml(content)).trim();
+        if (body && body !== '[deleted]' && body !== '[removed]') {
+            comments.push(`${author}: ${body}`);
+        }
     }
+    return comments;
+}
+
+async function fetchComments(post: RedditPostRaw): Promise<string[]> {
+    const cleanId = post.id.startsWith('t3_') ? post.id.slice(3) : post.id;
+    const rssUrl = `https://www.reddit.com/r/${post.subreddit}/comments/${cleanId}.rss?limit=100`;
+    
+    // ── Primary: Direct RSS fetch ──────────────────────────────────────────
+    try {
+        const res = await fetchWithTimeout(rssUrl, 10000, {
+            headers: { 'User-Agent': USER_AGENT },
+            cache:   'no-store',
+        });
+        if (res.ok) {
+            const xml = await res.text();
+            const comments = parseCommentsRss(xml);
+            if (comments.length > 0) return comments;
+        }
+    } catch (e) {
+        /* fall through to proxies */
+    }
+
+    // ── Fallback: CORS proxies for RSS ──────────────────────────────────────
+    const proxies = [
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(rssUrl)}`,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`,
+        `https://thingproxy.freeboard.io/fetch/${rssUrl}`
+    ];
+
+    for (const src of proxies) {
+        try {
+            const res = await fetchWithTimeout(src, 10000, {
+                headers: { 'User-Agent': USER_AGENT },
+                cache:   'no-store',
+            });
+            if (!res.ok) continue;
+            const xml = await res.text();
+            if (!xml?.trim()) continue;
+            const comments = parseCommentsRss(xml);
+            if (comments.length > 0) return comments;
+        } catch { /* try next proxy */ }
+    }
+
     return [];
 }
 
