@@ -3,7 +3,7 @@
 // Step B: Search Reddit subreddits via RSS (no auth needed) instead of JSON API
 // Returns Community[] — same shape as before so Tool 2 is unchanged.
 
-import { fetchWithTimeout, USER_AGENT, callAI, parseJSON } from './base';
+import { fetchWithTimeout, USER_AGENT, callAI, parseJSON, getRedditOAuthToken } from './base';
 
 export interface Community {
     name:        string;
@@ -131,8 +131,9 @@ export async function searchRedditCommunities(
                 for (const c of communities) {
                     if (!found.has(c.name)) found.set(c.name, c);
                 }
-            }),
+            })
         );
+        
         if (i + BATCH < queries.length) {
             await new Promise(r => setTimeout(r, DELAY_MS));
         }
@@ -142,8 +143,10 @@ export async function searchRedditCommunities(
 
 export async function redditDiscoverTool(): Promise<Community[]> {
     const queries = await aiGenerateSearchQueries();
-    const found   = await searchRedditCommunities(queries);
-    const all     = [...found.values()].sort((a, b) => b.subscribers - a.subscribers);
+    console.log(`[redditDiscoverTool] Running ${queries.length} AI queries via parallel proxy race...`);
+    
+    const found = await searchRedditCommunities(queries);
+    const all   = [...found.values()].sort((a, b) => b.subscribers - a.subscribers);
 
     if (all.length === 0) {
         throw new Error('Reddit subreddit search returned 0 communities — Reddit may be temporarily unavailable.');
