@@ -73,10 +73,11 @@ function parsePostsRss(xml: string, subreddit: string): RedditPostRaw[] {
 // ── Fetch one subreddit via RSS (primary) then JSON proxies (fallback) ────────
 
 async function fetchOneSub(subreddit: string, timeframe: string): Promise<RedditPostRaw[]> {
+    const rssUrl = `https://www.reddit.com/r/${subreddit}/top.rss?t=${timeframe}&limit=50`;
+
     // ── Primary: Direct RSS ──────────────────────────────────────────────────
     try {
-        const rssUrl = `https://www.reddit.com/r/${subreddit}/top.rss?t=${timeframe}&limit=50`;
-        const res    = await fetchWithTimeout(rssUrl, 10000, {
+        const res = await fetchWithTimeout(rssUrl, 10000, {
             headers: { 'User-Agent': USER_AGENT },
             cache:   'no-store',
         });
@@ -85,18 +86,39 @@ async function fetchOneSub(subreddit: string, timeframe: string): Promise<Reddit
             const posts = parsePostsRss(xml, subreddit);
             if (posts.length > 0) return posts;
         }
-    } catch { /* fall through to JSON proxies */ }
+    } catch { /* fall through to RSS proxies */ }
+
+    // ── Secondary: CORS proxies for RSS ──────────────────────────────────────
+    const rssProxies = [
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(rssUrl)}`,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`,
+        `https://thingproxy.freeboard.io/fetch/${rssUrl}`
+    ];
+
+    for (const src of rssProxies) {
+        try {
+            const res = await fetchWithTimeout(src, 10000, {
+                headers: { 'User-Agent': USER_AGENT },
+                cache:   'no-store',
+            });
+            if (!res.ok) continue;
+            const xml = await res.text();
+            if (!xml?.trim()) continue;
+            const posts = parsePostsRss(xml, subreddit);
+            if (posts.length > 0) return posts;
+        } catch { /* try next proxy */ }
+    }
 
     // ── Fallback: CORS proxies for JSON API ───────────────────────────────────
     const targetUrl = `https://www.reddit.com/r/${subreddit}/top.json?t=${timeframe}&limit=50`;
-    const proxies = [
+    const jsonProxies = [
         `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
         `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
         `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
         `https://thingproxy.freeboard.io/fetch/${targetUrl}`
     ];
 
-    for (const src of proxies) {
+    for (const src of jsonProxies) {
         try {
             const res = await fetchWithTimeout(src, 10000, {
                 headers: { 'User-Agent': USER_AGENT },
