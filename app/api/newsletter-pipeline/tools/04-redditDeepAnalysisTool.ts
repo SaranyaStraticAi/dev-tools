@@ -59,27 +59,13 @@ function parseCommentsRss(xml: string): string[] {
 async function fetchComments(post: RedditPostRaw): Promise<string[]> {
     const cleanId = post.id.startsWith('t3_') ? post.id.slice(3) : post.id;
     const rssUrl = `https://www.reddit.com/r/${post.subreddit}/comments/${cleanId}.rss?limit=100`;
-    
-    // ── Primary: Direct RSS fetch ──────────────────────────────────────────
-    try {
-        const res = await fetchWithTimeout(rssUrl, 10000, {
-            headers: { 'User-Agent': USER_AGENT },
-            cache:   'no-store',
-        });
-        if (res.ok) {
-            const xml = await res.text();
-            const comments = parseCommentsRss(xml);
-            if (comments.length > 0) return comments;
-        }
-    } catch (e) {
-        /* fall through to proxies */
-    }
 
-    // ── Fallback: CORS proxies for RSS ──────────────────────────────────────
+    // ── CORS proxies first (avoids direct Reddit requests that 403 on Vercel) ──
     const proxies = [
         `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(rssUrl)}`,
         `https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`,
-        `https://thingproxy.freeboard.io/fetch/${rssUrl}`
+        `https://thingproxy.freeboard.io/fetch/${rssUrl}`,
+        rssUrl // direct direct fetch as last resort
     ];
 
     for (const src of proxies) {
@@ -92,7 +78,9 @@ async function fetchComments(post: RedditPostRaw): Promise<string[]> {
             const xml = await res.text();
             if (!xml?.trim()) continue;
             const comments = parseCommentsRss(xml);
-            if (comments.length > 0) return comments;
+            if (comments.length > 0) {
+                return comments;
+            }
         } catch { /* try next proxy */ }
     }
 
