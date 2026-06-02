@@ -50,10 +50,10 @@ CRITICAL: duration_seconds must be exactly 4, 8, or 12. Sora 2 rejects all other
 
 export async function POST(req: NextRequest) {
   try {
-    const { systemPrompt, brief, marketContext, temperature = 0.85 } = await req.json();
+    const { systemPrompt, brief, marketContext, temperature = 0.85, fullUserPrompt } = await req.json();
 
-    if (!systemPrompt || !brief) {
-      return NextResponse.json({ error: 'systemPrompt and brief are required' }, { status: 400 });
+    if (!systemPrompt || (!brief && !fullUserPrompt)) {
+      return NextResponse.json({ error: 'systemPrompt and either brief or fullUserPrompt are required' }, { status: 400 });
     }
 
     const { apiKey, resource, dep, ver } = getAzureConfig();
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Azure OpenAI credentials missing' }, { status: 500 });
     }
 
-    const userContent = [
+    const userContent = fullUserPrompt || [
       brief,
       marketContext ? `\n${marketContext}` : '',
       '\n## YOUR TASK',

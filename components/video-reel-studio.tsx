@@ -19,6 +19,7 @@ type SavedConfig = {
   id: string; name: string; day: DayKey;
   systemPrompt: string; notes: string; marketContext: string;
   savedBy: string; savedAt: string; recommended: boolean; recommendNote: string;
+  fullUserPrompt?: string;
 };
 
 const initClip = (): ClipSt => ({ status:'idle', elapsed:0, url:null, err:null });
@@ -213,6 +214,7 @@ export default function VideoReelStudio() {
   const [sysP,         setSysP]         = useState(DEFAULT_SYSTEM);
   const [notes,        setNotes]        = useState(DAYS.monday.notes);
   const [mktCtx,       setMktCtx]       = useState(MOCK_TA);
+  const [customUserPrompt, setCustomUserPrompt] = useState<string|null>(null);
   const [showSys,      setShowSys]      = useState(false);
   const [showCtx,      setShowCtx]      = useState(true);
   const [showPrompt,   setShowPrompt]   = useState(false);
@@ -247,7 +249,15 @@ export default function VideoReelStudio() {
     try {
       const r = await fetch('/api/video-reel/prompts', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ name:saveName, day, systemPrompt:sysP, notes, marketContext:mktCtx, savedBy }),
+        body: JSON.stringify({
+          name:saveName,
+          day,
+          systemPrompt:sysP,
+          notes,
+          marketContext:mktCtx,
+          fullUserPrompt: customUserPrompt !== null ? customUserPrompt : buildFullUserPrompt(),
+          savedBy
+        }),
       });
       if (r.ok) { const cfg = await r.json(); setConfigs(prev => [cfg, ...prev]); setSaveName(''); setShowSaveForm(false); }
     } catch {} finally { setSaving(false); }
@@ -255,6 +265,11 @@ export default function VideoReelStudio() {
 
   function handleLoad(cfg: SavedConfig) {
     setSysP(cfg.systemPrompt); setNotes(cfg.notes); setMktCtx(cfg.marketContext);
+    if (cfg.fullUserPrompt) {
+      setCustomUserPrompt(cfg.fullUserPrompt);
+    } else {
+      setCustomUserPrompt(null);
+    }
     if (cfg.day !== day) { setDay(cfg.day); setReel(null); setClips([initClip(),initClip(),initClip()]); }
     setShowConfigs(false);
   }
@@ -281,6 +296,7 @@ export default function VideoReelStudio() {
   function changeDay(d: DayKey) {
     setDay(d); setNotes(DAYS[d].notes);
     setMktCtx(DAYS[d].dataType==='ta' ? MOCK_TA : DAYS[d].dataType==='news' ? MOCK_NEWS : '');
+    setCustomUserPrompt(null);
     setReel(null); setClips([initClip(),initClip(),initClip()]);
     setGenErr(null); setMergedUrl(null); setMergeErr(null);
   }
@@ -308,7 +324,13 @@ export default function VideoReelStudio() {
     try {
       const r = await fetch('/api/video-reel', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ systemPrompt:sysP, brief:buildBrief(), marketContext:mktCtx, temperature:0.85 }),
+        body: JSON.stringify({
+          systemPrompt:sysP,
+          brief:buildBrief(),
+          marketContext:mktCtx,
+          fullUserPrompt: customUserPrompt !== null ? customUserPrompt : buildFullUserPrompt(),
+          temperature:0.85
+        }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `API ${r.status}`);
@@ -541,24 +563,22 @@ export default function VideoReelStudio() {
       </Card>
 
       {/* Market context */}
-      {d.dataType !== 'none' && (
-        <Card className="bg-background/40 border-primary/10 overflow-hidden">
-          <button className="w-full p-4 flex items-center justify-between text-sm font-semibold hover:text-foreground"
-            onClick={() => setShowCtx(!showCtx)}>
-            <span className={d.dataType==='ta' ? 'text-teal-400' : 'text-amber-400'}>
-              {d.dataType==='ta' ? '📈 Market Context' : '📰 News Trigger'}
-              <span className="font-normal normal-case text-muted-foreground ml-2">(injected into GPT-4 prompt — edit freely)</span>
-            </span>
-            {showCtx ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
-          {showCtx && (
-            <div className="px-4 pb-4 pt-2 border-t border-primary/10">
-              <textarea value={mktCtx} onChange={e => setMktCtx(e.target.value)}
-                className="w-full min-h-[160px] p-3 rounded-xl bg-muted/40 border border-primary/10 focus:border-teal-400/40 outline-none resize-y text-xs font-mono text-muted-foreground leading-relaxed" />
-            </div>
-          )}
-        </Card>
-      )}
+      <Card className="bg-background/40 border-primary/10 overflow-hidden">
+        <button className="w-full p-4 flex items-center justify-between text-sm font-semibold hover:text-foreground"
+          onClick={() => setShowCtx(!showCtx)}>
+          <span className={d.dataType==='ta' ? 'text-teal-400' : 'text-amber-400'}>
+            {d.dataType==='ta' ? '📈 Market Context' : d.dataType==='news' ? '📰 News Trigger' : '📝 Market Context / News Trigger'}
+            <span className="font-normal normal-case text-muted-foreground ml-2">(injected into GPT-4 prompt — edit freely)</span>
+          </span>
+          {showCtx ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+        {showCtx && (
+          <div className="px-4 pb-4 pt-2 border-t border-primary/10">
+            <textarea value={mktCtx} onChange={e => setMktCtx(e.target.value)}
+              className="w-full min-h-[160px] p-3 rounded-xl bg-muted/40 border border-primary/10 focus:border-teal-400/40 outline-none resize-y text-xs font-mono text-muted-foreground leading-relaxed" />
+          </div>
+        )}
+      </Card>
 
       {/* Full user prompt preview */}
       <Card className="bg-background/40 border-sky-500/20 overflow-hidden">
@@ -566,21 +586,32 @@ export default function VideoReelStudio() {
           <button className="flex-1 flex items-center gap-2 text-left hover:text-foreground transition-colors"
             onClick={() => setShowPrompt(!showPrompt)}>
             <span className="text-sky-400">👁 Full User Prompt Preview</span>
-            <span className="font-normal normal-case text-muted-foreground text-xs">— exactly what GPT-4 receives · updates live</span>
+            <span className="font-normal normal-case text-muted-foreground text-xs">
+              {customUserPrompt !== null ? '— customized (will be used for generation)' : '— exactly what GPT-4 receives · updates live'}
+            </span>
             {showPrompt ? <ChevronUp className="w-4 h-4 ml-auto text-muted-foreground" /> : <ChevronDown className="w-4 h-4 ml-auto text-muted-foreground" />}
           </button>
-          <CopyBtn text={buildFullUserPrompt()} />
+          <div className="flex items-center gap-2">
+            {customUserPrompt !== null && showPrompt && (
+              <button onClick={() => setCustomUserPrompt(null)} className="text-xs text-sky-400 hover:text-sky-300 underline mr-2">
+                Reset
+              </button>
+            )}
+            <CopyBtn text={customUserPrompt !== null ? customUserPrompt : buildFullUserPrompt()} />
+          </div>
         </div>
         {showPrompt && (
-          <div className="border-t border-sky-500/10">
-            <div className="px-4 pt-3 pb-1 flex gap-3 flex-wrap text-[10px] font-semibold uppercase tracking-widest">
+          <div className="border-t border-sky-500/10 p-4 space-y-2">
+            <div className="flex gap-3 flex-wrap text-[10px] font-semibold uppercase tracking-widest">
               <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">Part 1 · Brief</span>
               {mktCtx.trim() && <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400">Part 2 · Market context</span>}
               <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400">Part 3 · Task + schema</span>
             </div>
-            <pre className="px-4 pb-4 pt-2 text-[11px] font-mono text-muted-foreground leading-relaxed whitespace-pre-wrap overflow-auto max-h-[500px]">
-              {buildFullUserPrompt()}
-            </pre>
+            <textarea
+              value={customUserPrompt !== null ? customUserPrompt : buildFullUserPrompt()}
+              onChange={e => setCustomUserPrompt(e.target.value)}
+              className="w-full min-h-[300px] p-3 rounded-xl bg-muted/40 border border-sky-500/10 focus:border-sky-400/40 outline-none resize-y text-xs font-mono text-muted-foreground leading-relaxed"
+            />
           </div>
         )}
       </Card>
