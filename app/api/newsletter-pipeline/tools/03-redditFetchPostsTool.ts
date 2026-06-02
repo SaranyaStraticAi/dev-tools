@@ -2,7 +2,7 @@
 // Fetches top posts from ALL LLM-chosen subreddits in parallel.
 // Primary: RSS feed (no auth). Fallback: CORS proxies for JSON.
 
-import { fetchWithTimeout, USER_AGENT } from './base';
+import { fetchWithTimeout, USER_AGENT, getRedditOAuthToken } from './base';
 
 export interface RedditPostRaw {
     id: string; subreddit: string; title: string; selftext: string;
@@ -93,6 +93,7 @@ async function fetchOneSub(subreddit: string, timeframe: string): Promise<Reddit
         `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`,
         `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
         `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+        `https://thingproxy.freeboard.io/fetch/${targetUrl}`
     ];
 
     for (const src of proxies) {
@@ -137,6 +138,8 @@ export async function redditFetchPostsTool(
 ): Promise<{ posts: RedditPostRaw[]; fetchedFrom: string[]; failedFrom: string[] }> {
     if (subreddits.length === 0) return { posts: [], fetchedFrom: [], failedFrom: [] };
 
+    // Fetch all subreddits completely in parallel.
+    // Each subreddit fetch internally runs a parallel proxy race.
     const results = await Promise.allSettled(subreddits.map(sub => fetchOneSub(sub, timeframe)));
 
     const allPosts: RedditPostRaw[] = [];

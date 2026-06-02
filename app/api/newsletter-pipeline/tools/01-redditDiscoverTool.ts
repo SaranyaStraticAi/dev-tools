@@ -3,7 +3,7 @@
 // Step B: Search Reddit subreddits via RSS (no auth needed) instead of JSON API
 // Returns Community[] — same shape as before so Tool 2 is unchanged.
 
-import { fetchWithTimeout, USER_AGENT, callAI, parseJSON } from './base';
+import { fetchWithTimeout, USER_AGENT, callAI, parseJSON, getRedditOAuthToken } from './base';
 
 export interface Community {
     name:        string;
@@ -135,8 +135,9 @@ export async function searchRedditCommunities(
                 for (const c of communities) {
                     if (!found.has(c.name)) found.set(c.name, c);
                 }
-            }),
+            })
         );
+        
         if (i + BATCH < queries.length) {
             await new Promise(r => setTimeout(r, DELAY_MS));
         }
