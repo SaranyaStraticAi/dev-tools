@@ -73,7 +73,7 @@ function parsePostsRss(xml: string, subreddit: string): RedditPostRaw[] {
 // ── Fetch one subreddit via RSS (primary) then JSON proxies (fallback) ────────
 
 async function fetchOneSub(subreddit: string, timeframe: string): Promise<RedditPostRaw[]> {
-    // ── Primary: RSS ──────────────────────────────────────────────────────────
+    // ── Primary: Direct RSS ──────────────────────────────────────────────────
     try {
         const rssUrl = `https://www.reddit.com/r/${subreddit}/top.rss?t=${timeframe}&limit=50`;
         const res    = await fetchWithTimeout(rssUrl, 10000, {

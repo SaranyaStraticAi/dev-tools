@@ -21,12 +21,12 @@ Generate search queries to run on Reddit's subreddit search to find every commun
 Think broadly: forex, day trading, psychology, prop firms (FTMO, Apex), strategies (ICT, SMC, price action),
 broker issues, algo trading, funded accounts, asset classes (gold, indices, currencies), beginner traders, etc.
 
-Generate as many distinct queries as you think are genuinely needed to cover the full landscape.
-Focus on variety — each query should surface different communities, not slight variations of the same topic.
+Focus on variety and yield — each query should surface different communities.
+To prevent Vercel execution timeouts, generate a maximum of 12 highly targeted, high-yield queries.
 
 Respond ONLY with a valid JSON array of search query strings. No markdown, no explanation.`;
 
-export const REDDIT_DISCOVER_USER_PROMPT = `Generate all Reddit search queries needed to discover every community where retail forex and active traders discuss their experiences. Return as many as genuinely needed — you decide the count.`;
+export const REDDIT_DISCOVER_USER_PROMPT = `Generate up to 12 high-yield Reddit search queries needed to discover key communities where retail forex and active traders discuss their experiences.`;
 
 export async function aiGenerateSearchQueries(
     options?: { systemPrompt?: string; userPrompt?: string }
@@ -94,23 +94,48 @@ function parseSubredditRss(xml: string): Community[] {
 // ── Search one query via RSS ──────────────────────────────────────────────────
 
 async function searchSubredditsRss(query: string): Promise<Community[]> {
-    // Use subreddits/search.rss — public, no auth required
-    const url = `https://www.reddit.com/subreddits/search.rss?q=${encodeURIComponent(query)}&limit=25&sort=relevance`;
+    // ── Primary: Direct RSS search ──────────────────────────────────────────
+    const rssUrl = `https://www.reddit.com/subreddits/search.rss?q=${encodeURIComponent(query)}&limit=25&sort=relevance`;
     try {
-        const res = await fetchWithTimeout(url, 10000, {
+        const res = await fetchWithTimeout(rssUrl, 10000, {
             headers: { 'User-Agent': USER_AGENT },
             cache:   'no-store',
         });
-        if (!res.ok) {
-            console.warn(`[redditDiscoverTool] RSS ${res.status} for "${query}"`);
-            return [];
+        if (res.ok) {
+            const xml = await res.text();
+            const communities = parseSubredditRss(xml);
+            if (communities.length > 0) return communities;
         }
-        const xml = await res.text();
-        return parseSubredditRss(xml);
+        console.warn(`[redditDiscoverTool] Direct RSS returned status ${res?.status} for "${query}", trying proxies`);
     } catch (e) {
-        console.warn(`[redditDiscoverTool] query "${query}" failed:`, e);
-        return [];
+        console.warn(`[redditDiscoverTool] Direct RSS fetch failed for "${query}":`, e);
     }
+
+    // ── Fallback: CORS proxies for RSS search ──────────────────────────────────
+    const proxies = [
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(rssUrl)}`,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`,
+        `https://thingproxy.freeboard.io/fetch/${rssUrl}`
+    ];
+
+    for (const src of proxies) {
+        try {
+            const res = await fetchWithTimeout(src, 10000, {
+                headers: { 'User-Agent': USER_AGENT },
+                cache:   'no-store',
+            });
+            if (!res.ok) continue;
+            const xml = await res.text();
+            if (!xml?.trim()) continue;
+            const communities = parseSubredditRss(xml);
+            if (communities.length > 0) {
+                console.log(`[redditDiscoverTool] Proxy success for "${query}" via ${new URL(src).hostname}`);
+                return communities;
+            }
+        } catch { /* try next proxy */ }
+    }
+
+    return [];
 }
 
 // ── Main (same signature as before) ──────────────────────────────────────────
