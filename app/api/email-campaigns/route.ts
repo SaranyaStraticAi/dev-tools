@@ -38,20 +38,20 @@ export async function PATCH(req: NextRequest) {
             return NextResponse.json({ error: 'Campaign is not in scheduled state' }, { status: 400 });
         }
 
-        // Cancel each broadcast in Resend
+        // Cancel each broadcast in Resend (by removing/deleting the scheduled broadcast)
         const cancelErrors: string[] = [];
         for (const broadcastId of campaign.broadcast_ids ?? []) {
             try {
-                const res = await (resend.broadcasts as any).cancel(broadcastId);
+                const res = await resend.broadcasts.remove(broadcastId);
                 if (res?.error) {
-                    console.warn(`[email-campaigns] cancel broadcast ${broadcastId} error:`, res.error);
+                    console.warn(`[email-campaigns] remove broadcast ${broadcastId} error:`, res.error);
                     cancelErrors.push(`${broadcastId}: ${res.error.message}`);
                 } else {
-                    console.log(`[email-campaigns] ✅ Cancelled broadcast ${broadcastId}`);
+                    console.log(`[email-campaigns] ✅ Cancelled/Removed broadcast ${broadcastId}`);
                 }
             } catch (e: any) {
                 // If already sent, Resend throws — treat as non-fatal
-                console.warn(`[email-campaigns] cancel broadcast ${broadcastId} threw:`, e.message);
+                console.warn(`[email-campaigns] remove broadcast ${broadcastId} threw:`, e.message);
                 cancelErrors.push(`${broadcastId}: ${e.message}`);
             }
         }
