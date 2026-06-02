@@ -5,7 +5,7 @@ export const maxDuration = 180; // 3 minutes timeout
 
 export async function POST(req: NextRequest) {
     try {
-        const { posts } = await req.json().catch(() => ({ posts: [] }));
+        const { posts, systemPrompt, userTemplate, userPrompt } = await req.json().catch(() => ({ posts: [] }));
 
         if (!Array.isArray(posts) || posts.length === 0) {
             return NextResponse.json({ 
@@ -15,7 +15,10 @@ export async function POST(req: NextRequest) {
         }
 
         console.log(`[deep-analysis-api] Running redditDeepAnalysisTool with ${posts.length} posts...`);
-        const result = await redditDeepAnalysisTool(posts);
+        const result = await redditDeepAnalysisTool(posts, {
+            systemPrompt,
+            userTemplate: userTemplate || userPrompt
+        });
 
         return NextResponse.json({ 
             success: true, 

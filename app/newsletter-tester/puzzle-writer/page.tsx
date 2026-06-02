@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useMsal } from '@azure/msal-react';
 import { Sparkles, RefreshCw, AlertCircle, Cpu, ChevronDown, ChevronUp, CheckCircle, FileText, Check, Copy, Puzzle } from 'lucide-react';
+import { WEEKLY_SYSTEM_PROMPT, WEEKLY_USER_TEMPLATE, PUZZLE_SYSTEM_PROMPT, PUZZLE_USER_TEMPLATE } from '../constants';
 
 const DEFAULT_MOCK_INPUT = [
     {
@@ -52,15 +53,38 @@ export default function PuzzleWriterTesterPage() {
     const [rawText, setRawText] = useState('');
     const [systemPrompt, setSystemPrompt] = useState('');
     const [userTemplate, setUserTemplate] = useState('');
-    const [showPromptsPanel, setShowPromptsPanel] = useState(false);
+    const [showPromptsPanel, setShowPromptsPanel] = useState(true);
     const [activeTab, setActiveTab] = useState<'preview' | 'json'>('preview');
     const [copied, setCopied] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Save states
+    const [savingPrompts, setSavingPrompts] = useState(false);
+    const [saveStatusMsg, setSaveStatusMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
     useEffect(() => {
         setMounted(true);
         const saved = localStorage.getItem('employee_session');
         if (saved) setEmployeeAccount(saved);
+
+        // Load active prompts from Azure Blob
+        (async () => {
+            try {
+                const res = await fetch('/api/newsletter-prompts');
+                if (!res.ok) throw new Error('Failed to fetch');
+                const data = await res.json();
+                if (data.exists && data.prompts) {
+                    setSystemPrompt(data.prompts.puzzleSystem || PUZZLE_SYSTEM_PROMPT);
+                    setUserTemplate(data.prompts.puzzleUser || PUZZLE_USER_TEMPLATE);
+                } else {
+                    setSystemPrompt(PUZZLE_SYSTEM_PROMPT);
+                    setUserTemplate(PUZZLE_USER_TEMPLATE);
+                }
+            } catch (e) {
+                setSystemPrompt(PUZZLE_SYSTEM_PROMPT);
+                setUserTemplate(PUZZLE_USER_TEMPLATE);
+            }
+        })();
     }, []);
 
     const userEmail = accounts[0]?.username;
@@ -100,7 +124,11 @@ export default function PuzzleWriterTesterPage() {
             const res = await fetch('/api/newsletter-pipeline/puzzle-writer', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(parsedInput),
+                body: JSON.stringify({
+                    posts: parsedInput,
+                    systemPrompt,
+                    userTemplate
+                }),
             });
             const data = await res.json();
 
@@ -124,6 +152,47 @@ export default function PuzzleWriterTesterPage() {
         navigator.clipboard.writeText(rawText);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
+    };
+
+    const handleSavePrompts = async () => {
+        setSavingPrompts(true);
+        setSaveStatusMsg(null);
+        try {
+            // 1. Fetch current active prompts from Azure to get the other fields
+            const getRes = await fetch('/api/newsletter-prompts');
+            const getData = await getRes.json();
+            
+            const weeklySystem = getData?.prompts?.weeklySystem || WEEKLY_SYSTEM_PROMPT;
+            const weeklyUser = getData?.prompts?.weeklyUser || WEEKLY_USER_TEMPLATE;
+            const puzzleSystem = systemPrompt;
+            const puzzleUser = userTemplate;
+            const weeklyTemplate = getData?.prompts?.weeklyTemplate || '';
+            const puzzleTemplate = getData?.prompts?.puzzleTemplate || '';
+            
+            // 2. Publish updated prompts
+            const postRes = await fetch('/api/newsletter-prompts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    weeklySystem,
+                    weeklyUser,
+                    puzzleSystem,
+                    puzzleUser,
+                    weeklyTemplate,
+                    puzzleTemplate,
+                    changedType: 'puzzle'
+                }),
+            });
+            const postData = await postRes.json();
+            if (!postRes.ok) throw new Error(postData.error || 'Failed to save prompts');
+            
+            setSaveStatusMsg({ text: 'Prompts successfully published to Azure Blob!', type: 'success' });
+            setTimeout(() => setSaveStatusMsg(null), 5000);
+        } catch (e: any) {
+            setSaveStatusMsg({ text: `Save failed: ${e.message}`, type: 'error' });
+        } finally {
+            setSavingPrompts(false);
+        }
     };
 
     // Helper to parse labeled output text
@@ -177,39 +246,73 @@ export default function PuzzleWriterTesterPage() {
             </div>
 
             {/* ── Prompts Panel ────────────────────────────────────────────── */}
-            {(systemPrompt || userTemplate) && (
-                <div className="w-full max-w-4xl bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-                    <button
-                        onClick={() => setShowPromptsPanel(!showPromptsPanel)}
-                        className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-muted/50 transition-colors"
-                    >
-                        <div className="flex items-center gap-2">
-                            <Cpu className="text-purple-500" size={18} />
-                            <div>
-                                <h3 className="text-sm font-bold text-foreground">Prompts Used for Generation (Loaded from Azure Blob)</h3>
-                                <p className="text-xs text-muted-foreground">Click to view active prompts currently published in Blob Storage</p>
-                            </div>
+            <div className="w-full max-w-4xl bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+                <button
+                    onClick={() => setShowPromptsPanel(!showPromptsPanel)}
+                    className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-muted/50 transition-colors"
+                >
+                    <div className="flex items-center gap-2">
+                        <Cpu className="text-purple-500" size={18} />
+                        <div>
+                            <h3 className="text-sm font-bold text-foreground">Active Prompts (Loaded from Azure Blob - Edit Freely)</h3>
+                            <p className="text-xs text-muted-foreground">Modify these prompts directly to test alternate angles and styles in isolation</p>
                         </div>
-                        {showPromptsPanel ? <ChevronUp size={16} className="text-muted-foreground"/> : <ChevronDown size={16} className="text-muted-foreground"/>}
-                    </button>
-                    {showPromptsPanel && (
-                        <div className="border-t border-border p-6 grid grid-cols-1 md:grid-cols-2 gap-6 bg-muted/20">
+                    </div>
+                    {showPromptsPanel ? <ChevronUp size={16} className="text-muted-foreground"/> : <ChevronDown size={16} className="text-muted-foreground"/>}
+                </button>
+                {showPromptsPanel && (
+                    <div className="border-t border-border p-6 bg-muted/20 flex flex-col gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="flex flex-col gap-2">
                                 <span className="text-xs font-bold text-purple-600 uppercase tracking-wider">System Prompt</span>
-                                <pre className="text-[11px] font-mono bg-background border border-border rounded-xl p-4 text-foreground max-h-60 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                                    {systemPrompt}
-                                </pre>
+                                <textarea
+                                    value={systemPrompt}
+                                    onChange={(e) => setSystemPrompt(e.target.value)}
+                                    rows={12}
+                                    className="w-full text-[11px] font-mono bg-background border border-border rounded-xl p-4 text-foreground outline-none focus:ring-1 focus:ring-purple-500 resize-y leading-relaxed"
+                                />
                             </div>
                             <div className="flex flex-col gap-2">
                                 <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">User Template</span>
-                                <pre className="text-[11px] font-mono bg-background border border-border rounded-xl p-4 text-foreground max-h-60 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                                    {userTemplate}
-                                </pre>
+                                <textarea
+                                    value={userTemplate}
+                                    onChange={(e) => setUserTemplate(e.target.value)}
+                                    rows={12}
+                                    className="w-full text-[11px] font-mono bg-background border border-border rounded-xl p-4 text-foreground outline-none focus:ring-1 focus:ring-purple-500 resize-y leading-relaxed"
+                                />
                             </div>
                         </div>
-                    )}
-                </div>
-            )}
+                        <div className="flex justify-end gap-3 items-center border-t border-border/60 pt-4">
+                            {saveStatusMsg && (
+                                <span className={`text-xs font-medium ${saveStatusMsg.type === 'error' ? 'text-red-500' : 'text-green-500'}`}>
+                                    {saveStatusMsg.text}
+                                </span>
+                            )}
+                            <button
+                                onClick={handleSavePrompts}
+                                disabled={savingPrompts || !systemPrompt || !userTemplate}
+                                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-bold text-xs transition-all shadow-sm ${
+                                    savingPrompts
+                                        ? 'bg-purple-100 text-purple-400 cursor-not-allowed'
+                                        : 'bg-purple-600 hover:bg-purple-700 text-white cursor-pointer'
+                                }`}
+                            >
+                                {savingPrompts ? (
+                                    <>
+                                        <RefreshCw className="animate-spin" size={12} />
+                                        Saving to Azure...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Cpu size={12} />
+                                        Save &amp; Publish to Azure Blob
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
 
             {/* ── Workspace ────────────────────────────────────────────────── */}
             <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-6">

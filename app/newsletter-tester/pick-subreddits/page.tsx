@@ -67,17 +67,97 @@ export default function LlmPickSubredditsTesterPage() {
     const [lastProcessedCandidates, setLastProcessedCandidates] = useState<Community[]>([]);
     
     // Prompts
-    const [systemPrompt, setSystemPrompt] = useState('');
-    const [userTemplate, setUserTemplate] = useState('');
-    const [showPromptsPanel, setShowPromptsPanel] = useState(false);
+    const [systemPrompt, setSystemPrompt] = useState(`You are a content strategist for Vibe Trader Weekly — a newsletter specifically for FOREX and active RETAIL TRADERS who trade currency pairs, indices, and commodities with real money.
+
+Your job: from the list below, select ONLY the communities where people actively discuss:
+- Forex currency pair trading (EUR/USD, GBP/JPY, XAU/USD etc.)
+- Day trading, swing trading, scalping with real money
+- Trading psychology, losses, discipline, emotional struggles
+- Prop firms and funded accounts (FTMO, Apex, TopStep etc.)
+- Technical analysis, price action, SMC, ICT strategies
+- Algorithmic and systematic trading
+- Risk management, position sizing
+- Futures trading (not crypto futures)
+- Broker issues, spreads, slippage, withdrawals
+
+STRICTLY EXCLUDE:
+- wallstreetbets, WallStreetbetsELITE, or any meme stock community
+- stocks, StockMarket, pennystocks, investing — pure stock market communities
+- Any crypto or cryptocurrency trading community
+- binaryoptions
+- Indian, Philippine, or any country-specific stock market communities
+- finance, personalfinance — general finance not active trading
+- Any buy-and-hold, long-term investing, or passive income community
+- Any community with "cracked", "free", "leaked", "pirat" in the name
+- Any community promoting scams, signals sellers, or get-rich-quick schemes
+
+ONLY include communities where the PRIMARY topic is active forex/retail trading with real money.
+Do NOT set an artificial limit — include every relevant community regardless of how many.
+Return subreddit names WITHOUT the r/ prefix.
+
+Respond ONLY with a valid JSON array of subreddit name strings. No markdown, no explanation.`);
+    const [userTemplate, setUserTemplate] = useState(`Here are Reddit communities discovered by searching for trading topics.
+Select ONLY the ones focused on active forex, currency, and retail trading.
+Strictly exclude meme stocks, crypto, country-specific stock markets, and general investing.
+
+{communityList}
+
+Return a JSON array of subreddit names only — no r/ prefix.`);
+    const [showPromptsPanel, setShowPromptsPanel] = useState(true);
 
     const [error, setError] = useState<string | null>(null);
+
+
+
+    // Save states
+    const [savingPrompts, setSavingPrompts] = useState(false);
+    const [saveStatusMsg, setSaveStatusMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
     useEffect(() => {
         setMounted(true);
         const saved = localStorage.getItem('employee_session');
         if (saved) setEmployeeAccount(saved);
+
+        // Load active prompts from Azure Blob
+        (async () => {
+            try {
+                const res = await fetch('/api/newsletter-prompts');
+                if (!res.ok) throw new Error('Failed to fetch');
+                const data = await res.json();
+                if (data.exists && data.prompts) {
+                    if (data.prompts.pickSystem) setSystemPrompt(data.prompts.pickSystem);
+                    if (data.prompts.pickUser) setUserTemplate(data.prompts.pickUser);
+                }
+            } catch (e) {
+                console.warn('Failed to load prompts from Azure Blob:', e);
+            }
+        })();
     }, []);
+
+    const handleSavePrompts = async () => {
+        setSavingPrompts(true);
+        setSaveStatusMsg(null);
+        try {
+            const postRes = await fetch('/api/newsletter-prompts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    pickSystem: systemPrompt,
+                    pickUser: userTemplate,
+                    changedType: 'pick'
+                }),
+            });
+            const postData = await postRes.json();
+            if (!postRes.ok) throw new Error(postData.error || 'Failed to save prompts');
+            
+            setSaveStatusMsg({ text: 'Prompts successfully published to Azure Blob!', type: 'success' });
+            setTimeout(() => setSaveStatusMsg(null), 5000);
+        } catch (e: any) {
+            setSaveStatusMsg({ text: `Save failed: ${e.message}`, type: 'error' });
+        } finally {
+            setSavingPrompts(false);
+        }
+    };
 
     const userEmail = accounts[0]?.username;
     const isAllowed = userEmail === 'masood@aity.dev' || employeeAccount === 'ketki@vibetrader.com' || userEmail === 'ketki@vibetrader.com';
@@ -115,7 +195,11 @@ export default function LlmPickSubredditsTesterPage() {
             const res = await fetch('/api/newsletter-pipeline/pick-subreddits', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ communities: parsedCandidates }),
+                body: JSON.stringify({ 
+                    communities: parsedCandidates,
+                    systemPrompt,
+                    userTemplate
+                }),
             });
             const data = await res.json();
             
@@ -124,8 +208,8 @@ export default function LlmPickSubredditsTesterPage() {
             }
 
             setPickedSubreddits(data.picked || []);
-            setSystemPrompt(data.system || '');
-            setUserTemplate(data.userTemplate || '');
+            if (data.system) setSystemPrompt(data.system);
+            if (data.userTemplate) setUserTemplate(data.userTemplate);
         } catch (err: any) {
             setError(err.message || 'An unexpected error occurred.');
         } finally {
@@ -154,39 +238,72 @@ export default function LlmPickSubredditsTesterPage() {
             </div>
 
             {/* ── Prompts Used Panel ───────────────────────────────────────── */}
-            {(systemPrompt || userTemplate) && (
-                <div className="w-full max-w-4xl bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-                    <button
-                        onClick={() => setShowPromptsPanel(!showPromptsPanel)}
-                        className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-muted/50 transition-colors"
-                    >
-                        <div className="flex items-center gap-2">
-                            <Cpu className="text-purple-500" size={18} />
-                            <div>
-                                <h3 className="text-sm font-bold text-foreground">Prompts Used for Filtering</h3>
-                                <p className="text-xs text-muted-foreground">Click to view System and User templates sent to the LLM</p>
-                            </div>
+            <div className="w-full max-w-4xl bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+                <button
+                    onClick={() => setShowPromptsPanel(!showPromptsPanel)}
+                    className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-muted/50 transition-colors"
+                >
+                    <div className="flex items-center gap-2">
+                        <Cpu className="text-purple-500" size={18} />
+                        <div>
+                            <h3 className="text-sm font-bold text-foreground">Filtering Prompts (Edit Freely)</h3>
+                            <p className="text-xs text-muted-foreground">Click to view/edit System and User templates sent to the LLM</p>
                         </div>
-                        {showPromptsPanel ? <ChevronUp size={16} className="text-muted-foreground"/> : <ChevronDown size={16} className="text-muted-foreground"/>}
-                    </button>
-                    {showPromptsPanel && (
-                        <div className="border-t border-border p-6 grid grid-cols-1 md:grid-cols-2 gap-6 bg-muted/20">
+                    </div>
+                    {showPromptsPanel ? <ChevronUp size={16} className="text-muted-foreground"/> : <ChevronDown size={16} className="text-muted-foreground"/>}
+                </button>
+                {showPromptsPanel && (
+                    <div className="border-t border-border bg-muted/20">
+                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="flex flex-col gap-2">
                                 <span className="text-xs font-bold text-purple-600 uppercase tracking-wider">System Prompt</span>
-                                <pre className="text-[11px] font-mono bg-background border border-border rounded-xl p-4 text-foreground max-h-60 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                                    {systemPrompt}
-                                </pre>
+                                <textarea
+                                    value={systemPrompt}
+                                    onChange={(e) => setSystemPrompt(e.target.value)}
+                                    rows={10}
+                                    className="w-full text-[11px] font-mono bg-background border border-border rounded-xl p-4 text-foreground outline-none focus:ring-1 focus:ring-purple-500 resize-y leading-relaxed"
+                                />
                             </div>
                             <div className="flex flex-col gap-2">
                                 <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">User Template</span>
-                                <pre className="text-[11px] font-mono bg-background border border-border rounded-xl p-4 text-foreground max-h-60 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                                    {userTemplate}
-                                </pre>
+                                <textarea
+                                    value={userTemplate}
+                                    onChange={(e) => setUserTemplate(e.target.value)}
+                                    rows={10}
+                                    className="w-full text-[11px] font-mono bg-background border border-border rounded-xl p-4 text-foreground outline-none focus:ring-1 focus:ring-purple-500 resize-y leading-relaxed"
+                                />
                             </div>
                         </div>
-                    )}
-                </div>
-            )}
+                        <div className="px-6 pb-6 pt-2 border-t border-border/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                            <button
+                                onClick={handleSavePrompts}
+                                disabled={savingPrompts}
+                                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 ${
+                                    savingPrompts
+                                        ? 'bg-purple-100 text-purple-400 cursor-not-allowed'
+                                        : 'bg-purple-600 hover:bg-purple-700 text-white cursor-pointer'
+                                }`}
+                            >
+                                {savingPrompts ? (
+                                    <>
+                                        <RefreshCw className="animate-spin" size={14} />
+                                        Saving to Azure...
+                                    </>
+                                ) : (
+                                    <>☁️ Save & Publish to Azure Blob</>
+                                )}
+                            </button>
+                            {saveStatusMsg && (
+                                <span className={`text-xs font-medium px-3 py-1 rounded-lg ${
+                                    saveStatusMsg.type === 'success' ? 'bg-green-500/10 text-green-600 dark:text-green-400' : 'bg-red-500/10 text-red-600 dark:text-red-400'
+                                }`}>
+                                    {saveStatusMsg.text}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
 
             {/* ── Main Workspace ───────────────────────────────────────────── */}
             <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-2 gap-6">

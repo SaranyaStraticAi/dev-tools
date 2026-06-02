@@ -28,8 +28,12 @@ Respond ONLY with a valid JSON array of search query strings. No markdown, no ex
 
 export const REDDIT_DISCOVER_USER_PROMPT = `Generate all Reddit search queries needed to discover every community where retail forex and active traders discuss their experiences. Return as many as genuinely needed — you decide the count.`;
 
-export async function aiGenerateSearchQueries(): Promise<string[]> {
-    const raw     = await callAI(REDDIT_DISCOVER_SYSTEM_PROMPT, REDDIT_DISCOVER_USER_PROMPT, 0.7);
+export async function aiGenerateSearchQueries(
+    options?: { systemPrompt?: string; userPrompt?: string }
+): Promise<string[]> {
+    const sys = options?.systemPrompt || REDDIT_DISCOVER_SYSTEM_PROMPT;
+    const usr = options?.userPrompt || REDDIT_DISCOVER_USER_PROMPT;
+    const raw     = await callAI(sys, usr, 0.7);
     const queries = parseJSON<string[]>(raw);
     if (!Array.isArray(queries) || queries.length === 0) throw new Error('AI returned no search queries');
     console.log(`[redditDiscoverTool] AI generated ${queries.length} queries:`, queries);
@@ -141,12 +145,12 @@ export async function searchRedditCommunities(
     return found;
 }
 
-export async function redditDiscoverTool(): Promise<Community[]> {
-    const queries = await aiGenerateSearchQueries();
-    console.log(`[redditDiscoverTool] Running ${queries.length} AI queries via parallel proxy race...`);
-    
-    const found = await searchRedditCommunities(queries);
-    const all   = [...found.values()].sort((a, b) => b.subscribers - a.subscribers);
+export async function redditDiscoverTool(
+    options?: { systemPrompt?: string; userPrompt?: string }
+): Promise<Community[]> {
+    const queries = await aiGenerateSearchQueries(options);
+    const found   = await searchRedditCommunities(queries);
+    const all     = [...found.values()].sort((a, b) => b.subscribers - a.subscribers);
 
     if (all.length === 0) {
         throw new Error('Reddit subreddit search returned 0 communities — Reddit may be temporarily unavailable.');

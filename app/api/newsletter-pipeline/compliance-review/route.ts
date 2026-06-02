@@ -6,7 +6,7 @@ export const maxDuration = 180; // 3 minutes timeout
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json().catch(() => ({}));
-        const { draftText } = body;
+        const { draftText, systemPrompt, userTemplate, userPrompt } = body;
 
         if (!draftText || typeof draftText !== 'string') {
             return NextResponse.json({ 
@@ -16,7 +16,10 @@ export async function POST(req: NextRequest) {
         }
 
         console.log('[compliance-review-api] Running complianceReviewTool...');
-        const result = await complianceReviewTool(draftText);
+        const result = await complianceReviewTool(draftText, {
+            systemPrompt,
+            userTemplate: userTemplate || userPrompt
+        });
 
         return NextResponse.json({ 
             success: true, 
