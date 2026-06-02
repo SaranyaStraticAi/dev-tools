@@ -10,6 +10,8 @@ export const maxDuration = 180; // 3 minutes timeout
 
 export async function POST(req: NextRequest) {
     try {
+        const body = await req.json().catch(() => ({}));
+        const { systemPrompt, userPrompt } = body;
         const encoder = new TextEncoder();
 
         const stream = new ReadableStream({
@@ -22,13 +24,13 @@ export async function POST(req: NextRequest) {
                 try {
                     // Send the prompts being used
                     sendEvent('prompts', 'done', {
-                        system: REDDIT_DISCOVER_SYSTEM_PROMPT,
-                        user: REDDIT_DISCOVER_USER_PROMPT
+                        system: systemPrompt || REDDIT_DISCOVER_SYSTEM_PROMPT,
+                        user: userPrompt || REDDIT_DISCOVER_USER_PROMPT
                     });
 
                     // Step 1: AI brainstorm queries
                     sendEvent('queries', 'running');
-                    const queries = await aiGenerateSearchQueries();
+                    const queries = await aiGenerateSearchQueries({ systemPrompt, userPrompt });
                     sendEvent('queries', 'done', { queries });
 
                     // Step 2: Search Reddit API using callback to track progress

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useMsal } from '@azure/msal-react';
-import { ShieldCheck, RefreshCw, AlertCircle, CheckCircle, FileText, Check, Copy } from 'lucide-react';
+import { ShieldCheck, RefreshCw, AlertCircle, CheckCircle, FileText, Check, Copy, Cpu, ChevronUp, ChevronDown } from 'lucide-react';
 
 export default function ComplianceReviewTesterPage() {
     const { accounts } = useMsal();
@@ -12,16 +12,98 @@ export default function ComplianceReviewTesterPage() {
     const [draftText, setDraftText] = useState('');
     const [running, setRunning] = useState(false);
 
+    // Prompts
+    const [systemPrompt, setSystemPrompt] = useState(`You are the Chief Compliance and Quality Officer for Vibe Trader Weekly.
+Your job is to review the drafted newsletter and autocorrect ANY violations of our editorial and compliance guidelines.
+
+=== STRICT GUIDELINES ===
+1. No banned vocabulary: "chaos", "blow up", "scramble", "wild", "crazy", "insane", "haywire". Remove or replace them.
+2. NO exclamation marks allowed anywhere in the body copy (Opening through Section 4). Remove them.
+3. No specific trade recommendations (e.g. "buy EUR/USD at 1.0850", "short gold here"). Change them to observation levels (e.g. "watch the 1.0850 level").
+4. No directional calls framed as instructions ("you should go long", "this is a buy signal").
+5. No income claims or return promises.
+6. No absolute language around risk tools ("never lose", "can't blow up"). Soften them (e.g. "better manage your risk").
+7. No fake quotes attributed to real people or real traders.
+8. No fake scarcity ("only 5 spots left", "limited time offer").
+9. No pressure language ("act now", "don't miss this").
+10. No specific brokers named negatively without factual basis.
+11. CTA text MUST match an approved option: "Try Vibe Trader", "See how it works", "Start trading smarter", "Get the edge".
+12. SUBJECT and NEWSLETTER_TITLE must be visibly different (fewer than 3 shared consecutive words). Rewrite the NEWSLETTER_TITLE if they are too similar.
+13. Body copy length (Opening through Section 4) must be between 400 and 500 words.
+14. No URLs are invented or modified.
+
+=== YOUR OUTPUT FORMAT ===
+Return a JSON object ONLY. No markdown, no preamble.
+{
+  "passed": false,
+  "wordCount": 420,
+  "flags": [
+    "Removed exclamation mark in Section 1",
+    "Replaced 'blow up' with 'experience severe drawdowns'",
+    "Changed CTA to 'Try Vibe Trader'"
+  ],
+  "fixedText": "SUBJECT: ..."
+}
+If the draft perfectly meets all criteria, set "passed": true, leave "flags" empty, and return the original text in "fixedText".`);
+    const [userTemplate, setUserTemplate] = useState(`Review and autocorrect the following newsletter draft:\n\n{draft_text}\n\nReturn only the JSON object.`);
+    const [showPromptsPanel, setShowPromptsPanel] = useState(true);
+
     // Results
     const [result, setResult] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
 
+
+
+    // Save states
+    const [savingPrompts, setSavingPrompts] = useState(false);
+    const [saveStatusMsg, setSaveStatusMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
     useEffect(() => {
         setMounted(true);
         const saved = localStorage.getItem('employee_session');
         if (saved) setEmployeeAccount(saved);
+
+        // Load active prompts from Azure Blob
+        (async () => {
+            try {
+                const res = await fetch('/api/newsletter-prompts');
+                if (!res.ok) throw new Error('Failed to fetch');
+                const data = await res.json();
+                if (data.exists && data.prompts) {
+                    if (data.prompts.reviewSystem) setSystemPrompt(data.prompts.reviewSystem);
+                    if (data.prompts.reviewUser) setUserTemplate(data.prompts.reviewUser);
+                }
+            } catch (e) {
+                console.warn('Failed to load prompts from Azure Blob:', e);
+            }
+        })();
     }, []);
+
+    const handleSavePrompts = async () => {
+        setSavingPrompts(true);
+        setSaveStatusMsg(null);
+        try {
+            const postRes = await fetch('/api/newsletter-prompts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    reviewSystem: systemPrompt,
+                    reviewUser: userTemplate,
+                    changedType: 'review'
+                }),
+            });
+            const postData = await postRes.json();
+            if (!postRes.ok) throw new Error(postData.error || 'Failed to save prompts');
+            
+            setSaveStatusMsg({ text: 'Prompts successfully published to Azure Blob!', type: 'success' });
+            setTimeout(() => setSaveStatusMsg(null), 5000);
+        } catch (e: any) {
+            setSaveStatusMsg({ text: `Save failed: ${e.message}`, type: 'error' });
+        } finally {
+            setSavingPrompts(false);
+        }
+    };
 
     const userEmail = accounts[0]?.username;
     const isAllowed = userEmail === 'masood@aity.dev' || employeeAccount === 'ketki@vibetrader.com' || userEmail === 'ketki@vibetrader.com';
@@ -52,7 +134,11 @@ export default function ComplianceReviewTesterPage() {
             const res = await fetch('/api/newsletter-pipeline/compliance-review', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ draftText }),
+                body: JSON.stringify({ 
+                    draftText,
+                    systemPrompt,
+                    userTemplate
+                }),
             });
             const data = await res.json();
 
@@ -61,6 +147,10 @@ export default function ComplianceReviewTesterPage() {
             }
 
             setResult(data.result);
+            if (data.result?.prompts) {
+                setSystemPrompt(data.result.prompts.system || systemPrompt);
+                setUserTemplate(data.result.prompts.userTemplate || userTemplate);
+            }
         } catch (err: any) {
             setError(err.message || 'An unexpected error occurred.');
         } finally {
@@ -93,6 +183,74 @@ export default function ComplianceReviewTesterPage() {
                     className="mt-1 text-[10px] font-bold px-3 py-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-all">
                     ← Back to Pipeline Tester
                 </a>
+            </div>
+
+            {/* ── Prompts Panel ────────────────────────────────────────────── */}
+            <div className="w-full max-w-5xl bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+                <button
+                    onClick={() => setShowPromptsPanel(!showPromptsPanel)}
+                    className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-muted/50 transition-colors"
+                >
+                    <div className="flex items-center gap-2">
+                        <Cpu className="text-blue-500" size={18} />
+                        <div>
+                            <h3 className="text-sm font-bold text-foreground">Compliance Reviewer Prompts (Edit Freely)</h3>
+                            <p className="text-xs text-muted-foreground">Click to view/edit System and User prompts sent to the LLM</p>
+                        </div>
+                    </div>
+                    {showPromptsPanel ? <ChevronUp size={16} className="text-muted-foreground"/> : <ChevronDown size={16} className="text-muted-foreground"/>}
+                </button>
+                {showPromptsPanel && (
+                    <div className="border-t border-border bg-muted/20">
+                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="flex flex-col gap-2">
+                                <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">System Prompt</span>
+                                <textarea
+                                    value={systemPrompt}
+                                    onChange={(e) => setSystemPrompt(e.target.value)}
+                                    rows={12}
+                                    className="w-full text-[11px] font-mono bg-background border border-border rounded-xl p-4 text-foreground outline-none focus:ring-1 focus:ring-blue-500 resize-y leading-relaxed"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">User Template</span>
+                                <textarea
+                                    value={userTemplate}
+                                    onChange={(e) => setUserTemplate(e.target.value)}
+                                    rows={12}
+                                    className="w-full text-[11px] font-mono bg-background border border-border rounded-xl p-4 text-foreground outline-none focus:ring-1 focus:ring-blue-500 resize-y leading-relaxed"
+                                />
+                            </div>
+                        </div>
+                        <div className="px-6 pb-6 pt-2 border-t border-border/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                            <button
+                                onClick={handleSavePrompts}
+                                disabled={savingPrompts}
+                                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 ${
+                                    savingPrompts
+                                        ? 'bg-blue-100 text-blue-400 cursor-not-allowed'
+                                        : 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer'
+                                }`}
+                            >
+                                {savingPrompts ? (
+                                    <>
+                                        <RefreshCw className="animate-spin" size={14} />
+                                        Saving to Azure...
+                                    </>
+                                ) : (
+                                    <>☁️ Save & Publish to Azure Blob</>
+                                )}
+                            </button>
+                            {saveStatusMsg && (
+                                <span className={`text-xs font-medium px-3 py-1 rounded-lg ${
+                                    saveStatusMsg.type === 'success' ? 'bg-green-500/10 text-green-600 dark:text-green-400' : 'bg-red-500/10 text-red-600 dark:text-red-400'
+                                }`}>
+                                    {saveStatusMsg.text}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* ── Workspace ────────────────────────────────────────────────── */}

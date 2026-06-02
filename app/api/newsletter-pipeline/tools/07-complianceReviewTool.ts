@@ -9,15 +9,19 @@ export interface ComplianceReviewResult {
     wordCount: number;
     flags: string[];
     fixedText: string;
+    prompts?: { system: string; user: string; userTemplate: string };
 }
 
 export async function complianceReviewTool(
-    draftText: string
+    draftText: string,
+    options?: { systemPrompt?: string; userTemplate?: string }
 ): Promise<ComplianceReviewResult> {
-    const userPrompt = REVIEW_USER_TEMPLATE.replace('{draft_text}', draftText);
+    const sys = options?.systemPrompt || REVIEW_SYSTEM_PROMPT;
+    const tmpl = options?.userTemplate || REVIEW_USER_TEMPLATE;
+    const userPrompt = tmpl.replace('{draft_text}', draftText);
     
     // Call AI with a low temperature for strict compliance checking
-    const rawResponse = await callAI(REVIEW_SYSTEM_PROMPT, userPrompt, 0.2);
+    const rawResponse = await callAI(sys, userPrompt, 0.2);
     
     try {
         // Find the JSON block in case the AI added markdown around it
@@ -32,6 +36,8 @@ export async function complianceReviewTool(
         if (!result.fixedText) result.fixedText = draftText; // fallback
         if (typeof result.wordCount !== 'number') result.wordCount = 0;
 
+        result.prompts = { system: sys, user: userPrompt, userTemplate: tmpl };
+
         return result;
     } catch (e) {
         console.error('[complianceReviewTool] Error parsing JSON:', e, 'Raw:', rawResponse);
@@ -40,7 +46,8 @@ export async function complianceReviewTool(
             passed: false,
             wordCount: 0,
             flags: ['Failed to parse JSON response from LLM reviewer.'],
-            fixedText: draftText
+            fixedText: draftText,
+            prompts: { system: sys, user: userPrompt, userTemplate: tmpl }
         };
     }
 }

@@ -62,37 +62,62 @@ export async function GET(req: NextRequest) {
     }
 }
 
-// POST — publish all prompts + save TWO type-specific history snapshots
+// POST — publish prompts + save type-specific history snapshots
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
-        const { weeklySystem, weeklyUser, puzzleSystem, puzzleUser, weeklyTemplate, puzzleTemplate, sectionTemplates, changedType } = body;
+        const {
+            weeklySystem, weeklyUser,
+            puzzleSystem, puzzleUser,
+            weeklyTemplate, puzzleTemplate,
+            sectionTemplates,
+            discoverSystem, discoverUser,
+            pickSystem, pickUser,
+            analysisSystem, analysisUser,
+            reviewSystem, reviewUser,
+            changedType
+        } = body;
 
-        if (!weeklySystem || !weeklyUser || !puzzleSystem || !puzzleUser) {
-            return NextResponse.json({ error: 'All four prompt fields are required' }, { status: 400 });
+        const container = getContainerClient();
+        await container.createIfNotExists({ access: 'blob' });
+
+        // Load existing active prompts to merge
+        const blobClient = container.getBlockBlobClient(BLOB_NAME);
+        let existingData: any = {};
+        if (await blobClient.exists()) {
+            try {
+                const download = await blobClient.downloadToBuffer();
+                existingData = JSON.parse(download.toString('utf-8'));
+            } catch (e) {
+                console.warn('[newsletter-prompts POST] Could not parse existing blob:', e);
+            }
         }
 
         const publishedAt = new Date().toISOString();
         const safeTs      = publishedAt.replace(/:/g, '-').replace(/\./g, '-');
 
-        const fullPayload = JSON.stringify({
-            weeklySystem, weeklyUser, puzzleSystem, puzzleUser,
-            weeklyTemplate:   weeklyTemplate   || null,
-            puzzleTemplate:   puzzleTemplate   || null,
-            sectionTemplates: sectionTemplates || null,
+        const mergedData = {
+            ...existingData,
             publishedAt,
-        });
+        };
 
-        const weeklyPayload = JSON.stringify({
-            weeklySystem, weeklyUser, weeklyTemplate: weeklyTemplate || null, publishedAt,
-        });
+        if (weeklySystem !== undefined) mergedData.weeklySystem = weeklySystem;
+        if (weeklyUser !== undefined) mergedData.weeklyUser = weeklyUser;
+        if (puzzleSystem !== undefined) mergedData.puzzleSystem = puzzleSystem;
+        if (puzzleUser !== undefined) mergedData.puzzleUser = puzzleUser;
+        if (weeklyTemplate !== undefined) mergedData.weeklyTemplate = weeklyTemplate;
+        if (puzzleTemplate !== undefined) mergedData.puzzleTemplate = puzzleTemplate;
+        if (sectionTemplates !== undefined) mergedData.sectionTemplates = sectionTemplates;
+        if (discoverSystem !== undefined) mergedData.discoverSystem = discoverSystem;
+        if (discoverUser !== undefined) mergedData.discoverUser = discoverUser;
+        if (pickSystem !== undefined) mergedData.pickSystem = pickSystem;
+        if (pickUser !== undefined) mergedData.pickUser = pickUser;
+        if (analysisSystem !== undefined) mergedData.analysisSystem = analysisSystem;
+        if (analysisUser !== undefined) mergedData.analysisUser = analysisUser;
+        if (reviewSystem !== undefined) mergedData.reviewSystem = reviewSystem;
+        if (reviewUser !== undefined) mergedData.reviewUser = reviewUser;
 
-        const puzzlePayload = JSON.stringify({
-            puzzleSystem, puzzleUser, puzzleTemplate: puzzleTemplate || null, publishedAt,
-        });
-
-        const container = getContainerClient();
-        await container.createIfNotExists({ access: 'blob' });
+        const fullPayload = JSON.stringify(mergedData);
 
         const upload = async (blobName: string, data: string) => {
             const blob = container.getBlockBlobClient(blobName);
@@ -102,16 +127,67 @@ export async function POST(req: NextRequest) {
             } as any);
         };
 
-        // 1. Overwrite active blob (full payload — pipeline always reads this)
+        // 1. Overwrite active active-prompts.json
         await upload(BLOB_NAME, fullPayload);
 
-        // 2. Per-type history snapshots — only snapshot the type that was actually changed.
-        //    changedType is sent by the frontend (the active tab: 'weekly' | 'puzzle').
-        //    Fall back to saving both if changedType is missing (e.g. old client).
-        const saveWeekly = !changedType || changedType === 'weekly';
-        const savePuzzle = !changedType || changedType === 'puzzle';
-        if (saveWeekly) await upload(`${HISTORY_DIR}/weekly/${safeTs}.json`, weeklyPayload);
-        if (savePuzzle) await upload(`${HISTORY_DIR}/puzzle/${safeTs}.json`, puzzlePayload);
+        // 2. Per-type history snapshots
+        const saveWeekly = changedType === 'weekly';
+        const savePuzzle = changedType === 'puzzle';
+        const saveDiscover = changedType === 'discover';
+        const savePick = changedType === 'pick';
+        const saveAnalysis = changedType === 'analysis';
+        const saveReview = changedType === 'review';
+
+        if (saveWeekly) {
+            const weeklyPayload = JSON.stringify({
+                weeklySystem: mergedData.weeklySystem,
+                weeklyUser: mergedData.weeklyUser,
+                weeklyTemplate: mergedData.weeklyTemplate || null,
+                publishedAt,
+            });
+            await upload(`${HISTORY_DIR}/weekly/${safeTs}.json`, weeklyPayload);
+        }
+        if (savePuzzle) {
+            const puzzlePayload = JSON.stringify({
+                puzzleSystem: mergedData.puzzleSystem,
+                puzzleUser: mergedData.puzzleUser,
+                puzzleTemplate: mergedData.puzzleTemplate || null,
+                publishedAt,
+            });
+            await upload(`${HISTORY_DIR}/puzzle/${safeTs}.json`, puzzlePayload);
+        }
+        if (saveDiscover) {
+            const discoverPayload = JSON.stringify({
+                discoverSystem: mergedData.discoverSystem,
+                discoverUser: mergedData.discoverUser,
+                publishedAt,
+            });
+            await upload(`${HISTORY_DIR}/discover/${safeTs}.json`, discoverPayload);
+        }
+        if (savePick) {
+            const pickPayload = JSON.stringify({
+                pickSystem: mergedData.pickSystem,
+                pickUser: mergedData.pickUser,
+                publishedAt,
+            });
+            await upload(`${HISTORY_DIR}/pick/${safeTs}.json`, pickPayload);
+        }
+        if (saveAnalysis) {
+            const analysisPayload = JSON.stringify({
+                analysisSystem: mergedData.analysisSystem,
+                analysisUser: mergedData.analysisUser,
+                publishedAt,
+            });
+            await upload(`${HISTORY_DIR}/analysis/${safeTs}.json`, analysisPayload);
+        }
+        if (saveReview) {
+            const reviewPayload = JSON.stringify({
+                reviewSystem: mergedData.reviewSystem,
+                reviewUser: mergedData.reviewUser,
+                publishedAt,
+            });
+            await upload(`${HISTORY_DIR}/review/${safeTs}.json`, reviewPayload);
+        }
 
         return NextResponse.json({ success: true, publishedAt });
     } catch (err: any) {

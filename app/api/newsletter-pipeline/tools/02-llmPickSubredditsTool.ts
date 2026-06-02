@@ -45,7 +45,10 @@ Strictly exclude meme stocks, crypto, country-specific stock markets, and genera
 
 Return a JSON array of subreddit names only — no r/ prefix.`;
 
-export async function llmPickSubredditsTool(communities: Community[]): Promise<string[]> {
+export async function llmPickSubredditsTool(
+    communities: Community[],
+    options?: { systemPrompt?: string; userTemplate?: string }
+): Promise<string[]> {
     if (communities.length === 0) return [];
 
     const candidates = communities
@@ -56,7 +59,9 @@ export async function llmPickSubredditsTool(communities: Community[]): Promise<s
         .map(c => `r/${c.name} | ${c.subscribers.toLocaleString()} members | ${c.description || 'No description'}`)
         .join('\n');
 
-    const raw    = await callAI(LLM_PICK_SYSTEM_PROMPT, LLM_PICK_USER_TEMPLATE.replace('{communityList}', communityList), 0.1);
+    const sys = options?.systemPrompt || LLM_PICK_SYSTEM_PROMPT;
+    const tmpl = options?.userTemplate || LLM_PICK_USER_TEMPLATE;
+    const raw    = await callAI(sys, tmpl.replace('{communityList}', communityList), 0.1);
     const picked = parseJSON<string[]>(raw);
     if (!Array.isArray(picked)) throw new Error('LLM did not return a JSON array');
 

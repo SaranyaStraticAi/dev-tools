@@ -22,7 +22,8 @@ async function loadBlobPrompts(): Promise<{ puzzleSystem: string; puzzleUser: st
 
 export async function POST(req: NextRequest) {
     try {
-        const posts = await req.json().catch(() => null);
+        const body = await req.json().catch(() => ({}));
+        const { posts, systemPrompt, userTemplate } = body;
 
         if (!posts || !Array.isArray(posts)) {
             return NextResponse.json({ 
@@ -31,31 +32,34 @@ export async function POST(req: NextRequest) {
             }, { status: 400 });
         }
 
-        console.log('[puzzle-writer-api] Loading active prompts from Azure Blob...');
-        let prompts = {
-            puzzleSystem: PUZZLE_SYSTEM_PROMPT,
-            puzzleUser: PUZZLE_USER_TEMPLATE
-        };
+        let activeSystem = systemPrompt;
+        let activeUserTemplate = userTemplate;
 
-        try {
-            const blobPrompts = await loadBlobPrompts();
-            prompts = blobPrompts;
-        } catch (e: any) {
-            console.warn('[puzzle-writer-api] Azure Blob prompt load failed, using local defaults:', e.message);
+        if (!activeSystem || !activeUserTemplate) {
+            console.log('[puzzle-writer-api] Loading active prompts from Azure Blob...');
+            try {
+                const blobPrompts = await loadBlobPrompts();
+                if (!activeSystem) activeSystem = blobPrompts.puzzleSystem;
+                if (!activeUserTemplate) activeUserTemplate = blobPrompts.puzzleUser;
+            } catch (e: any) {
+                console.warn('[puzzle-writer-api] Azure Blob prompt load failed, using local defaults:', e.message);
+                if (!activeSystem) activeSystem = PUZZLE_SYSTEM_PROMPT;
+                if (!activeUserTemplate) activeUserTemplate = PUZZLE_USER_TEMPLATE;
+            }
         }
 
         console.log('[puzzle-writer-api] Running puzzleWriterTool...');
         const result = await puzzleWriterTool(posts, {
-            systemPrompt: prompts.puzzleSystem,
-            userTemplate: prompts.puzzleUser
+            systemPrompt: activeSystem,
+            userTemplate: activeUserTemplate
         });
 
         return NextResponse.json({ 
             success: true, 
             result,
             prompts: {
-                system: prompts.puzzleSystem,
-                userTemplate: prompts.puzzleUser
+                system: activeSystem,
+                userTemplate: activeUserTemplate
             }
         });
     } catch (error: any) {

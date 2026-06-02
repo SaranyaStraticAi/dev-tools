@@ -102,7 +102,10 @@ async function fetchCommentsInBatches(
     return results;
 }
 
-export async function redditDeepAnalysisTool(posts: RedditPostRaw[]): Promise<DeepAnalysisResult> {
+export async function redditDeepAnalysisTool(
+    posts: RedditPostRaw[],
+    options?: { systemPrompt?: string; userTemplate?: string }
+): Promise<DeepAnalysisResult> {
     if (posts.length === 0) throw new Error('No posts to analyze');
 
     // Cap at top 40 by upvotes — 40 posts × ~15 comments each is plenty of signal.
@@ -117,7 +120,7 @@ export async function redditDeepAnalysisTool(posts: RedditPostRaw[]): Promise<De
 
     const fullDataset = postsWithComments.map((post, i) => formatPost(post, i)).join('\n\n');
 
-    const system = `You are a senior analyst for Vibe Trader Weekly, a professional forex and retail trading newsletter.
+    const system = options?.systemPrompt || `You are a senior analyst for Vibe Trader Weekly, a professional forex and retail trading newsletter.
 You have the COMPLETE Reddit dataset for this week — every post and every comment thread.
 
 Find the dominant trader pain theme and return structured analysis as JSON.
@@ -145,9 +148,9 @@ Respond ONLY with valid JSON:
 }
 No markdown, no backticks — raw JSON only.`;
 
-    const userTemplate = `Analyze the complete Reddit trading dataset for this week.\n\nCOMPLETE DATASET ({postCount} posts, {commentCount} comments):\n\n{fullDataset}`;
+    const userTmpl = options?.userTemplate || `Analyze the complete Reddit trading dataset for this week.\n\nCOMPLETE DATASET ({postCount} posts, {commentCount} comments):\n\n{fullDataset}`;
 
-    const user = userTemplate
+    const user = userTmpl
         .replace('{postCount}', postsWithComments.length.toString())
         .replace('{commentCount}', totalComments.toString())
         .replace('{fullDataset}', fullDataset);
@@ -185,6 +188,6 @@ No markdown, no backticks — raw JSON only.`;
         dominantPainTheme: analysis.dominantPainTheme, emotionalIntensity: analysis.emotionalIntensity,
         keyPhrases: analysis.keyPhrases || [], currencyOrEvent: analysis.currencyOrEvent || 'Forex Market',
         bestPost, supportingPosts, analysisNotes: analysis.analysisNotes || '',
-        prompts: { system, user, userTemplate },
+        prompts: { system, user, userTemplate: userTmpl },
     };
 }

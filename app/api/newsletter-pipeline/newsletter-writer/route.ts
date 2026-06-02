@@ -22,7 +22,7 @@ async function loadBlobPrompts(): Promise<{ weeklySystem: string; weeklyUser: st
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json().catch(() => ({}));
-        const { analysis, news } = body;
+        const { analysis, news, systemPrompt, userTemplate } = body;
 
         if (!analysis || !news) {
             return NextResponse.json({ 
@@ -31,21 +31,35 @@ export async function POST(req: NextRequest) {
             }, { status: 400 });
         }
 
-        console.log('[newsletter-writer-api] Loading active prompts from Azure Blob...');
-        const blobPrompts = await loadBlobPrompts();
+        let activeSystem = systemPrompt;
+        let activeUserTemplate = userTemplate;
+
+        if (!activeSystem || !activeUserTemplate) {
+            console.log('[newsletter-writer-api] Loading active prompts from Azure Blob...');
+            try {
+                const blobPrompts = await loadBlobPrompts();
+                if (!activeSystem) activeSystem = blobPrompts.weeklySystem;
+                if (!activeUserTemplate) activeUserTemplate = blobPrompts.weeklyUser;
+            } catch (e: any) {
+                console.warn('[newsletter-writer-api] Blob load failed, using local fallback:', e.message);
+                const { WEEKLY_SYSTEM_PROMPT, WEEKLY_USER_TEMPLATE } = await import('../tools/prompts');
+                if (!activeSystem) activeSystem = WEEKLY_SYSTEM_PROMPT;
+                if (!activeUserTemplate) activeUserTemplate = WEEKLY_USER_TEMPLATE;
+            }
+        }
 
         console.log('[newsletter-writer-api] Running newsletterWriterTool...');
         const result = await newsletterWriterTool(analysis, news, {
-            systemPrompt: blobPrompts.weeklySystem,
-            userTemplate: blobPrompts.weeklyUser
+            systemPrompt: activeSystem,
+            userTemplate: activeUserTemplate
         });
 
         return NextResponse.json({ 
             success: true, 
             result,
             prompts: {
-                system: blobPrompts.weeklySystem,
-                userTemplate: blobPrompts.weeklyUser
+                system: activeSystem,
+                userTemplate: activeUserTemplate
             }
         });
     } catch (error: any) {

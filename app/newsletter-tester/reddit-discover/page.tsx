@@ -18,9 +18,19 @@ export default function RedditDiscoverTesterPage() {
 
     const [running, setRunning]           = useState(false);
     const [currentStep, setCurrentStep]   = useState<'idle'|'prompts'|'queries'|'searching'|'complete'|'error'>('idle');
-    const [systemPrompt, setSystemPrompt] = useState('');
-    const [userPrompt, setUserPrompt]     = useState('');
-    const [showPromptsPanel, setShowPromptsPanel] = useState(false);
+    const [systemPrompt, setSystemPrompt] = useState(`You are building a Reddit community discovery system for a forex and retail trading newsletter called Vibe Trader Weekly.
+The newsletter targets retail traders — people trading currencies, indices, commodities with real money.
+
+Generate search queries to run on Reddit's subreddit search to find every community where these traders gather.
+Think broadly: forex, day trading, psychology, prop firms (FTMO, Apex), strategies (ICT, SMC, price action),
+broker issues, algo trading, funded accounts, asset classes (gold, indices, currencies), beginner traders, etc.
+
+Generate as many distinct queries as you think are genuinely needed to cover the full landscape.
+Focus on variety — each query should surface different communities, not slight variations of the same topic.
+
+Respond ONLY with a valid JSON array of search query strings. No markdown, no explanation.`);
+    const [userPrompt, setUserPrompt]     = useState(`Generate all Reddit search queries needed to discover every community where retail forex and active traders discuss their experiences. Return as many as genuinely needed — you decide the count.`);
+    const [showPromptsPanel, setShowPromptsPanel] = useState(true);
     const [queries, setQueries]           = useState<string[]>([]);
     const [searchProgress, setSearchProgress] = useState({ currentQuery: '', index: 0, total: 0, foundCount: 0 });
     const [communities, setCommunities]   = useState<Community[]>([]);
@@ -29,11 +39,55 @@ export default function RedditDiscoverTesterPage() {
     const [copiedIndex, setCopiedIndex]   = useState<number | null>(null);
     const [activeTab, setActiveTab]       = useState<'table' | 'json'>('table');
 
+    // Save states
+    const [savingPrompts, setSavingPrompts] = useState(false);
+    const [saveStatusMsg, setSaveStatusMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
     useEffect(() => {
         setMounted(true);
         const saved = localStorage.getItem('employee_session');
         if (saved) setEmployeeAccount(saved);
+
+        // Load active prompts from Azure Blob
+        (async () => {
+            try {
+                const res = await fetch('/api/newsletter-prompts');
+                if (!res.ok) throw new Error('Failed to fetch');
+                const data = await res.json();
+                if (data.exists && data.prompts) {
+                    if (data.prompts.discoverSystem) setSystemPrompt(data.prompts.discoverSystem);
+                    if (data.prompts.discoverUser) setUserPrompt(data.prompts.discoverUser);
+                }
+            } catch (e) {
+                console.warn('Failed to load prompts from Azure Blob:', e);
+            }
+        })();
     }, []);
+
+    const handleSavePrompts = async () => {
+        setSavingPrompts(true);
+        setSaveStatusMsg(null);
+        try {
+            const postRes = await fetch('/api/newsletter-prompts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    discoverSystem: systemPrompt,
+                    discoverUser: userPrompt,
+                    changedType: 'discover'
+                }),
+            });
+            const postData = await postRes.json();
+            if (!postRes.ok) throw new Error(postData.error || 'Failed to save prompts');
+            
+            setSaveStatusMsg({ text: 'Prompts successfully published to Azure Blob!', type: 'success' });
+            setTimeout(() => setSaveStatusMsg(null), 5000);
+        } catch (e: any) {
+            setSaveStatusMsg({ text: `Save failed: ${e.message}`, type: 'error' });
+        } finally {
+            setSavingPrompts(false);
+        }
+    };
 
     const userEmail  = accounts[0]?.username;
     const isAllowed  = userEmail === 'masood@aity.dev' || employeeAccount === 'ketki@vibetrader.com' || userEmail === 'ketki@vibetrader.com';
@@ -53,7 +107,11 @@ export default function RedditDiscoverTesterPage() {
         setCommunities([]); setQueries([]);
         setSearchProgress({ currentQuery: '', index: 0, total: 0, foundCount: 0 });
         try {
-            const res = await fetch('/api/newsletter-pipeline/reddit-discover', { method: 'POST' });
+            const res = await fetch('/api/newsletter-pipeline/reddit-discover', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ systemPrompt, userPrompt })
+            });
             if (!res.body) throw new Error('No readable response body');
             const reader = res.body.getReader();
             const decoder = new TextDecoder();
@@ -114,39 +172,72 @@ export default function RedditDiscoverTesterPage() {
             </div>
 
             {/* ── Prompts Used Panel ───────────────────────────────────────── */}
-            {(systemPrompt || userPrompt) && (
-                <div className="w-full max-w-4xl bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
-                    <button
-                        onClick={() => setShowPromptsPanel(!showPromptsPanel)}
-                        className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-muted/50 transition-colors"
-                    >
-                        <div className="flex items-center gap-2">
-                            <Cpu className="text-purple-500" size={18} />
-                            <div>
-                                <h3 className="text-sm font-bold text-foreground">Prompts Used for Discovery</h3>
-                                <p className="text-xs text-muted-foreground">Click to view System and User prompts sent to the LLM</p>
-                            </div>
+            <div className="w-full max-w-4xl bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+                <button
+                    onClick={() => setShowPromptsPanel(!showPromptsPanel)}
+                    className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-muted/50 transition-colors"
+                >
+                    <div className="flex items-center gap-2">
+                        <Cpu className="text-purple-500" size={18} />
+                        <div>
+                            <h3 className="text-sm font-bold text-foreground">Discovery Prompts (Edit Freely)</h3>
+                            <p className="text-xs text-muted-foreground">Click to view/edit System and User prompts sent to the LLM</p>
                         </div>
-                        {showPromptsPanel ? <ChevronUp size={16} className="text-muted-foreground"/> : <ChevronDown size={16} className="text-muted-foreground"/>}
-                    </button>
-                    {showPromptsPanel && (
-                        <div className="border-t border-border p-6 grid grid-cols-1 md:grid-cols-2 gap-6 bg-muted/20">
+                    </div>
+                    {showPromptsPanel ? <ChevronUp size={16} className="text-muted-foreground"/> : <ChevronDown size={16} className="text-muted-foreground"/>}
+                </button>
+                {showPromptsPanel && (
+                    <div className="border-t border-border bg-muted/20">
+                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="flex flex-col gap-2">
                                 <span className="text-xs font-bold text-purple-600 uppercase tracking-wider">System Prompt</span>
-                                <pre className="text-[11px] font-mono bg-background border border-border rounded-xl p-4 text-foreground max-h-60 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                                    {systemPrompt}
-                                </pre>
+                                <textarea
+                                    value={systemPrompt}
+                                    onChange={(e) => setSystemPrompt(e.target.value)}
+                                    rows={10}
+                                    className="w-full text-[11px] font-mono bg-background border border-border rounded-xl p-4 text-foreground outline-none focus:ring-1 focus:ring-purple-500 resize-y leading-relaxed"
+                                />
                             </div>
                             <div className="flex flex-col gap-2">
                                 <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">User Prompt</span>
-                                <pre className="text-[11px] font-mono bg-background border border-border rounded-xl p-4 text-foreground max-h-60 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                                    {userPrompt}
-                                </pre>
+                                <textarea
+                                    value={userPrompt}
+                                    onChange={(e) => setUserPrompt(e.target.value)}
+                                    rows={10}
+                                    className="w-full text-[11px] font-mono bg-background border border-border rounded-xl p-4 text-foreground outline-none focus:ring-1 focus:ring-purple-500 resize-y leading-relaxed"
+                                />
                             </div>
                         </div>
-                    )}
-                </div>
-            )}
+                        <div className="px-6 pb-6 pt-2 border-t border-border/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                            <button
+                                onClick={handleSavePrompts}
+                                disabled={savingPrompts}
+                                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-2 ${
+                                    savingPrompts
+                                        ? 'bg-purple-100 text-purple-400 cursor-not-allowed'
+                                        : 'bg-purple-600 hover:bg-purple-700 text-white cursor-pointer'
+                                }`}
+                            >
+                                {savingPrompts ? (
+                                    <>
+                                        <RefreshCw className="animate-spin" size={14} />
+                                        Saving to Azure...
+                                    </>
+                                ) : (
+                                    <>☁️ Save & Publish to Azure Blob</>
+                                )}
+                            </button>
+                            {saveStatusMsg && (
+                                <span className={`text-xs font-medium px-3 py-1 rounded-lg ${
+                                    saveStatusMsg.type === 'success' ? 'bg-green-500/10 text-green-600 dark:text-green-400' : 'bg-red-500/10 text-red-600 dark:text-red-400'
+                                }`}>
+                                    {saveStatusMsg.text}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
 
             {/* ── Action Panel ────────────────────────────────────────────── */}
             <div className="w-full max-w-4xl bg-card border border-border rounded-2xl p-6 flex flex-col gap-6 shadow-sm">
