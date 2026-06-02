@@ -4,35 +4,34 @@ import { useState, useRef, useEffect } from 'react';
 import {
   Loader2, RefreshCw, ChevronDown, ChevronUp,
   Play, Download, FileText, Copy, Check, Wand2, Merge,
-  Save, Star, Trash2, FolderOpen
+  Save, Star, Trash2, FolderOpen, Zap
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Scene  = { duration_seconds: number; script_lines: string[]; sora_prompt: string };
-type Reel   = { voice: string; content_type: string; scene_1: Scene; scene_2: Scene; scene_3: Scene; instagram_caption: string };
-type ClipSt = { status: 'idle'|'submitting'|'polling'|'downloading'|'done'|'error'; elapsed: number; url: string|null; err: string|null };
-type DayKey = 'monday'|'tuesday'|'wednesday'|'thursday'|'friday';
+type Scene = { duration_seconds: number; script_lines: string[]; sora_prompt: string };
+type Reel = { voice: string; content_type: string; scene_1: Scene; scene_2: Scene; scene_3: Scene; instagram_caption: string };
+type ClipSt = { status: 'idle' | 'submitting' | 'polling' | 'downloading' | 'done' | 'error'; elapsed: number; url: string | null; err: string | null };
+type DayKey = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday';
 type SavedConfig = {
   id: string; name: string; day: DayKey;
   systemPrompt: string; notes: string; marketContext: string;
   savedBy: string; savedAt: string; recommended: boolean; recommendNote: string;
-  fullUserPrompt?: string;
 };
 
-const initClip = (): ClipSt => ({ status:'idle', elapsed:0, url:null, err:null });
+const initClip = (): ClipSt => ({ status: 'idle', elapsed: 0, url: null, err: null });
 const DURATIONS = [4, 8, 12];
 
 // ─── Day configs ──────────────────────────────────────────────────────────────
 
-const DAYS: Record<DayKey, { label:string; format:string; type:string; notes:string; cta:string; follow:string; dataType:'ta'|'news'|'none' }> = {
-  monday:    { label:'Monday',    format:'A', type:'Trading Puzzle',             dataType:'ta',   cta:'Comment BUY, SELL or WAIT — we reply to every answer.', follow:'Follow — tomorrow we drop the analysis.',              notes:'Open with a chart setup at a key level. Build suspense through the reel. End on the question BUY SELL or WAIT. Do NOT reveal the answer — that is Friday Part 2. Observer voice. No product mention.' },
-  tuesday:   { label:'Tuesday',   format:'B', type:'Psychology / Trader Pain',   dataType:'none', cta:'Send this to a trader who needs to hear this.',           follow:'Follow — more on why traders do this.',                notes:'Observer voice. Name a specific trader behavior precisely — revenge trading, moving stop losses, overtrading out of boredom, FOMO entries. Reframe as a system problem, not a character flaw.' },
-  wednesday: { label:'Wednesday', format:'C', type:'Market Insight',             dataType:'news', cta:'Drop your read below.',                                   follow:'Follow — we break down moves like this as they happen.',notes:'Use the news item as a TRIGGER only — NOT a news summary. Ask: what does this move make traders do emotionally? Observer voice. The insight must feel timeless.' },
-  thursday:  { label:'Thursday',  format:'B', type:'Entertainment / Relatable',  dataType:'none', cta:'Tag a trader who has been here.',                          follow:"Follow — we say what most trading accounts won't.",    notes:'Observer voice. Shareable and relatable. Designed to get shares and tags. Keep it punchy.' },
-  friday:    { label:'Friday',    format:'A', type:'Puzzle Part 2 — Mon Answer', dataType:'ta',   cta:'Comment if you got it right.',                            follow:'Follow — Monday puzzle drops at 7pm.',                notes:"This RESOLVES Monday's Puzzle. Breakdown: correct answer, why most got it wrong, the lesson. Reference 'the puzzle from Monday' in the script." },
+const DAYS: Record<DayKey, { label: string; format: string; type: string; notes: string; cta: string; follow: string; dataType: 'ta' | 'news' | 'none' }> = {
+  monday: { label: 'Monday', format: 'A', type: 'Trading Puzzle', dataType: 'ta', cta: 'Comment BUY, SELL or WAIT — we reply to every answer.', follow: 'Follow — tomorrow we drop the analysis.', notes: 'Open with a chart setup at a key level. Build suspense through the reel. End on the question BUY SELL or WAIT. Do NOT reveal the answer — that is Friday Part 2. Observer voice. No product mention.' },
+  tuesday: { label: 'Tuesday', format: 'B', type: 'Psychology / Trader Pain', dataType: 'none', cta: 'Send this to a trader who needs to hear this.', follow: 'Follow — more on why traders do this.', notes: 'Observer voice. Name a specific trader behavior precisely — revenge trading, moving stop losses, overtrading out of boredom, FOMO entries. Reframe as a system problem, not a character flaw.' },
+  wednesday: { label: 'Wednesday', format: 'C', type: 'Market Insight', dataType: 'news', cta: 'Drop your read below.', follow: 'Follow — we break down moves like this as they happen.', notes: 'Use the news item as a TRIGGER only — NOT a news summary. Ask: what does this move make traders do emotionally? Observer voice. The insight must feel timeless.' },
+  thursday: { label: 'Thursday', format: 'B', type: 'Entertainment / Relatable', dataType: 'none', cta: 'Tag a trader who has been here.', follow: "Follow — we say what most trading accounts won't.", notes: 'Observer voice. Shareable and relatable. Designed to get shares and tags. Keep it punchy.' },
+  friday: { label: 'Friday', format: 'A', type: 'Puzzle Part 2 — Mon Answer', dataType: 'ta', cta: 'Comment if you got it right.', follow: 'Follow — Monday puzzle drops at 7pm.', notes: "This RESOLVES Monday's Puzzle. Breakdown: correct answer, why most got it wrong, the lesson. Reference 'the puzzle from Monday' in the script." },
 };
 
 const MOCK_TA = `## MARKET CONTEXT -- REAL DATA (use these exact numbers in script lines)
@@ -100,6 +99,15 @@ Sora 2 only accepts EXACTLY 4, 8, or 12 seconds.
 
 ## SORA 2 VISUAL DIRECTION
 Lead with shot type. Under 150 words. NO real people, NO faces, NO brand logos.
+
+VISUAL CONTINUITY — CRITICAL:
+All 3 scenes are ONE continuous reel, not 3 separate videos.
+Every sora_prompt MUST open with the same environment anchor line:
+"Dark trading room. Single monitor glow. Same desk, same scene."
+Then describe the specific shot for that scene.
+Same room, same desk, same cold blue-black lighting across all 3 scenes.
+Camera angle and framing can change — the ENVIRONMENT must not.
+
 Visual vocabulary:
 - Trading desk at night, monitor glow only, rest of room dark
 - Over-the-shoulder shot, trader studying screen, hand hovering on mouse
@@ -152,17 +160,17 @@ function CopyBtn({ text }: { text: string }) {
 // ─── Scene card ───────────────────────────────────────────────────────────────
 
 function SceneCard({ n, scene, onUpdate, onGenerate, clip }: {
-  n: 1|2|3; scene: Scene; onUpdate:(s:Scene)=>void; onGenerate:()=>void; clip:ClipSt;
+  n: 1 | 2 | 3; scene: Scene; onUpdate: (s: Scene) => void; onGenerate: () => void; clip: ClipSt;
 }) {
-  const busy = ['submitting','polling','downloading'].includes(clip.status);
+  const busy = ['submitting', 'polling', 'downloading'].includes(clip.status);
   return (
     <Card className="p-4 bg-background/50 border-primary/10 space-y-3">
       <div className="flex items-center justify-between">
         <span className="text-sm font-bold text-violet-400">Scene {n}</span>
         <div className="flex gap-1">
           {DURATIONS.map(d => (
-            <button key={d} onClick={() => onUpdate({...scene, duration_seconds:d})} disabled={busy}
-              className={`px-2 py-0.5 rounded text-xs font-semibold border transition-all ${scene.duration_seconds===d ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted/30 text-muted-foreground border-primary/10 hover:border-primary/30'}`}>
+            <button key={d} onClick={() => onUpdate({ ...scene, duration_seconds: d })} disabled={busy}
+              className={`px-2 py-0.5 rounded text-xs font-semibold border transition-all ${scene.duration_seconds === d ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted/30 text-muted-foreground border-primary/10 hover:border-primary/30'}`}>
               {d}s
             </button>
           ))}
@@ -170,9 +178,9 @@ function SceneCard({ n, scene, onUpdate, onGenerate, clip }: {
       </div>
       <div className="space-y-1">
         <label className="text-[10px] font-semibold text-emerald-400 uppercase tracking-widest">On-screen text</label>
-        {scene.script_lines.map((line,i) => (
+        {scene.script_lines.map((line, i) => (
           <input key={i} value={line} disabled={busy}
-            onChange={e => { const l=[...scene.script_lines]; l[i]=e.target.value; onUpdate({...scene,script_lines:l}); }}
+            onChange={e => { const l = [...scene.script_lines]; l[i] = e.target.value; onUpdate({ ...scene, script_lines: l }); }}
             className="w-full px-2.5 py-1.5 rounded-lg bg-muted/40 border border-primary/10 focus:border-emerald-400/50 outline-none text-xs text-foreground font-mono" />
         ))}
       </div>
@@ -180,23 +188,23 @@ function SceneCard({ n, scene, onUpdate, onGenerate, clip }: {
         <label className="text-[10px] font-semibold text-fuchsia-400 uppercase tracking-widest">
           Sora 2 prompt <span className="font-normal normal-case text-muted-foreground">{scene.sora_prompt.length}c</span>
         </label>
-        <textarea value={scene.sora_prompt} disabled={busy} onChange={e => onUpdate({...scene,sora_prompt:e.target.value})}
+        <textarea value={scene.sora_prompt} disabled={busy} onChange={e => onUpdate({ ...scene, sora_prompt: e.target.value })}
           className="w-full min-h-[80px] px-2.5 py-2 rounded-lg bg-muted/40 border border-primary/10 focus:border-fuchsia-400/40 outline-none resize-y text-[11px] font-mono text-muted-foreground leading-relaxed" />
       </div>
       <Button onClick={onGenerate} disabled={busy || !scene.sora_prompt.trim()} size="sm"
         className="w-full bg-gradient-to-r from-fuchsia-600 to-pink-600 hover:from-fuchsia-500 hover:to-pink-500 text-white text-xs font-semibold disabled:opacity-40 h-8">
-        {busy ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />{clip.status==='polling' ? `${clip.elapsed}s...` : clip.status==='submitting' ? 'Queuing...' : 'Downloading...'}</>
-          : clip.status==='done' ? <><RefreshCw className="w-3 h-3 mr-1" />Re-gen</>
-          : <><Play className="w-3 h-3 mr-1" />Generate Clip {n}</>}
+        {busy ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />{clip.status === 'polling' ? `${clip.elapsed}s...` : clip.status === 'submitting' ? 'Queuing...' : 'Downloading...'}</>
+          : clip.status === 'done' ? <><RefreshCw className="w-3 h-3 mr-1" />Re-gen</>
+            : <><Play className="w-3 h-3 mr-1" />Generate Clip {n}</>}
       </Button>
-      {clip.status==='polling' && (
+      {clip.status === 'polling' && (
         <div className="h-0.5 bg-muted/40 rounded-full overflow-hidden">
-          <div className="h-full bg-gradient-to-r from-fuchsia-500 to-pink-500 rounded-full transition-all duration-1000" style={{width:`${Math.min((clip.elapsed/120)*100,92)}%`}} />
+          <div className="h-full bg-gradient-to-r from-fuchsia-500 to-pink-500 rounded-full transition-all duration-1000" style={{ width: `${Math.min((clip.elapsed / 120) * 100, 92)}%` }} />
         </div>
       )}
-      {clip.status==='error' && <p className="text-[10px] text-destructive">❌ {clip.err}</p>}
+      {clip.status === 'error' && <p className="text-[10px] text-destructive">❌ {clip.err}</p>}
       {clip.url && (
-        <div className="relative rounded-lg overflow-hidden bg-black border border-primary/10" style={{aspectRatio:'9/16',maxHeight:'220px'}}>
+        <div className="relative rounded-lg overflow-hidden bg-black border border-primary/10" style={{ aspectRatio: '9/16', maxHeight: '220px' }}>
           <video src={clip.url} controls autoPlay loop playsInline className="w-full h-full object-contain" />
           <a href={clip.url} download={`scene_${n}.mp4`} className="absolute top-2 right-2 p-1 rounded-md bg-black/60 border border-white/10">
             <Download className="w-3.5 h-3.5 text-white" />
@@ -210,37 +218,38 @@ function SceneCard({ n, scene, onUpdate, onGenerate, clip }: {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function VideoReelStudio() {
-  const [day,          setDay]          = useState<DayKey>('monday');
-  const [sysP,         setSysP]         = useState(DEFAULT_SYSTEM);
-  const [notes,        setNotes]        = useState(DAYS.monday.notes);
-  const [mktCtx,       setMktCtx]       = useState(MOCK_TA);
-  const [customUserPrompt, setCustomUserPrompt] = useState<string|null>(null);
-  const [showSys,      setShowSys]      = useState(false);
-  const [showCtx,      setShowCtx]      = useState(true);
-  const [showPrompt,   setShowPrompt]   = useState(false);
-  const [genBusy,      setGenBusy]      = useState(false);
-  const [genErr,       setGenErr]       = useState<string|null>(null);
-  const [reel,         setReel]         = useState<Reel|null>(null);
-  const [clips,        setClips]        = useState<[ClipSt,ClipSt,ClipSt]>([initClip(),initClip(),initClip()]);
-  const [merging,      setMerging]      = useState(false);
-  const [mergedUrl,    setMergedUrl]    = useState<string|null>(null);
-  const [mergeErr,     setMergeErr]     = useState<string|null>(null);
+  const [day, setDay] = useState<DayKey>('monday');
+  const [sysP, setSysP] = useState(DEFAULT_SYSTEM);
+  const [notes, setNotes] = useState(DAYS.monday.notes);
+  const [mktCtx, setMktCtx] = useState(MOCK_TA);
+  const [showSys, setShowSys] = useState(false);
+  const [showCtx, setShowCtx] = useState(true);
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [genBusy, setGenBusy] = useState(false);
+  const [genErr, setGenErr] = useState<string | null>(null);
+  const [reel, setReel] = useState<Reel | null>(null);
+  const [clips, setClips] = useState<[ClipSt, ClipSt, ClipSt]>([initClip(), initClip(), initClip()]);
+  const [merging, setMerging] = useState(false);
+  const [mergedUrl, setMergedUrl] = useState<string | null>(null);
+  const [mergeErr, setMergeErr] = useState<string | null>(null);
+  const [continuity, setContinuity] = useState(true);
+  const [lastFrames, setLastFrames] = useState<[string | null, string | null, string | null]>([null, null, null]);
 
   // Saved configs
-  const [configs,      setConfigs]      = useState<SavedConfig[]>([]);
-  const [showConfigs,  setShowConfigs]  = useState(false);
+  const [configs, setConfigs] = useState<SavedConfig[]>([]);
+  const [showConfigs, setShowConfigs] = useState(false);
   const [showSaveForm, setShowSaveForm] = useState(false);
-  const [saveName,     setSaveName]     = useState('');
-  const [savedBy,      setSavedBy]      = useState('Designer');
-  const [saving,       setSaving]       = useState(false);
-  const [recNote,      setRecNote]      = useState<Record<string,string>>({});
+  const [saveName, setSaveName] = useState('');
+  const [savedBy, setSavedBy] = useState('Designer');
+  const [saving, setSaving] = useState(false);
+  const [recNote, setRecNote] = useState<Record<string, string>>({});
 
   const pollRefs = [useRef<any>(null), useRef<any>(null), useRef<any>(null)];
 
   useEffect(() => { fetchConfigs(); }, []);
 
   async function fetchConfigs() {
-    try { const r = await fetch('/api/video-reel/prompts'); if(r.ok) setConfigs(await r.json()); } catch {}
+    try { const r = await fetch('/api/video-reel/prompts'); if (r.ok) setConfigs(await r.json()); } catch { }
   }
 
   async function handleSave() {
@@ -248,69 +257,82 @@ export default function VideoReelStudio() {
     setSaving(true);
     try {
       const r = await fetch('/api/video-reel/prompts', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({
-          name:saveName,
-          day,
-          systemPrompt:sysP,
-          notes,
-          marketContext:mktCtx,
-          fullUserPrompt: customUserPrompt !== null ? customUserPrompt : buildFullUserPrompt(),
-          savedBy
-        }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: saveName, day, systemPrompt: sysP, notes, marketContext: mktCtx, savedBy }),
       });
       if (r.ok) { const cfg = await r.json(); setConfigs(prev => [cfg, ...prev]); setSaveName(''); setShowSaveForm(false); }
-    } catch {} finally { setSaving(false); }
+    } catch { } finally { setSaving(false); }
   }
 
   function handleLoad(cfg: SavedConfig) {
     setSysP(cfg.systemPrompt); setNotes(cfg.notes); setMktCtx(cfg.marketContext);
-    if (cfg.fullUserPrompt) {
-      setCustomUserPrompt(cfg.fullUserPrompt);
-    } else {
-      setCustomUserPrompt(null);
-    }
-    if (cfg.day !== day) { setDay(cfg.day); setReel(null); setClips([initClip(),initClip(),initClip()]); }
+    if (cfg.day !== day) { setDay(cfg.day); setReel(null); setClips([initClip(), initClip(), initClip()]); }
     setShowConfigs(false);
   }
 
   async function handleRecommend(cfg: SavedConfig) {
     const note = recNote[cfg.id] ?? cfg.recommendNote;
     const r = await fetch(`/api/video-reel/prompts?id=${cfg.id}`, {
-      method:'PATCH', headers:{'Content-Type':'application/json'},
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ recommended: !cfg.recommended, recommendNote: note }),
     });
     if (r.ok) {
       const upd = await r.json();
-      setConfigs(prev => prev.map(c => c.id===cfg.id ? upd : c)
-        .sort((a,b) => a.recommended === b.recommended ? new Date(b.savedAt).getTime()-new Date(a.savedAt).getTime() : a.recommended ? -1 : 1));
+      setConfigs(prev => prev.map(c => c.id === cfg.id ? upd : c)
+        .sort((a, b) => a.recommended === b.recommended ? new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime() : a.recommended ? -1 : 1));
     }
   }
 
   async function handleDelete(id: string) {
     if (!confirm('Delete this saved config?')) return;
-    await fetch(`/api/video-reel/prompts?id=${id}`, { method:'DELETE' });
+    await fetch(`/api/video-reel/prompts?id=${id}`, { method: 'DELETE' });
     setConfigs(prev => prev.filter(c => c.id !== id));
   }
 
   function changeDay(d: DayKey) {
     setDay(d); setNotes(DAYS[d].notes);
-    setMktCtx(DAYS[d].dataType==='ta' ? MOCK_TA : DAYS[d].dataType==='news' ? MOCK_NEWS : '');
-    setCustomUserPrompt(null);
-    setReel(null); setClips([initClip(),initClip(),initClip()]);
+    setMktCtx(DAYS[d].dataType === 'ta' ? MOCK_TA : DAYS[d].dataType === 'news' ? MOCK_NEWS : '');
+    setReel(null); setClips([initClip(), initClip(), initClip()]);
+    setLastFrames([null, null, null]);
     setGenErr(null); setMergedUrl(null); setMergeErr(null);
+  }
+
+  // Extract last frame of a video blob URL as base64 JPEG (for Sora continuity conditioning)
+  function extractLastFrame(videoUrl: string): Promise<string | null> {
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      video.crossOrigin = 'anonymous';
+      video.muted = true;
+      video.preload = 'metadata';
+      video.src = videoUrl;
+      video.addEventListener('loadedmetadata', () => {
+        video.currentTime = Math.max(0, video.duration - 0.05);
+      });
+      video.addEventListener('seeked', () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth || 720;
+          canvas.height = video.videoHeight || 1280;
+          canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/jpeg', 0.85).split(',')[1]);
+        } catch { resolve(null); }
+        video.src = '';
+      });
+      video.addEventListener('error', () => resolve(null));
+      video.load();
+    });
   }
 
   function buildBrief() {
     const d = DAYS[day];
-    return ['## TODAY\'S CONTENT BRIEF',`Day: ${d.label}`,`Format: ${d.format} -- ${d.type}`,
-      `CTA goal: Comments + Follows`,`Engagement CTA: ${d.cta}`,`Follow CTA hint: ${d.follow}`,
+    return ['## TODAY\'S CONTENT BRIEF', `Day: ${d.label}`, `Format: ${d.format} -- ${d.type}`,
+      `CTA goal: Comments + Follows`, `Engagement CTA: ${d.cta}`, `Follow CTA hint: ${d.follow}`,
       `Director notes: ${notes}`].join('\n');
   }
 
   function buildFullUserPrompt() {
     const parts = [buildBrief()];
-    if (mktCtx.trim()) parts.push('\n'+mktCtx);
+    if (mktCtx.trim()) parts.push('\n' + mktCtx);
     parts.push('\n## YOUR TASK');
     parts.push('Generate a complete Instagram reel package following the v6 skill above.');
     parts.push('Respond ONLY with valid raw JSON matching this schema — no preamble, no fences:');
@@ -320,70 +342,85 @@ export default function VideoReelStudio() {
 
   async function handleGenerateScript() {
     setGenBusy(true); setGenErr(null); setReel(null);
-    setClips([initClip(),initClip(),initClip()]); setMergedUrl(null); setMergeErr(null);
+    setClips([initClip(), initClip(), initClip()]); setMergedUrl(null); setMergeErr(null);
     try {
       const r = await fetch('/api/video-reel', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({
-          systemPrompt:sysP,
-          brief:buildBrief(),
-          marketContext:mktCtx,
-          fullUserPrompt: customUserPrompt !== null ? customUserPrompt : buildFullUserPrompt(),
-          temperature:0.85
-        }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ systemPrompt: sysP, brief: buildBrief(), marketContext: mktCtx, temperature: 0.85 }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `API ${r.status}`);
       setReel(data as Reel);
-    } catch(e:any) { setGenErr(e.message || 'Script generation failed'); }
+    } catch (e: any) { setGenErr(e.message || 'Script generation failed'); }
     finally { setGenBusy(false); }
   }
 
   async function handleGenerateClip(idx: number) {
     if (!reel) return;
-    const scene = reel[`scene_${idx+1}` as keyof Reel] as Scene;
+    const scene = reel[`scene_${idx + 1}` as keyof Reel] as Scene;
     if (!scene.sora_prompt.trim()) return;
     setMergedUrl(null); setMergeErr(null);
-    function upd(p: Partial<ClipSt>) { setClips(prev => { const c=[...prev] as [ClipSt,ClipSt,ClipSt]; c[idx]={...c[idx],...p}; return c; }); }
-    upd({ status:'submitting', elapsed:0, url:null, err:null });
+    function upd(p: Partial<ClipSt>) { setClips(prev => { const c = [...prev] as [ClipSt, ClipSt, ClipSt]; c[idx] = { ...c[idx], ...p }; return c; }); }
+    upd({ status: 'submitting', elapsed: 0, url: null, err: null });
     try {
-      const cfg = await fetch('/api/generate-video').then(r=>r.json());
+      const cfg = await fetch('/api/generate-video').then(r => r.json());
+
+      // Build Sora payload — add image conditioning from previous clip's last frame
+      const prevFrame = continuity && idx > 0 ? lastFrames[idx - 1] : null;
+      const soraBody: Record<string, unknown> = {
+        model: 'sora-2',
+        prompt: scene.sora_prompt,
+        size: '720x1280',
+        seconds: String(scene.duration_seconds),
+      };
+      if (prevFrame) {
+        // Image conditioning: last frame of Scene N → first frame of Scene N+1
+        soraBody.images = [{ b64_json: prevFrame }];
+        console.log(`[sora] Scene ${idx + 1}: using last frame of scene ${idx} for continuity`);
+      }
+
       const sub = await fetch(cfg.submitUrl, {
-        method:'POST', headers:{'Api-key':cfg.apiKey,'Content-Type':'application/json'},
-        body: JSON.stringify({ model:'sora-2', prompt:scene.sora_prompt, size:'720x1280', seconds:String(scene.duration_seconds) }),
+        method: 'POST', headers: { 'Api-key': cfg.apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify(soraBody),
       });
       const subData = await sub.json();
       if (!sub.ok) throw new Error(subData?.error?.message || `Submit failed`);
       const vid = subData.id || subData.video_id;
       if (!vid) throw new Error('No video_id');
-      upd({ status:'polling' });
+      upd({ status: 'polling' });
       let elapsed = 0;
       await new Promise<void>((resolve, reject) => {
         pollRefs[idx].current = setInterval(async () => {
           elapsed += 5; upd({ elapsed });
           try {
-            const r = await fetch(`${cfg.statusUrl}/${vid}`, { headers:{'Api-key':cfg.apiKey} });
+            const r = await fetch(`${cfg.statusUrl}/${vid}`, { headers: { 'Api-key': cfg.apiKey } });
             if (!r.ok) return;
             const d = await r.json();
-            if (['succeeded','completed'].includes(d.status)) { clearInterval(pollRefs[idx].current); resolve(); }
-            else if (['failed','canceled','cancelled'].includes(d.status)) { clearInterval(pollRefs[idx].current); reject(new Error(`Job ${d.status}`)); }
-          } catch {}
+            if (['succeeded', 'completed'].includes(d.status)) { clearInterval(pollRefs[idx].current); resolve(); }
+            else if (['failed', 'canceled', 'cancelled'].includes(d.status)) { clearInterval(pollRefs[idx].current); reject(new Error(`Job ${d.status}`)); }
+          } catch { }
         }, 5000);
       });
-      upd({ status:'downloading' });
-      const dl = await fetch(`${cfg.statusUrl}/${vid}/content`, { headers:{'Api-key':cfg.apiKey} });
+      upd({ status: 'downloading' });
+      const dl = await fetch(`${cfg.statusUrl}/${vid}/content`, { headers: { 'Api-key': cfg.apiKey } });
       if (!dl.ok) throw new Error(`Download failed`);
-      upd({ status:'done', url: URL.createObjectURL(await dl.blob()) });
-    } catch(e:any) { clearInterval(pollRefs[idx].current); upd({ status:'error', err:e.message||'Unknown' }); }
+      const blobUrl = URL.createObjectURL(await dl.blob());
+      upd({ status: 'done', url: blobUrl });
+
+      // Extract last frame for next scene's continuity conditioning
+      const frame = await extractLastFrame(blobUrl);
+      if (frame) setLastFrames(prev => { const f = [...prev] as [string | null, string | null, string | null]; f[idx] = frame; return f; });
+
+    } catch (e: any) { clearInterval(pollRefs[idx].current); upd({ status: 'error', err: e.message || 'Unknown' }); }
   }
 
   // Client-side merge via ffmpeg.wasm — works on Vercel, no server needed
   async function handleMerge() {
-    if (!clips.some(c=>c.status==='done')) return;
+    if (!clips.some(c => c.status === 'done')) return;
     setMerging(true); setMergeErr(null); setMergedUrl(null);
     try {
       // Dynamic import — avoids SSR issues with browser-only WASM APIs
-      const { FFmpeg }        = await import('@ffmpeg/ffmpeg');
+      const { FFmpeg } = await import('@ffmpeg/ffmpeg');
       const { fetchFile, toBlobURL } = await import('@ffmpeg/util');
 
       const ffmpeg = new FFmpeg();
@@ -391,7 +428,7 @@ export default function VideoReelStudio() {
       // Load ffmpeg core from jsDelivr CDN (single-threaded, no COOP/COEP needed)
       const base = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
       await ffmpeg.load({
-        coreURL: await toBlobURL(`${base}/ffmpeg-core.js`,   'text/javascript'),
+        coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, 'text/javascript'),
         wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm'),
       });
 
@@ -414,32 +451,32 @@ export default function VideoReelStudio() {
 
       // Read result and create blob URL
       const data = await ffmpeg.readFile('out.mp4');
-      const buf  = data instanceof Uint8Array ? data.buffer as ArrayBuffer : data as unknown as ArrayBuffer;
+      const buf = data instanceof Uint8Array ? data.buffer as ArrayBuffer : data as unknown as ArrayBuffer;
       setMergedUrl(URL.createObjectURL(new Blob([buf], { type: 'video/mp4' })));
-    } catch(e:any) {
+    } catch (e: any) {
       setMergeErr(e.message || 'Merge failed');
     } finally { setMerging(false); }
   }
 
-  function updateScene(n: 1|2|3, s: Scene) { if(reel) setReel({...reel,[`scene_${n}`]:s}); }
+  function updateScene(n: 1 | 2 | 3, s: Scene) { if (reel) setReel({ ...reel, [`scene_${n}`]: s }); }
 
   function buildScriptTxt() {
     if (!reel) return '';
-    let t=0; const out=[`VIBETRADER REEL — ${DAYS[day].label.toUpperCase()}\n`];
-    ([1,2,3] as const).forEach(n => {
-      const sc=reel[`scene_${n}`]; const dur=sc.duration_seconds;
-      out.push(`Scene ${n}  [${t}s–${t+dur}s]  (${dur}s)`);
-      sc.script_lines.forEach((l,i)=>out.push(`  [${t+Math.round(i*(dur/sc.script_lines.length))}s]  ${l}`));
-      out.push(''); t+=dur;
+    let t = 0; const out = [`VIBETRADER REEL — ${DAYS[day].label.toUpperCase()}\n`];
+    ([1, 2, 3] as const).forEach(n => {
+      const sc = reel[`scene_${n}`]; const dur = sc.duration_seconds;
+      out.push(`Scene ${n}  [${t}s–${t + dur}s]  (${dur}s)`);
+      sc.script_lines.forEach((l, i) => out.push(`  [${t + Math.round(i * (dur / sc.script_lines.length))}s]  ${l}`));
+      out.push(''); t += dur;
     });
     out.push(`Total: ${t}s\n\nSORA PROMPTS`);
-    ([1,2,3] as const).forEach(n=>out.push(`\nScene ${n}:\n${reel[`scene_${n}`].sora_prompt}`));
+    ([1, 2, 3] as const).forEach(n => out.push(`\nScene ${n}:\n${reel[`scene_${n}`].sora_prompt}`));
     return out.join('\n');
   }
 
   const d = DAYS[day];
-  const doneCount = clips.filter(c=>c.status==='done').length;
-  const anyBusy   = clips.some(c=>['submitting','polling','downloading'].includes(c.status));
+  const doneCount = clips.filter(c => c.status === 'done').length;
+  const anyBusy = clips.some(c => ['submitting', 'polling', 'downloading'].includes(c.status));
 
   return (
     <div className="w-full max-w-5xl mx-auto space-y-5 p-4">
@@ -448,9 +485,9 @@ export default function VideoReelStudio() {
       <div className="flex gap-2 flex-wrap">
         {(Object.keys(DAYS) as DayKey[]).map(k => (
           <button key={k} onClick={() => changeDay(k)}
-            className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all ${day===k ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted/30 text-muted-foreground border-primary/10 hover:border-primary/30'}`}>
+            className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all ${day === k ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted/30 text-muted-foreground border-primary/10 hover:border-primary/30'}`}>
             {DAYS[k].label}
-            <span className={`ml-1.5 text-xs font-normal ${day===k ? 'text-violet-200' : 'text-muted-foreground/50'}`}>Fmt {DAYS[k].format}</span>
+            <span className={`ml-1.5 text-xs font-normal ${day === k ? 'text-violet-200' : 'text-muted-foreground/50'}`}>Fmt {DAYS[k].format}</span>
           </button>
         ))}
       </div>
@@ -462,9 +499,9 @@ export default function VideoReelStudio() {
         <span className="text-muted-foreground text-xs">CTA: <span className="text-foreground">{d.cta}</span></span>
         {d.dataType !== 'none' && (
           <><span className="text-muted-foreground/40">·</span>
-          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${d.dataType==='ta' ? 'bg-teal-500/10 text-teal-400' : 'bg-amber-500/10 text-amber-400'}`}>
-            {d.dataType==='ta' ? '📈 TA data' : '📰 News data'}
-          </span></>
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${d.dataType === 'ta' ? 'bg-teal-500/10 text-teal-400' : 'bg-amber-500/10 text-amber-400'}`}>
+              {d.dataType === 'ta' ? '📈 TA data' : '📰 News data'}
+            </span></>
         )}
       </div>
 
@@ -478,9 +515,9 @@ export default function VideoReelStudio() {
             {configs.length > 0 && (
               <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px]">{configs.length}</span>
             )}
-            {configs.some(c=>c.recommended) && (
+            {configs.some(c => c.recommended) && (
               <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-[10px] flex items-center gap-0.5">
-                <Star className="w-2.5 h-2.5" /> {configs.filter(c=>c.recommended).length} recommended
+                <Star className="w-2.5 h-2.5" /> {configs.filter(c => c.recommended).length} recommended
               </span>
             )}
           </span>
@@ -501,7 +538,7 @@ export default function VideoReelStudio() {
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted/40 text-muted-foreground capitalize">{cfg.day}</span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      by {cfg.savedBy} · {new Date(cfg.savedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}
+                      by {cfg.savedBy} · {new Date(cfg.savedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </p>
                     {cfg.recommended && cfg.recommendNote && (
                       <p className="text-xs text-amber-400 mt-1">⭐ {cfg.recommendNote}</p>
@@ -528,7 +565,7 @@ export default function VideoReelStudio() {
                   <div className="flex gap-2">
                     <input placeholder="Add a note before recommending (optional)..."
                       value={recNote[cfg.id] ?? ''}
-                      onChange={e => setRecNote(prev => ({...prev, [cfg.id]: e.target.value}))}
+                      onChange={e => setRecNote(prev => ({ ...prev, [cfg.id]: e.target.value }))}
                       className="flex-1 px-2.5 py-1.5 rounded-lg bg-muted/40 border border-primary/10 text-xs text-foreground outline-none focus:border-amber-400/50" />
                   </div>
                 )}
@@ -563,22 +600,24 @@ export default function VideoReelStudio() {
       </Card>
 
       {/* Market context */}
-      <Card className="bg-background/40 border-primary/10 overflow-hidden">
-        <button className="w-full p-4 flex items-center justify-between text-sm font-semibold hover:text-foreground"
-          onClick={() => setShowCtx(!showCtx)}>
-          <span className={d.dataType==='ta' ? 'text-teal-400' : 'text-amber-400'}>
-            {d.dataType==='ta' ? '📈 Market Context' : d.dataType==='news' ? '📰 News Trigger' : '📝 Market Context / News Trigger'}
-            <span className="font-normal normal-case text-muted-foreground ml-2">(injected into GPT-4 prompt — edit freely)</span>
-          </span>
-          {showCtx ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-        </button>
-        {showCtx && (
-          <div className="px-4 pb-4 pt-2 border-t border-primary/10">
-            <textarea value={mktCtx} onChange={e => setMktCtx(e.target.value)}
-              className="w-full min-h-[160px] p-3 rounded-xl bg-muted/40 border border-primary/10 focus:border-teal-400/40 outline-none resize-y text-xs font-mono text-muted-foreground leading-relaxed" />
-          </div>
-        )}
-      </Card>
+      {d.dataType !== 'none' && (
+        <Card className="bg-background/40 border-primary/10 overflow-hidden">
+          <button className="w-full p-4 flex items-center justify-between text-sm font-semibold hover:text-foreground"
+            onClick={() => setShowCtx(!showCtx)}>
+            <span className={d.dataType === 'ta' ? 'text-teal-400' : 'text-amber-400'}>
+              {d.dataType === 'ta' ? '📈 Market Context' : '📰 News Trigger'}
+              <span className="font-normal normal-case text-muted-foreground ml-2">(injected into GPT-4 prompt — edit freely)</span>
+            </span>
+            {showCtx ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+          {showCtx && (
+            <div className="px-4 pb-4 pt-2 border-t border-primary/10">
+              <textarea value={mktCtx} onChange={e => setMktCtx(e.target.value)}
+                className="w-full min-h-[160px] p-3 rounded-xl bg-muted/40 border border-primary/10 focus:border-teal-400/40 outline-none resize-y text-xs font-mono text-muted-foreground leading-relaxed" />
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Full user prompt preview */}
       <Card className="bg-background/40 border-sky-500/20 overflow-hidden">
@@ -586,32 +625,21 @@ export default function VideoReelStudio() {
           <button className="flex-1 flex items-center gap-2 text-left hover:text-foreground transition-colors"
             onClick={() => setShowPrompt(!showPrompt)}>
             <span className="text-sky-400">👁 Full User Prompt Preview</span>
-            <span className="font-normal normal-case text-muted-foreground text-xs">
-              {customUserPrompt !== null ? '— customized (will be used for generation)' : '— exactly what GPT-4 receives · updates live'}
-            </span>
+            <span className="font-normal normal-case text-muted-foreground text-xs">— exactly what GPT-4 receives · updates live</span>
             {showPrompt ? <ChevronUp className="w-4 h-4 ml-auto text-muted-foreground" /> : <ChevronDown className="w-4 h-4 ml-auto text-muted-foreground" />}
           </button>
-          <div className="flex items-center gap-2">
-            {customUserPrompt !== null && showPrompt && (
-              <button onClick={() => setCustomUserPrompt(null)} className="text-xs text-sky-400 hover:text-sky-300 underline mr-2">
-                Reset
-              </button>
-            )}
-            <CopyBtn text={customUserPrompt !== null ? customUserPrompt : buildFullUserPrompt()} />
-          </div>
+          <CopyBtn text={buildFullUserPrompt()} />
         </div>
         {showPrompt && (
-          <div className="border-t border-sky-500/10 p-4 space-y-2">
-            <div className="flex gap-3 flex-wrap text-[10px] font-semibold uppercase tracking-widest">
+          <div className="border-t border-sky-500/10">
+            <div className="px-4 pt-3 pb-1 flex gap-3 flex-wrap text-[10px] font-semibold uppercase tracking-widest">
               <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">Part 1 · Brief</span>
               {mktCtx.trim() && <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400">Part 2 · Market context</span>}
               <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400">Part 3 · Task + schema</span>
             </div>
-            <textarea
-              value={customUserPrompt !== null ? customUserPrompt : buildFullUserPrompt()}
-              onChange={e => setCustomUserPrompt(e.target.value)}
-              className="w-full min-h-[300px] p-3 rounded-xl bg-muted/40 border border-sky-500/10 focus:border-sky-400/40 outline-none resize-y text-xs font-mono text-muted-foreground leading-relaxed"
-            />
+            <pre className="px-4 pb-4 pt-2 text-[11px] font-mono text-muted-foreground leading-relaxed whitespace-pre-wrap overflow-auto max-h-[500px]">
+              {buildFullUserPrompt()}
+            </pre>
           </div>
         )}
       </Card>
@@ -631,7 +659,7 @@ export default function VideoReelStudio() {
             <div className="flex gap-2">
               <input placeholder='Config name, e.g. "Monday bearish EURUSD v2"'
                 value={saveName} onChange={e => setSaveName(e.target.value)}
-                onKeyDown={e => e.key==='Enter' && handleSave()}
+                onKeyDown={e => e.key === 'Enter' && handleSave()}
                 className="flex-1 px-3 py-2 rounded-lg bg-muted/40 border border-primary/10 focus:border-emerald-400/50 outline-none text-sm text-foreground" />
               <input placeholder="Saved by" value={savedBy} onChange={e => setSavedBy(e.target.value)}
                 className="w-32 px-3 py-2 rounded-lg bg-muted/40 border border-primary/10 focus:border-emerald-400/50 outline-none text-sm text-foreground" />
@@ -656,7 +684,7 @@ export default function VideoReelStudio() {
         className="w-full h-12 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white font-bold text-base disabled:opacity-40">
         {genBusy ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" />GPT-4 generating 3-scene script...</>
           : reel ? <><RefreshCw className="w-5 h-5 mr-2" />Re-generate Script</>
-          : <><Wand2 className="w-5 h-5 mr-2" />Generate 3-Scene Script</>}
+            : <><Wand2 className="w-5 h-5 mr-2" />Generate 3-Scene Script</>}
       </Button>
 
       {genErr && <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">❌ {genErr}</div>}
@@ -669,18 +697,33 @@ export default function VideoReelStudio() {
             <span className="text-xs text-muted-foreground font-semibold uppercase tracking-widest">3 Scenes · edit → generate → merge</span>
             <div className="flex-1 h-px bg-border/40" />
           </div>
-          <div className="text-xs text-muted-foreground px-1 flex items-center gap-2">
-            <span className="text-violet-400 font-semibold">{reel.voice}</span>
-            <span className="text-muted-foreground/40">·</span>
-            <span>{reel.content_type}</span>
-            <span className="text-muted-foreground/40">·</span>
-            <span>{doneCount}/3 clips ready</span>
+
+          {/* Continuity mode toggle */}
+          <div className="flex items-center justify-between px-1">
+            <div className="text-xs text-muted-foreground flex items-center gap-2">
+              <span className="text-violet-400 font-semibold">{reel.voice}</span>
+              <span className="text-muted-foreground/40">·</span>
+              <span>{reel.content_type}</span>
+              <span className="text-muted-foreground/40">·</span>
+              <span>{doneCount}/3 clips ready</span>
+            </div>
+            <button onClick={() => setContinuity(p => !p)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${continuity
+                ? 'bg-violet-600/20 border-violet-500/40 text-violet-300'
+                : 'bg-muted/30 border-primary/10 text-muted-foreground'
+                }`}
+              title="When ON: last frame of Scene 1 is fed into Scene 2 as starting image, and Scene 2 last frame into Scene 3. Keeps lighting, room and desk consistent across all 3 clips.">
+              <Zap className={`w-3 h-3 ${continuity ? 'fill-violet-400' : ''}`} />
+              Continuity {continuity ? 'ON' : 'OFF'}
+              {continuity && lastFrames[0] && <span className="text-violet-400">· S1→S2</span>}
+              {continuity && lastFrames[1] && <span className="text-violet-400"> S2→S3</span>}
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {([1,2,3] as const).map(n => (
-              <SceneCard key={n} n={n} scene={reel[`scene_${n}`]} clip={clips[n-1]}
-                onUpdate={s => updateScene(n,s)} onGenerate={() => handleGenerateClip(n-1)} />
+            {([1, 2, 3] as const).map(n => (
+              <SceneCard key={n} n={n} scene={reel[`scene_${n}`]} clip={clips[n - 1]}
+                onUpdate={s => updateScene(n, s)} onGenerate={() => handleGenerateClip(n - 1)} />
             ))}
           </div>
 
@@ -694,7 +737,7 @@ export default function VideoReelStudio() {
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {doneCount === 0 ? 'Generate at least 1 clip to enable merge'
                     : doneCount < 3 ? `${doneCount}/3 clips ready`
-                    : 'All 3 clips ready'}
+                      : 'All 3 clips ready'}
                 </p>
               </div>
               {mergedUrl && (
@@ -704,17 +747,17 @@ export default function VideoReelStudio() {
                 </a>
               )}
             </div>
-            <Button onClick={handleMerge} disabled={doneCount===0||anyBusy||merging}
+            <Button onClick={handleMerge} disabled={doneCount === 0 || anyBusy || merging}
               className="w-full h-11 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold disabled:opacity-40">
               {merging ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Merging...</>
                 : mergedUrl ? <><RefreshCw className="w-4 h-4 mr-2" />Re-merge</>
-                : <><Merge className="w-4 h-4 mr-2" />Merge {doneCount} Clip{doneCount!==1?'s':''} → Final Video</>}
+                  : <><Merge className="w-4 h-4 mr-2" />Merge {doneCount} Clip{doneCount !== 1 ? 's' : ''} → Final Video</>}
             </Button>
             {mergeErr && <p className="text-xs text-destructive mt-3">❌ {mergeErr}</p>}
             {mergedUrl && (
               <div className="mt-4 flex flex-col items-center gap-3">
                 <div className="relative rounded-2xl overflow-hidden bg-black border border-violet-500/30"
-                  style={{ aspectRatio:'9/16', maxHeight:'420px', width:'100%', maxWidth:'240px' }}>
+                  style={{ aspectRatio: '9/16', maxHeight: '420px', width: '100%', maxWidth: '240px' }}>
                   <video src={mergedUrl} controls autoPlay loop playsInline className="w-full h-full object-contain" />
                 </div>
               </div>
@@ -727,7 +770,7 @@ export default function VideoReelStudio() {
               <label className="text-xs font-semibold text-sky-400 uppercase tracking-widest">Instagram Caption</label>
               <CopyBtn text={reel.instagram_caption} />
             </div>
-            <textarea value={reel.instagram_caption} onChange={e => setReel({...reel,instagram_caption:e.target.value})}
+            <textarea value={reel.instagram_caption} onChange={e => setReel({ ...reel, instagram_caption: e.target.value })}
               className="w-full min-h-[140px] p-3 rounded-xl bg-muted/40 border border-primary/10 focus:border-sky-400/40 outline-none resize-y text-sm text-foreground leading-relaxed" />
           </Card>
 
