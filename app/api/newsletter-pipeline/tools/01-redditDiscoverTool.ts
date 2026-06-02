@@ -1,7 +1,7 @@
 // Tool 1 — redditDiscoverTool
-// Step A: AI decides what search queries to run — no hardcoded topics, no count limit
-// Step B: Run queries in small batches via a fast parallel proxy race to avoid Reddit IP blocks and timeouts
-// Throws if Reddit returns 0 communities so the pipeline fails loudly.
+// Step A: AI decides what search queries to run
+// Step B: Search Reddit subreddits via RSS (no auth needed) instead of JSON API
+// Returns Community[] — same shape as before so Tool 2 is unchanged.
 
 import { fetchWithTimeout, USER_AGENT, callAI, parseJSON, getRedditOAuthToken } from './base';
 
@@ -12,10 +12,12 @@ export interface Community {
     url:         string;
 }
 
+// ── Prompts (unchanged) ───────────────────────────────────────────────────────
+
 export const REDDIT_DISCOVER_SYSTEM_PROMPT = `You are building a Reddit community discovery system for a forex and retail trading newsletter called Vibe Trader Weekly.
 The newsletter targets retail traders — people trading currencies, indices, commodities with real money.
 
-Generate search queries to run on Reddit's subreddit search API to find every community where these traders gather.
+Generate search queries to run on Reddit's subreddit search to find every community where these traders gather.
 Think broadly: forex, day trading, psychology, prop firms (FTMO, Apex), strategies (ICT, SMC, price action),
 broker issues, algo trading, funded accounts, asset classes (gold, indices, currencies), beginner traders, etc.
 
@@ -34,43 +36,88 @@ export async function aiGenerateSearchQueries(): Promise<string[]> {
     return queries;
 }
 
-// ── Gentle Proxy Fetcher ─────────────────────────────────────────────────────
-// We can't use OAuth, and firing too fast causes 429 Rate Limits from proxies.
-// Try allorigins gently. If it fails, try thingproxy.
-async function fetchSubredditSearchGentle(query: string): Promise<any> {
-    const targetUrl = `https://www.reddit.com/subreddits/search.json?q=${encodeURIComponent(query)}&limit=25&sort=relevance`;
+// ── RSS helpers ───────────────────────────────────────────────────────────────
 
-    const sources = [
-        targetUrl, // Direct (fast 403 on Vercel, works locally)
-        `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
-        `https://thingproxy.freeboard.io/fetch/${targetUrl}`
-    ];
-
-    for (const src of sources) {
-        try {
-            const res = await fetchWithTimeout(src, 10000, {
-                headers: { 'User-Agent': USER_AGENT },
-                cache: 'no-store'
-            });
-            if (!res.ok) continue; // Skip to next proxy on 403/429
-            const text = await res.text();
-            if (!text?.trim()) continue;
-            const parsed = JSON.parse(text);
-            if (parsed?.data?.children) return parsed;
-        } catch (e) {
-            // Ignore timeout/parse errors and try next source
-        }
-    }
-    return null;
+function decodeHtml(str: string): string {
+    return str
+        .replace(/&amp;/g,  '&')
+        .replace(/&lt;/g,   '<')
+        .replace(/&gt;/g,   '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g,  "'")
+        .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+        .trim();
 }
+
+function stripHtml(str: string): string {
+    return str.replace(/<[^>]+>/g, ' ').replace(/\s{2,}/g, ' ').trim();
+}
+
+// Parse Reddit's subreddit search RSS — each <entry> is one subreddit
+function parseSubredditRss(xml: string): Community[] {
+    const communities: Community[] = [];
+    const entryRe = /<entry>([\s\S]*?)<\/entry>/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = entryRe.exec(xml)) !== null) {
+        const entry = match[1];
+
+        const rawTitle = entry.match(/<title[^>]*>([\s\S]*?)<\/title>/)?.[1] ?? '';
+        const link     = entry.match(/<link[^>]*href="([^"]+)"/)?.[1]         ?? '';
+        const rawDesc  = entry.match(/<summary[^>]*>([\s\S]*?)<\/summary>/)?.[1]
+                      ?? entry.match(/<content[^>]*>([\s\S]*?)<\/content>/)?.[1]
+                      ?? '';
+
+        // Title for subreddit RSS entries is usually "r/subredditname: description"
+        // or just the subreddit name
+        const titleDecoded = decodeHtml(rawTitle);
+        const nameMatch    = titleDecoded.match(/^(?:r\/)?([A-Za-z0-9_]+)/);
+        const name         = nameMatch?.[1] ?? '';
+
+        if (!name) continue;
+
+        // Subscriber count isn't in the RSS, default to 0 — Tool 2 filters by relevance anyway
+        communities.push({
+            name,
+            subscribers: 0,
+            description: stripHtml(decodeHtml(rawDesc)).slice(0, 200),
+            url:         link || `https://reddit.com/r/${name}`,
+        });
+    }
+    return communities;
+}
+
+// ── Search one query via RSS ──────────────────────────────────────────────────
+
+async function searchSubredditsRss(query: string): Promise<Community[]> {
+    // Use subreddits/search.rss — public, no auth required
+    const url = `https://www.reddit.com/subreddits/search.rss?q=${encodeURIComponent(query)}&limit=25&sort=relevance`;
+    try {
+        const res = await fetchWithTimeout(url, 10000, {
+            headers: { 'User-Agent': USER_AGENT },
+            cache:   'no-store',
+        });
+        if (!res.ok) {
+            console.warn(`[redditDiscoverTool] RSS ${res.status} for "${query}"`);
+            return [];
+        }
+        const xml = await res.text();
+        return parseSubredditRss(xml);
+    } catch (e) {
+        console.warn(`[redditDiscoverTool] query "${query}" failed:`, e);
+        return [];
+    }
+}
+
+// ── Main (same signature as before) ──────────────────────────────────────────
 
 export async function searchRedditCommunities(
     queries: string[],
     onQueryProgress?: (query: string, index: number, total: number, foundCount: number) => void,
 ): Promise<Map<string, Community>> {
     const found    = new Map<string, Community>();
-    const BATCH    = 2;   // Reduced to 2 parallel to avoid 429 rate limit
-    const DELAY_MS = 1500; // 1.5s delay between batches to respect proxy limits
+    const BATCH    = 3;
+    const DELAY_MS = 1000;
 
     for (let i = 0; i < queries.length; i += BATCH) {
         const batch = queries.slice(i, i + BATCH);
@@ -78,30 +125,17 @@ export async function searchRedditCommunities(
             batch.map(async (query, batchIdx) => {
                 const globalIndex = i + batchIdx;
                 if (globalIndex >= queries.length) return;
-                
                 if (onQueryProgress) onQueryProgress(query, globalIndex, queries.length, found.size);
 
-                const data = await fetchSubredditSearchGentle(query);
-                if (!data) {
-                    console.warn(`[redditDiscoverTool] all proxy sources failed for "${query}"`);
-                    return;
-                }
-                
-                for (const item of (data.data.children || [])) {
-                    const d = item.data;
-                    if (!d?.display_name || found.has(d.display_name)) continue;
-                    found.set(d.display_name, {
-                        name:        d.display_name as string,
-                        subscribers: (d.subscribers || 0) as number,
-                        description: ((d.public_description || d.title || '') as string).slice(0, 200),
-                        url:         `https://reddit.com/r/${d.display_name}`,
-                    });
+                const communities = await searchSubredditsRss(query);
+                for (const c of communities) {
+                    if (!found.has(c.name)) found.set(c.name, c);
                 }
             })
         );
         
         if (i + BATCH < queries.length) {
-            await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+            await new Promise(r => setTimeout(r, DELAY_MS));
         }
     }
     return found;
@@ -115,7 +149,7 @@ export async function redditDiscoverTool(): Promise<Community[]> {
     const all   = [...found.values()].sort((a, b) => b.subscribers - a.subscribers);
 
     if (all.length === 0) {
-        throw new Error('Reddit search returned 0 communities — all proxy sources failed.');
+        throw new Error('Reddit subreddit search returned 0 communities — Reddit may be temporarily unavailable.');
     }
 
     console.log(`[redditDiscoverTool] Found ${all.length} unique communities`);

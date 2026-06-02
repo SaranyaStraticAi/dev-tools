@@ -1,6 +1,47 @@
 // base.ts — shared helpers for all newsletter pipeline tools
 
-export const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36';
+export const USER_AGENT = 'VibeTrader Newsletter Bot/1.0 (by /u/vibetrader_bot)';
+
+// ── Reddit OAuth token (cached in-process for the token's lifetime) ──────────
+let redditTokenCache: { token: string; expiresAt: number } | null = null;
+
+export async function getRedditToken(): Promise<string> {
+    // Return cached token if still valid (with 60s buffer)
+    if (redditTokenCache && Date.now() < redditTokenCache.expiresAt - 60_000) {
+        return redditTokenCache.token;
+    }
+
+    const clientId     = process.env.REDDIT_CLIENT_ID;
+    const clientSecret = process.env.REDDIT_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+        throw new Error('REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET must be set in .env.local — see https://www.reddit.com/prefs/apps');
+    }
+
+    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+    const res = await fetch('https://www.reddit.com/api/v1/access_token', {
+        method:  'POST',
+        headers: {
+            'Authorization': `Basic ${credentials}`,
+            'Content-Type':  'application/x-www-form-urlencoded',
+            'User-Agent':    USER_AGENT,
+        },
+        body: 'grant_type=client_credentials',
+    });
+
+    if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Reddit OAuth failed (${res.status}): ${text}`);
+    }
+
+    const data = await res.json();
+    redditTokenCache = {
+        token:     data.access_token as string,
+        expiresAt: Date.now() + (data.expires_in as number) * 1000,
+    };
+
+    console.log('[reddit] Got fresh OAuth token, expires in', data.expires_in, 's');
+    return redditTokenCache.token;
+}
 
 function getAzureConfig() {
     const apiKey     = process.env.AZURE_OPENAI_API_KEY || '';
