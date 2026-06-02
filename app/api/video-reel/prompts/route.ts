@@ -59,10 +59,10 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, day, systemPrompt, notes, marketContext, savedBy, recommendNote } = body;
+    const { name, day, systemPrompt, notes, marketContext, savedBy, recommendNote, fullUserPrompt } = body;
 
     if (!name || !day || !systemPrompt) {
-      return NextResponse.json({ error: 'name, day and systemPrompt are required' }, { status: 400 });
+       return NextResponse.json({ error: 'name, day and systemPrompt are required' }, { status: 400 });
     }
 
     const id     = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -73,6 +73,7 @@ export async function POST(req: NextRequest) {
       systemPrompt,
       notes:         notes ?? '',
       marketContext: marketContext ?? '',
+      fullUserPrompt: fullUserPrompt ?? '',
       savedBy:       (savedBy ?? 'Designer').trim(),
       savedAt:       new Date().toISOString(),
       recommended:   false,
