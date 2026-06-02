@@ -6,7 +6,7 @@ import { redditDeepAnalysisTool } from './tools/04-redditDeepAnalysisTool';
 import { newsContextTool }        from './tools/05-newsContextTool';
 import { newsletterWriterTool }   from './tools/06-newsletterWriterTool';
 import { puzzleWriterTool }       from './tools/06b-puzzleWriterTool';
-import { complianceReviewTool } from './tools/07-complianceReviewTool';
+import { complianceReviewTool }   from './tools/07-complianceReviewTool';
 import { bannerImageTool }        from './tools/08-bannerImageTool';
 import {
     WEEKLY_SYSTEM_PROMPT, WEEKLY_USER_TEMPLATE,
@@ -89,19 +89,19 @@ export async function POST(req: NextRequest) {
                         source: prompts.source,
                     });
 
-                    // ── Tool 1: Discover communities ──────────────────────────
+                    // ── Tool 1: Discover communities via RSS ──────────────────
                     sendEvent('discover', 'pending');
                     console.log(`[pipeline][${type}] starting discover...`);
                     const discovered = await redditDiscoverTool();
                     sendEvent('discover', 'done', { count: discovered.length });
 
-                    // ── Tool 2: LLM picks communities ─────────────────────────
+                    // ── Tool 2: LLM picks relevant communities ────────────────
                     sendEvent('pick', 'pending');
                     console.log(`[pipeline][${type}] starting pick...`);
                     const picked = await llmPickSubredditsTool(discovered);
                     sendEvent('pick', 'done', { picked });
 
-                    // ── Tool 3: Fetch posts ───────────────────────────────────
+                    // ── Tool 3: Fetch posts via RSS ───────────────────────────
                     sendEvent('fetch', 'pending');
                     console.log(`[pipeline][${type}] starting fetch...`);
                     const { posts, fetchedFrom } = await redditFetchPostsTool(picked, 'week');
@@ -117,7 +117,6 @@ export async function POST(req: NextRequest) {
                         });
                         sendEvent('write', 'done');
 
-                        // Return directly, puzzle skips deep analysis, compliance and banner
                         sendEvent('complete', 'done', {
                             result: {
                                 rawText:        writeResult.rawText,
@@ -131,8 +130,7 @@ export async function POST(req: NextRequest) {
                         return;
                     }
 
-                    // ── WEEKLY PATH ───────────────────────────────────────
-                    // ── Tool 4: Deep analysis ─────────────────────────────────
+                    // ── WEEKLY PATH ───────────────────────────────────────────
                     sendEvent('analyze', 'pending');
                     console.log(`[pipeline][${type}] starting analyze...`);
                     const analysis = await redditDeepAnalysisTool(posts);

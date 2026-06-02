@@ -107,7 +107,7 @@ export default function RedditPanel({
             {/* ── Post list ───────────────────────────────────────────────── */}
             <div className="divide-y max-h-72 overflow-y-auto">
                 {posts.map((post, i) => (
-                    <div key={post.rank} className="flex items-start gap-3 px-4 py-3 hover:bg-muted/30">
+                    <div key={`${post.rank}-${i}`} className="flex items-start gap-3 px-4 py-3 hover:bg-muted/30">
                         <span className="text-xs font-mono text-muted-foreground w-5 shrink-0 mt-0.5">#{post.rank}</span>
                         <div className="flex-1 min-w-0">
                             <input value={post.title}

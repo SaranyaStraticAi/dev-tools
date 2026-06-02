@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image, Link2, Network, LayoutGrid, ChevronDown, Mail, Video, GraduationCap, Download, Brain, Newspaper, Edit, ShieldCheck, Inbox } from 'lucide-react';
+import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image, Link2, Network, LayoutGrid, ChevronDown, Mail, Video, GraduationCap, Download, Brain, Newspaper, Edit, ShieldCheck, Inbox, Puzzle } from 'lucide-react';
 import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
 import { useState, useEffect } from 'react';
 
@@ -78,6 +78,15 @@ const navGroups = [
       { name: '06: Newsletter Writer',   href: '/newsletter-tester/newsletter-writer', icon: Edit },
       { name: '07: Compliance Reviewer', href: '/newsletter-tester/compliance-review', icon: ShieldCheck },
       { name: '08: Newsletter Banner',   href: '/newsletter-tester/generate-banner',   icon: Image },
+    ],
+  },
+  {
+    label: 'Tuesday Puzzle Pipeline',
+    items: [
+      { name: '01: Reddit Discoverer',   href: '/newsletter-tester/reddit-discover', icon: Search },
+      { name: '02: Subreddit Selector',  href: '/newsletter-tester/pick-subreddits',  icon: Layers },
+      { name: '03: Reddit Post Fetcher', href: '/newsletter-tester/fetch-posts',      icon: Download },
+      { name: '06b: Puzzle Writer',      href: '/newsletter-tester/puzzle-writer',    icon: Puzzle },
     ],
   },
   {
