@@ -98,28 +98,32 @@ Sora 2 only accepts EXACTLY 4, 8, or 12 seconds.
 - NEVER first-person trader confessions as the brand voice.
 
 ## SORA 2 VISUAL DIRECTION
-Lead with shot type. Under 150 words. NO real people, NO faces, NO brand logos.
+Lead with shot type. Under 150 words. NO humans, NO silhouettes, NO characters, NO hands, NO shoulders, NO body parts, NO faces, NO brand logos. (Strict Azure safety moderation compliance).
+NEVER use words like "trader", "person", "human", "man", "woman", "hand", "finger", "shoulder", "head", or "silhouette" in any sora_prompt. Focus entirely on objects, devices, charts, and empty spaces.
+
+## IMAGE & VIDEO GENERATION PIPELINE FLOW (CRITICAL FOR PROMPT WRITING)
+1. IMAGE STEP: For each scene, the system first generates a static reference image by combining a hardcoded environment background anchor (defining a dark, professional empty trading room) with your generated sora_prompt. Therefore, write the prompt so that it describes a clear, static visual setup first.
+2. VIDEO STEP: The static image generated in step 1 is then fed directly into Sora as the First Frame (input_reference) of the video clip. The generated sora_prompt will guide the video's motion starting from that image.
+3. WRITING RULE: Ensure each scene's sora_prompt describes a clear starting configuration of charts, screens, or abstract elements (which DALL-E can draw in the image step), followed by the specific camera movement or animation (which Sora can execute in the video step).
 
 VISUAL CONTINUITY — CRITICAL:
 All 3 scenes are ONE continuous reel, not 3 separate videos.
 Every sora_prompt MUST open with the same environment anchor line:
-"Dark trading room. Single monitor glow. Same desk, same scene."
+"Dark trading room. Single monitor glow. Same desk, same scene. Empty environment, no people."
 Then describe the specific shot for that scene.
 Same room, same desk, same cold blue-black lighting across all 3 scenes.
 Camera angle and framing can change — the ENVIRONMENT must not.
 
 Visual vocabulary:
-- Trading desk at night, monitor glow only, rest of room dark
-- Over-the-shoulder shot, trader studying screen, hand hovering on mouse
-- Slow camera push in toward the monitor
-- Tight close-up on hands, fingers over keyboard, tense stillness
+- Trading desk at night, monitor glow only, rest of room dark, empty room
+- Slow camera push in toward the glowing monitor with a chart
 - Wide shot of empty desk — cold coffee, phone face-down, second monitor dark
-- Chart on screen with red candles, position open, number showing a loss
+- Chart on screen with red candles, position open, numbers showing
 - Abstract data streams in deep blue space, numbers flying
 - Gold bars stacked on dark surface, warm amber light circling slowly
 - Dark storm clouds over bright horizon — bearish environment
 Lighting: monitor glow as primary. NEVER bright studio lighting.
-Character: always mid-moment. No smiling.
+No characters or people in any scene.
 
 ## CAPTION FORMULA
 Line 1: Hook — 1 line, max 10 words.
@@ -147,6 +151,28 @@ CRITICAL: duration_seconds must be exactly 4, 8, or 12.`;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+function resizeBase64Image(base64Str: string, targetWidth: number, targetHeight: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.src = `data:image/jpeg;base64,${base64Str}`;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Canvas context not available'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+      resolve(canvas.toDataURL('image/jpeg', 0.9).split(',')[1]);
+    };
+    img.onerror = (err) => {
+      reject(err);
+    };
+  });
+}
+
 function CopyBtn({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -159,8 +185,10 @@ function CopyBtn({ text }: { text: string }) {
 
 // ─── Scene card ───────────────────────────────────────────────────────────────
 
-function SceneCard({ n, scene, onUpdate, onGenerate, clip }: {
+function SceneCard({ n, scene, onUpdate, onGenerate, clip, refImage, refBusy, onGenerateRef, prevLastFrame, continuity, isBlocked }: {
   n: 1 | 2 | 3; scene: Scene; onUpdate: (s: Scene) => void; onGenerate: () => void; clip: ClipSt;
+  refImage: string | null; refBusy: boolean; onGenerateRef: () => void;
+  prevLastFrame: string | null; continuity: boolean; isBlocked: boolean;
 }) {
   const busy = ['submitting', 'polling', 'downloading'].includes(clip.status);
   return (
@@ -190,6 +218,37 @@ function SceneCard({ n, scene, onUpdate, onGenerate, clip }: {
         </label>
         <textarea value={scene.sora_prompt} disabled={busy} onChange={e => onUpdate({ ...scene, sora_prompt: e.target.value })}
           className="w-full min-h-[80px] px-2.5 py-2 rounded-lg bg-muted/40 border border-primary/10 focus:border-fuchsia-400/40 outline-none resize-y text-[11px] font-mono text-muted-foreground leading-relaxed" />
+      </div>
+
+      {/* Reference image / Continuity frame */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <label className="text-[10px] font-semibold text-amber-400 uppercase tracking-widest flex items-center gap-1">
+            🎨 Reference image
+            {refImage ? (
+              <span className="font-normal normal-case text-emerald-400 ml-1">· feeds into Sora as first frame</span>
+            ) : (
+              n > 1 && continuity && prevLastFrame && <span className="font-normal normal-case text-emerald-400 ml-1">· auto-extracted from Scene {n-1} end</span>
+            )}
+          </label>
+          <button onClick={onGenerateRef} disabled={busy || refBusy}
+            className="text-[10px] px-2 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 disabled:opacity-40 transition-all font-semibold flex items-center gap-1">
+            {refBusy ? <><Loader2 className="w-2.5 h-2.5 animate-spin" />Generating...</> : refImage ? <><RefreshCw className="w-2.5 h-2.5" />Regenerate</> : <>Generate</>}
+          </button>
+        </div>
+        {refImage ? (
+          <div className="rounded-lg overflow-hidden border border-amber-500/20 bg-black" style={{ aspectRatio: '9/16', maxHeight: '160px' }}>
+            <img src={`data:image/jpeg;base64,${refImage}`} alt={`Scene ${n} reference`} className="w-full h-full object-cover" />
+          </div>
+        ) : n > 1 && continuity && prevLastFrame ? (
+          <div className="rounded-lg overflow-hidden border border-emerald-500/20 bg-black" style={{ aspectRatio: '9/16', maxHeight: '160px' }}>
+            <img src={`data:image/jpeg;base64,${prevLastFrame}`} alt={`Scene ${n} starting frame`} className="w-full h-full object-cover" />
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-primary/10 bg-muted/20 flex items-center justify-center text-[10px] text-muted-foreground/40 p-2 text-center" style={{ aspectRatio: '9/16', maxHeight: '80px' }}>
+            {n === 1 ? 'no reference yet' : continuity ? `Waiting for Scene ${n-1} video...` : 'no reference (will generate from text)'}
+          </div>
+        )}
       </div>
       <Button onClick={onGenerate} disabled={busy || !scene.sora_prompt.trim()} size="sm"
         className="w-full bg-gradient-to-r from-fuchsia-600 to-pink-600 hover:from-fuchsia-500 hover:to-pink-500 text-white text-xs font-semibold disabled:opacity-40 h-8">
@@ -233,8 +292,11 @@ export default function VideoReelStudio() {
   const [merging, setMerging] = useState(false);
   const [mergedUrl, setMergedUrl] = useState<string | null>(null);
   const [mergeErr, setMergeErr] = useState<string | null>(null);
+  const [mergeStatus, setMergeStatus] = useState('');
   const [continuity, setContinuity] = useState(true);
   const [lastFrames, setLastFrames] = useState<[string | null, string | null, string | null]>([null, null, null]);
+  const [refImages,  setRefImages]  = useState<[string|null,string|null,string|null]>([null,null,null]);
+  const [refBusy,    setRefBusy]    = useState<[boolean,boolean,boolean]>([false,false,false]);
 
   // Saved configs
   const [configs, setConfigs] = useState<SavedConfig[]>([]);
@@ -295,7 +357,55 @@ export default function VideoReelStudio() {
     setMktCtx(DAYS[d].dataType === 'ta' ? MOCK_TA : DAYS[d].dataType === 'news' ? MOCK_NEWS : '');
     setReel(null); setClips([initClip(), initClip(), initClip()]);
     setLastFrames([null, null, null]); setEditedPrompt(null);
+    setRefImages([null,null,null]); setRefBusy([false,false,false]);
     setGenErr(null); setMergedUrl(null); setMergeErr(null);
+  }
+
+  async function generateRefImage(idx: number, reelOverride?: Reel) {
+    const activeReel = reelOverride || reel;
+    if (!activeReel) return;
+    const scene = activeReel[`scene_${idx+1}` as keyof Reel] as Scene;
+    setRefBusy(prev => { const b=[...prev] as [boolean,boolean,boolean]; b[idx]=true; return b; });
+    try {
+      const cfg = await fetch('/api/generate-image').then(r => r.json());
+      if (cfg.error) throw new Error(cfg.error);
+      const prompt = scene.sora_prompt;
+      const res = await fetch(cfg.url, {
+        method: 'POST',
+        headers: { 'Api-key': cfg.apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model:         cfg.deployment,
+          prompt,
+          size:          '1024x1792',
+          quality:       'medium',
+          n:             1,
+          output_format: 'jpeg',    // valid values: 'jpeg' | 'png'  (NOT 'b64_json')
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || `Image API ${res.status}`);
+
+      // Azure returns b64_json inline when output_format is set, or a URL — handle both
+      let b64: string | null = data.data?.[0]?.b64_json ?? null;
+
+      if (!b64) {
+        const imgUrl = data.data?.[0]?.url ?? null;
+        if (!imgUrl) throw new Error('No image returned from API');
+        // Fetch the URL and convert to base64
+        const imgRes  = await fetch(imgUrl);
+        const imgBuf  = await imgRes.arrayBuffer();
+        const bytes   = new Uint8Array(imgBuf);
+        let binary = '';
+        bytes.forEach(b => { binary += String.fromCharCode(b); });
+        b64 = btoa(binary);
+      }
+
+      setRefImages(prev => { const r=[...prev] as [string|null,string|null,string|null]; r[idx]=b64; return r; });
+    } catch(e:any) {
+      console.error(`[ref-image] Scene ${idx+1}:`, e.message);
+    } finally {
+      setRefBusy(prev => { const b=[...prev] as [boolean,boolean,boolean]; b[idx]=false; return b; });
+    }
   }
 
   // Extract last frame of a video blob URL as base64 JPEG (for Sora continuity conditioning)
@@ -355,8 +465,14 @@ export default function VideoReelStudio() {
         body: JSON.stringify(body),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.error || `API ${r.status}`);
-      setReel(data as Reel);
+      const parsedReel = data as Reel;
+      setReel(parsedReel);
+      // Automatically trigger image generation for all 3 scenes in parallel
+      Promise.all([
+        generateRefImage(0, parsedReel),
+        generateRefImage(1, parsedReel),
+        generateRefImage(2, parsedReel)
+      ]).catch(err => console.error('[auto-ref-gen] Failed to generate reference images:', err));
     } catch (e: any) { setGenErr(e.message || 'Script generation failed'); }
     finally { setGenBusy(false); }
   }
@@ -371,18 +487,35 @@ export default function VideoReelStudio() {
     try {
       const cfg = await fetch('/api/generate-video').then(r => r.json());
 
-      // Build Sora payload — add image conditioning from previous clip's last frame
-      const prevFrame = continuity && idx > 0 ? lastFrames[idx - 1] : null;
+      // Image conditioning priority:
+      // 1. Reference image (designer explicitly generated + approved)
+      // 2. Last frame of previous clip (continuity fallback)
+      // 3. No conditioning
+      const refFrame  = refImages[idx];
+      const prevFrame = !refFrame && continuity && idx > 0 ? lastFrames[idx - 1] : null;
+      let anchor      = refFrame ?? prevFrame;
+
+      if (anchor) {
+        try {
+          // Resize to exactly 720x1280 to comply with Azure Sora 2 API requirements
+          anchor = await resizeBase64Image(anchor, 720, 1280);
+        } catch (resizeErr) {
+          console.warn('[resize-image] failed to resize anchor, sending raw:', resizeErr);
+        }
+      }
+
+      // Build Sora payload
       const soraBody: Record<string, unknown> = {
         model: 'sora-2',
         prompt: scene.sora_prompt,
         size: '720x1280',
         seconds: String(scene.duration_seconds),
       };
-      if (prevFrame) {
-        // Image conditioning: last frame of Scene N → first frame of Scene N+1
-        soraBody.images = [{ b64_json: prevFrame }];
-        console.log(`[sora] Scene ${idx + 1}: using last frame of scene ${idx} for continuity`);
+      if (anchor) {
+        soraBody.input_reference = {
+          image_url: `data:image/jpeg;base64,${anchor}`
+        };
+        console.log(`[sora] Scene ${idx+1}: conditioning from ${refFrame ? 'reference image' : 'prev clip last frame'}`);
       }
 
       const sub = await fetch(cfg.submitUrl, {
@@ -403,7 +536,11 @@ export default function VideoReelStudio() {
             if (!r.ok) return;
             const d = await r.json();
             if (['succeeded', 'completed'].includes(d.status)) { clearInterval(pollRefs[idx].current); resolve(); }
-            else if (['failed', 'canceled', 'cancelled'].includes(d.status)) { clearInterval(pollRefs[idx].current); reject(new Error(`Job ${d.status}`)); }
+            else if (['failed', 'canceled', 'cancelled'].includes(d.status)) {
+              clearInterval(pollRefs[idx].current);
+              const errMsg = d.error?.message || d.failure_reason || `Job ${d.status}`;
+              reject(new Error(errMsg));
+            }
           } catch { }
         }, 5000);
       });
@@ -423,7 +560,7 @@ export default function VideoReelStudio() {
   // Client-side merge via ffmpeg.wasm — works on Vercel, no server needed
   async function handleMerge() {
     if (!clips.some(c => c.status === 'done')) return;
-    setMerging(true); setMergeErr(null); setMergedUrl(null);
+    setMerging(true); setMergeErr(null); setMergedUrl(null); setMergeStatus('Initializing FFmpeg...');
     try {
       // Dynamic import — avoids SSR issues with browser-only WASM APIs
       const { FFmpeg } = await import('@ffmpeg/ffmpeg');
@@ -438,18 +575,78 @@ export default function VideoReelStudio() {
         wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, 'application/wasm'),
       });
 
-      // Write each ready clip into the ffmpeg virtual filesystem
+      // Download Roboto Medium font for captions
+      setMergeStatus('Loading Roboto font for captions...');
+      try {
+        await ffmpeg.writeFile(
+          'font.ttf',
+          await fetchFile('https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.66/fonts/Roboto/Roboto-Medium.ttf')
+        );
+      } catch (fontErr) {
+        console.error('Failed to load font, captions might not render:', fontErr);
+      }
+
+      // Process and burn captions on each clip
       const entries: string[] = [];
       for (let i = 0; i < 3; i++) {
         if (clips[i].status === 'done' && clips[i].url) {
-          const name = `clip${i}.mp4`;
-          await ffmpeg.writeFile(name, await fetchFile(clips[i].url!));
-          entries.push(`file '${name}'`);
+          const rawName = `clip${i}.mp4`;
+          const textName = `clip_text${i}.mp4`;
+          
+          setMergeStatus(`Processing Scene ${i + 1} video...`);
+          await ffmpeg.writeFile(rawName, await fetchFile(clips[i].url!));
+
+          const sceneKey = `scene_${i + 1}` as keyof Reel;
+          const scene = reel?.[sceneKey] as Scene | undefined;
+
+          if (scene && scene.script_lines?.length > 0) {
+            setMergeStatus(`Burning captions onto Scene ${i + 1}...`);
+            const lines = scene.script_lines;
+            const totalDur = scene.duration_seconds || 8;
+            const lineDur = totalDur / lines.length;
+
+            const drawtextFilters: string[] = [];
+            lines.forEach((line, j) => {
+              if (!line.trim()) return;
+              // Escape line text for ffmpeg drawtext filter
+              const escapedLine = line
+                .replace(/\\/g, '\\\\')
+                .replace(/'/g, "'\\\\''")
+                .replace(/:/g, '\\:');
+              
+              const start = j * lineDur;
+              const end = (j + 1) * lineDur;
+              
+              // Centered white text with black border
+              drawtextFilters.push(
+                `drawtext=fontfile=font.ttf:text='${escapedLine}':fontcolor=white:fontsize=44:borderw=4:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,${start},${end})'`
+              );
+            });
+
+            if (drawtextFilters.length > 0) {
+              const filter = drawtextFilters.join(',');
+              // Re-encode video using preset ultrafast to burn subtitles
+              await ffmpeg.exec([
+                '-i', rawName,
+                '-vf', filter,
+                '-preset', 'ultrafast',
+                '-crf', '22',
+                textName
+              ]);
+              entries.push(`file '${textName}'`);
+            } else {
+              entries.push(`file '${rawName}'`);
+            }
+          } else {
+            entries.push(`file '${rawName}'`);
+          }
         }
       }
+
       if (!entries.length) throw new Error('No clips to merge');
 
       // Concat list
+      setMergeStatus('Merging scenes into final video...');
       await ffmpeg.writeFile('list.txt', new TextEncoder().encode(entries.join('\n')));
 
       // Run concat — stream copy, no re-encode, fast
@@ -459,8 +656,10 @@ export default function VideoReelStudio() {
       const data = await ffmpeg.readFile('out.mp4');
       const buf = data instanceof Uint8Array ? data.buffer as ArrayBuffer : data as unknown as ArrayBuffer;
       setMergedUrl(URL.createObjectURL(new Blob([buf], { type: 'video/mp4' })));
+      setMergeStatus('');
     } catch (e: any) {
       setMergeErr(e.message || 'Merge failed');
+      setMergeStatus('');
     } finally { setMerging(false); }
   }
 
@@ -750,7 +949,13 @@ export default function VideoReelStudio() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {([1, 2, 3] as const).map(n => (
               <SceneCard key={n} n={n} scene={reel[`scene_${n}`]} clip={clips[n - 1]}
-                onUpdate={s => updateScene(n, s)} onGenerate={() => handleGenerateClip(n - 1)} />
+                refImage={refImages[n-1]} refBusy={refBusy[n-1]}
+                onUpdate={s => updateScene(n, s)}
+                onGenerate={() => handleGenerateClip(n - 1)}
+                onGenerateRef={() => generateRefImage(n - 1)}
+                prevLastFrame={n > 1 ? lastFrames[n - 2] : null}
+                continuity={continuity}
+                isBlocked={false} />
             ))}
           </div>
 
@@ -774,11 +979,18 @@ export default function VideoReelStudio() {
                 </a>
               )}
             </div>
-            <Button onClick={handleMerge} disabled={doneCount === 0 || anyBusy || merging}
+             <Button onClick={handleMerge} disabled={doneCount === 0 || anyBusy || merging}
               className="w-full h-11 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold disabled:opacity-40">
-              {merging ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Merging...</>
-                : mergedUrl ? <><RefreshCw className="w-4 h-4 mr-2" />Re-merge</>
-                  : <><Merge className="w-4 h-4 mr-2" />Merge {doneCount} Clip{doneCount !== 1 ? 's' : ''} → Final Video</>}
+              {merging ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  {mergeStatus || 'Merging...'}
+                </>
+              ) : mergedUrl ? (
+                <><RefreshCw className="w-4 h-4 mr-2" />Re-merge &amp; Burn Captions</>
+              ) : (
+                <><Merge className="w-4 h-4 mr-2" />Merge &amp; Burn Captions ({doneCount} Clip{doneCount !== 1 ? 's' : ''})</>
+              )}
             </Button>
             {mergeErr && <p className="text-xs text-destructive mt-3">❌ {mergeErr}</p>}
             {mergedUrl && (
