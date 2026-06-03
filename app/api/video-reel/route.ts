@@ -14,14 +14,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 function getAzureConfig() {
-  const apiKey   = process.env.AZURE_OPENAI_API_KEY!;
+  const apiKey = process.env.AZURE_OPENAI_API_KEY!;
   const endpoint = process.env.AZURE_OPENAI_ENDPOINT!;
-  const dep      = process.env.AZURE_OPENAI_DEPLOYMENT_RAG || process.env.AZURE_OPENAI_DEPLOYMENT || 'gpt-4.1-rag-summary';
-  const ver      = process.env.AZURE_OPENAI_API_VERSION || '2024-02-01';
+  const dep = process.env.AZURE_OPENAI_DEPLOYMENT_RAG || process.env.AZURE_OPENAI_DEPLOYMENT || 'gpt-4.1-rag-summary';
+  const ver = process.env.AZURE_OPENAI_API_VERSION || '2024-02-01';
 
   let resource = process.env.AZURE_OPENAI_RESOURCE_NAME || '';
   if (!resource && endpoint) {
-    try { resource = new URL(endpoint).hostname.split('.')[0]; } catch {}
+    try { resource = new URL(endpoint).hostname.split('.')[0]; } catch { }
   }
   return { apiKey, resource, dep, ver };
 }
@@ -50,10 +50,10 @@ CRITICAL: duration_seconds must be exactly 4, 8, or 12. Sora 2 rejects all other
 
 export async function POST(req: NextRequest) {
   try {
-    const { systemPrompt, brief, marketContext, temperature = 0.85, fullUserPrompt } = await req.json();
+    const { systemPrompt, brief, marketContext, temperature = 0.85, fullPrompt } = await req.json();
 
-    if (!systemPrompt || (!brief && !fullUserPrompt)) {
-      return NextResponse.json({ error: 'systemPrompt and either brief or fullUserPrompt are required' }, { status: 400 });
+    if (!systemPrompt) {
+      return NextResponse.json({ error: 'systemPrompt is required' }, { status: 400 });
     }
 
     const { apiKey, resource, dep, ver } = getAzureConfig();
@@ -61,7 +61,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Azure OpenAI credentials missing' }, { status: 500 });
     }
 
-    const userContent = fullUserPrompt || [
+    // If designer edited the prompt preview directly, use that verbatim.
+    // Otherwise assemble from parts as normal.
+    const userContent = fullPrompt ?? [
       brief,
       marketContext ? `\n${marketContext}` : '',
       '\n## YOUR TASK',
@@ -79,7 +81,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user',   content: userContent   },
+          { role: 'user', content: userContent },
         ],
         temperature,
         max_tokens: 2000,
