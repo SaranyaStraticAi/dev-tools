@@ -26,6 +26,7 @@ interface OutputPanelProps {
     onSave?:       () => void;
     saveStatus?:   'idle' | 'saving' | 'saved' | 'error';
     saveError?:    string;
+    onClear?:      () => void;
 }
 
 export default function OutputPanel({
@@ -39,6 +40,7 @@ export default function OutputPanel({
     onSave,
     saveStatus = 'idle',
     saveError,
+    onClear,
 }: OutputPanelProps) {
     const [tab, setTab] = useState<'preview' | 'template' | 'raw' | 'metrics'>('preview');
     const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
@@ -172,6 +174,12 @@ export default function OutputPanel({
                             ) : (
                                 '💾 Save for Later'
                             )}
+                        </button>
+                    )}
+                    {onClear && (
+                        <button onClick={onClear}
+                            className="px-4 py-1.5 rounded-lg text-xs font-bold border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-all shadow-sm">
+                            🗑️ Clear
                         </button>
                     )}
                     <button onClick={handleDownload}

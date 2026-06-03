@@ -625,6 +625,18 @@ ${newsData.referenceLinks?.map((l: any) => `- ${l.title}: ${l.url}`).join('\n') 
         a.click(); URL.revokeObjectURL(url);
     };
 
+    // ── Clear generated state ──────────────────────────────────────────────────
+    const handleClear = () => {
+        setRawText('');
+        setEmailHtml('');
+        setBannerUrl('');
+        setPipelineLog([]);
+        localStorage.removeItem('newsletter_rawText');
+        localStorage.removeItem('newsletter_emailHtml');
+        localStorage.removeItem('newsletter_bannerUrl');
+        localStorage.removeItem('newsletter_pipelineLog');
+    };
+
     // ── Derived values ────────────────────────────────────────────────────────
     let parsed = rawText ? parseNewsletter(rawText) : null;
     if (parsed && type === 'puzzle') parsed = processPuzzleTokens(parsed);
@@ -663,7 +675,7 @@ ${newsData.referenceLinks?.map((l: any) => `- ${l.title}: ${l.url}`).join('\n') 
         // Output
         rawText, emailHtml, loading, step, error,
         parsed,
-        handleGenerate, handleGeneratePipeline, downloadHtml,
+        handleGenerate, handleGeneratePipeline, downloadHtml, handleClear,
         saveStatus, saveError, handleSaveNewsletter,
         // Resend
         broadcastId, sendStatus, sendError, metrics,
