@@ -159,12 +159,22 @@ export async function newsContextTool(analysis: DeepAnalysisResult): Promise<New
 
     // FIX 2: Fetch actual article content (6 candidates, parallel, 8s timeout each)
     const articles: NewsArticle[] = await Promise.all(
-        hits.slice(0, 6).map(async (h: any): Promise<NewsArticle> => ({
-            url:     (h.link   as string) || '#',
-            title:   (h.title  as string) || rawQuery,
-            source:  (h.source as string) || extractDomain((h.link as string) || '#'),
-            content: await fetchArticleContent((h.link as string) || '#'),
-        })),
+        hits.slice(0, 6).map(async (h: any): Promise<NewsArticle> => {
+            const url = (h.link as string) || '#';
+            let content = await fetchArticleContent(url);
+            
+            // Fallback: If scraper is blocked (403/401) or returns no content, use the Google snippet
+            if (!content || content.trim().length < 100) {
+                content = (h.snippet as string) || '';
+            }
+            
+            return {
+                url,
+                title:   (h.title  as string) || rawQuery,
+                source:  (h.source as string) || extractDomain(url),
+                content,
+            };
+        }),
     );
 
     // FIX 3: Filter irrelevant articles
@@ -174,10 +184,10 @@ export async function newsContextTool(analysis: DeepAnalysisResult): Promise<New
         return passes;
     });
 
-    // FIX 4: Drop articles with no content — never pass empty sources to Tool 6
+    // FIX 4: Drop articles with no content — lowered limit to 20 to support snippets
     const withContent = (relevant.length > 0 ? relevant : articles)
         .filter(a => {
-            const ok = a.content.trim().length > 100;
+            const ok = a.content.trim().length > 20;
             if (!ok) console.warn(`[newsContextTool] Dropped (no content): "${a.title}" (${a.source})`);
             return ok;
         });
