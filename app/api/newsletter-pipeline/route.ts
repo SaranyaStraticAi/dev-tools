@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
-import { redditDiscoverTool }     from './tools/01-redditDiscoverTool';
-import { llmPickSubredditsTool }  from './tools/02-llmPickSubredditsTool';
+import { redditDiscoverTool, REDDIT_DISCOVER_SYSTEM_PROMPT, REDDIT_DISCOVER_USER_PROMPT } from './tools/01-redditDiscoverTool';
+import { llmPickSubredditsTool, LLM_PICK_SYSTEM_PROMPT, LLM_PICK_USER_TEMPLATE }  from './tools/02-llmPickSubredditsTool';
 import { redditFetchPostsTool }   from './tools/03-redditFetchPostsTool';
-import { redditDeepAnalysisTool } from './tools/04-redditDeepAnalysisTool';
+import { redditDeepAnalysisTool, ANALYZE_SYSTEM_PROMPT, ANALYZE_USER_TEMPLATE } from './tools/04-redditDeepAnalysisTool';
 import { newsContextTool }        from './tools/05-newsContextTool';
 import { newsletterWriterTool }   from './tools/06-newsletterWriterTool';
 import { puzzleWriterTool }       from './tools/06b-puzzleWriterTool';
@@ -12,6 +12,7 @@ import {
     WEEKLY_SYSTEM_PROMPT, WEEKLY_USER_TEMPLATE,
     PUZZLE_SYSTEM_PROMPT, PUZZLE_USER_TEMPLATE,
     WEEKLY_TEMPLATE, PUZZLE_TEMPLATE,
+    REVIEW_SYSTEM_PROMPT, REVIEW_USER_TEMPLATE,
 } from './tools/prompts';
 
 // Load prompts from Azure Blob (active-prompts.json).
@@ -34,6 +35,14 @@ async function loadPrompts(requestUrl: string) {
             puzzleSystem:   p.puzzleSystem   || PUZZLE_SYSTEM_PROMPT,
             puzzleUser:     p.puzzleUser     || PUZZLE_USER_TEMPLATE,
             puzzleTemplate: p.puzzleTemplate || PUZZLE_TEMPLATE,
+            discoverSystem: p.discoverSystem || REDDIT_DISCOVER_SYSTEM_PROMPT,
+            discoverUser:   p.discoverUser   || REDDIT_DISCOVER_USER_PROMPT,
+            pickSystem:     p.pickSystem     || LLM_PICK_SYSTEM_PROMPT,
+            pickUser:       p.pickUser       || LLM_PICK_USER_TEMPLATE,
+            analysisSystem: p.analysisSystem || ANALYZE_SYSTEM_PROMPT,
+            analysisUser:   p.analysisUser   || ANALYZE_USER_TEMPLATE,
+            reviewSystem:   p.reviewSystem   || REVIEW_SYSTEM_PROMPT,
+            reviewUser:     p.reviewUser     || REVIEW_USER_TEMPLATE,
             source: 'blob' as const,
         };
     } catch (e: any) {
@@ -45,6 +54,14 @@ async function loadPrompts(requestUrl: string) {
             puzzleSystem:   PUZZLE_SYSTEM_PROMPT,
             puzzleUser:     PUZZLE_USER_TEMPLATE,
             puzzleTemplate: PUZZLE_TEMPLATE,
+            discoverSystem: REDDIT_DISCOVER_SYSTEM_PROMPT,
+            discoverUser:   REDDIT_DISCOVER_USER_PROMPT,
+            pickSystem:     LLM_PICK_SYSTEM_PROMPT,
+            pickUser:       LLM_PICK_USER_TEMPLATE,
+            analysisSystem: ANALYZE_SYSTEM_PROMPT,
+            analysisUser:   ANALYZE_USER_TEMPLATE,
+            reviewSystem:   REVIEW_SYSTEM_PROMPT,
+            reviewUser:     REVIEW_USER_TEMPLATE,
             source: 'hardcoded' as const,
         };
     }
@@ -81,7 +98,11 @@ export async function POST(req: NextRequest) {
                     sendEvent('prompts', 'running', { message: 'Loading prompts from Azure Blob...' });
                     const prompts = await loadPrompts(req.url);
                     const { weeklySystem, weeklyUser, weeklyTemplate,
-                            puzzleSystem, puzzleUser, puzzleTemplate } = prompts;
+                            puzzleSystem, puzzleUser, puzzleTemplate,
+                            discoverSystem, discoverUser,
+                            pickSystem, pickUser,
+                            analysisSystem, analysisUser,
+                            reviewSystem, reviewUser } = prompts;
                     sendEvent('prompts', 'done', {
                         message: prompts.source === 'blob'
                             ? 'Prompts loaded from Azure Blob ✓'
@@ -92,13 +113,19 @@ export async function POST(req: NextRequest) {
                     // ── Tool 1: Discover communities via RSS ──────────────────
                     sendEvent('discover', 'pending');
                     console.log(`[pipeline][${type}] starting discover...`);
-                    const discovered = await redditDiscoverTool();
+                    const discovered = await redditDiscoverTool({
+                        systemPrompt: discoverSystem,
+                        userPrompt: discoverUser,
+                    });
                     sendEvent('discover', 'done', { count: discovered.length });
 
                     // ── Tool 2: LLM picks relevant communities ────────────────
                     sendEvent('pick', 'pending');
                     console.log(`[pipeline][${type}] starting pick...`);
-                    const picked = await llmPickSubredditsTool(discovered);
+                    const picked = await llmPickSubredditsTool(discovered, {
+                        systemPrompt: pickSystem,
+                        userTemplate: pickUser,
+                    });
                     sendEvent('pick', 'done', { picked });
 
                     // ── Tool 3: Fetch posts via RSS ───────────────────────────
@@ -133,7 +160,10 @@ export async function POST(req: NextRequest) {
                     // ── WEEKLY PATH ───────────────────────────────────────────
                     sendEvent('analyze', 'pending');
                     console.log(`[pipeline][${type}] starting analyze...`);
-                    const analysis = await redditDeepAnalysisTool(posts);
+                    const analysis = await redditDeepAnalysisTool(posts, {
+                        systemPrompt: analysisSystem,
+                        userTemplate: analysisUser,
+                    });
                     sendEvent('analyze', 'done', { analysis });
 
                     // ── Tool 5: News context ──────────────────────────────────
@@ -154,7 +184,10 @@ export async function POST(req: NextRequest) {
                     // ── Tool 7: Compliance Review ──────────────────────────────
                     sendEvent('review', 'pending');
                     console.log(`[pipeline][${type}] starting review...`);
-                    const reviewResult = await complianceReviewTool(writeResult.rawText);
+                    const reviewResult = await complianceReviewTool(writeResult.rawText, {
+                        systemPrompt: reviewSystem,
+                        userTemplate: reviewUser,
+                    });
                     sendEvent('review', 'done', { passed: reviewResult.passed, flags: reviewResult.flags });
 
                     // ── Tool 8: Banner ────────────────────────────────────────
