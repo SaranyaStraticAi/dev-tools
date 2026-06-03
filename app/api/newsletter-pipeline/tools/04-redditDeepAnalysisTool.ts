@@ -137,25 +137,7 @@ async function fetchCommentsInBatches(
     return results;
 }
 
-export async function redditDeepAnalysisTool(
-    posts: RedditPostRaw[],
-    options?: { systemPrompt?: string; userTemplate?: string }
-): Promise<DeepAnalysisResult> {
-    if (posts.length === 0) throw new Error('No posts to analyze');
-
-    // Cap at top 40 by upvotes — 40 posts × ~15 comments each is plenty of signal.
-    // Was 100 before which caused rate limiting. 40 is the sweet spot.
-    const topPosts = posts.slice(0, 40);
-    console.log(`[redditDeepAnalysisTool] Fetching comments for top ${topPosts.length} posts (from ${posts.length} total) in batches of 5...`);
-
-    const postsWithComments = await fetchCommentsInBatches(topPosts, 5, 600);
-
-    const totalComments = postsWithComments.reduce((sum, p) => sum + p.topComments.length, 0);
-    console.log(`[redditDeepAnalysisTool] Fetched ${totalComments} comments across ${posts.length} posts`);
-
-    const fullDataset = postsWithComments.map((post, i) => formatPost(post, i)).join('\n\n');
-
-    const system = options?.systemPrompt || `You are a senior analyst for Vibe Trader Weekly, a professional forex and retail trading newsletter.
+export const ANALYZE_SYSTEM_PROMPT = `You are a senior analyst for Vibe Trader Weekly, a professional forex and retail trading newsletter.
 You have the COMPLETE Reddit dataset for this week — every post and every comment thread.
 
 Find the dominant trader pain theme and return structured analysis as JSON.
@@ -183,7 +165,29 @@ Respond ONLY with valid JSON:
 }
 No markdown, no backticks — raw JSON only.`;
 
-    const userTmpl = options?.userTemplate || `Analyze the complete Reddit trading dataset for this week.\n\nCOMPLETE DATASET ({postCount} posts, {commentCount} comments):\n\n{fullDataset}`;
+export const ANALYZE_USER_TEMPLATE = `Analyze the complete Reddit trading dataset for this week.\n\nCOMPLETE DATASET ({postCount} posts, {commentCount} comments):\n\n{fullDataset}`;
+
+export async function redditDeepAnalysisTool(
+    posts: RedditPostRaw[],
+    options?: { systemPrompt?: string; userTemplate?: string }
+): Promise<DeepAnalysisResult> {
+    if (posts.length === 0) throw new Error('No posts to analyze');
+
+    // Cap at top 40 by upvotes — 40 posts × ~15 comments each is plenty of signal.
+    // Was 100 before which caused rate limiting. 40 is the sweet spot.
+    const topPosts = posts.slice(0, 40);
+    console.log(`[redditDeepAnalysisTool] Fetching comments for top ${topPosts.length} posts (from ${posts.length} total) in batches of 5...`);
+
+    const postsWithComments = await fetchCommentsInBatches(topPosts, 5, 600);
+
+    const totalComments = postsWithComments.reduce((sum, p) => sum + p.topComments.length, 0);
+    console.log(`[redditDeepAnalysisTool] Fetched ${totalComments} comments across ${posts.length} posts`);
+
+    const fullDataset = postsWithComments.map((post, i) => formatPost(post, i)).join('\n\n');
+
+    const system = options?.systemPrompt || ANALYZE_SYSTEM_PROMPT;
+
+    const userTmpl = options?.userTemplate || ANALYZE_USER_TEMPLATE;
 
     const user = userTmpl
         .replace('{postCount}', postsWithComments.length.toString())
