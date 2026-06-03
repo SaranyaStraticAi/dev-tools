@@ -225,6 +225,7 @@ export default function VideoReelStudio() {
   const [showSys, setShowSys] = useState(false);
   const [showCtx, setShowCtx] = useState(true);
   const [showPrompt, setShowPrompt] = useState(false);
+  const [editedPrompt, setEditedPrompt] = useState<string | null>(null); // null = auto-assembled
   const [genBusy, setGenBusy] = useState(false);
   const [genErr, setGenErr] = useState<string | null>(null);
   const [reel, setReel] = useState<Reel | null>(null);
@@ -293,7 +294,7 @@ export default function VideoReelStudio() {
     setDay(d); setNotes(DAYS[d].notes);
     setMktCtx(DAYS[d].dataType === 'ta' ? MOCK_TA : DAYS[d].dataType === 'news' ? MOCK_NEWS : '');
     setReel(null); setClips([initClip(), initClip(), initClip()]);
-    setLastFrames([null, null, null]);
+    setLastFrames([null, null, null]); setEditedPrompt(null);
     setGenErr(null); setMergedUrl(null); setMergeErr(null);
   }
 
@@ -344,9 +345,14 @@ export default function VideoReelStudio() {
     setGenBusy(true); setGenErr(null); setReel(null);
     setClips([initClip(), initClip(), initClip()]); setMergedUrl(null); setMergeErr(null);
     try {
+      // Use editedPrompt if designer modified the preview, otherwise assemble from parts
+      const body = editedPrompt
+        ? { systemPrompt: sysP, fullPrompt: editedPrompt, temperature: 0.85 }
+        : { systemPrompt: sysP, brief: buildBrief(), marketContext: mktCtx, temperature: 0.85 };
+
       const r = await fetch('/api/video-reel', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ systemPrompt: sysP, brief: buildBrief(), marketContext: mktCtx, temperature: 0.85 }),
+        body: JSON.stringify(body),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error || `API ${r.status}`);
@@ -619,27 +625,48 @@ export default function VideoReelStudio() {
         </Card>
       )}
 
-      {/* Full user prompt preview */}
+      {/* Full user prompt preview — editable */}
       <Card className="bg-background/40 border-sky-500/20 overflow-hidden">
         <div className="w-full p-4 flex items-center justify-between text-sm font-semibold">
           <button className="flex-1 flex items-center gap-2 text-left hover:text-foreground transition-colors"
             onClick={() => setShowPrompt(!showPrompt)}>
-            <span className="text-sky-400">👁 Full User Prompt Preview</span>
-            <span className="font-normal normal-case text-muted-foreground text-xs">— exactly what GPT-4 receives · updates live</span>
+            <span className="text-sky-400">👁 Full User Prompt</span>
+            {editedPrompt !== null
+              ? <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-semibold">✏️ Modified — this exact text will be sent to GPT-4</span>
+              : <span className="font-normal normal-case text-muted-foreground text-xs">— auto-assembled · edit to override · updates live</span>
+            }
             {showPrompt ? <ChevronUp className="w-4 h-4 ml-auto text-muted-foreground" /> : <ChevronDown className="w-4 h-4 ml-auto text-muted-foreground" />}
           </button>
-          <CopyBtn text={buildFullUserPrompt()} />
+          <div className="flex items-center gap-1">
+            {editedPrompt !== null && (
+              <button onClick={() => setEditedPrompt(null)}
+                className="px-2 py-1 rounded-md bg-muted/40 text-xs text-muted-foreground hover:text-foreground border border-primary/10 transition-colors">
+                Reset
+              </button>
+            )}
+            <CopyBtn text={editedPrompt ?? buildFullUserPrompt()} />
+          </div>
         </div>
         {showPrompt && (
-          <div className="border-t border-sky-500/10">
-            <div className="px-4 pt-3 pb-1 flex gap-3 flex-wrap text-[10px] font-semibold uppercase tracking-widest">
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">Part 1 · Brief</span>
-              {mktCtx.trim() && <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400">Part 2 · Market context</span>}
-              <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400">Part 3 · Task + schema</span>
-            </div>
-            <pre className="px-4 pb-4 pt-2 text-[11px] font-mono text-muted-foreground leading-relaxed whitespace-pre-wrap overflow-auto max-h-[500px]">
-              {buildFullUserPrompt()}
-            </pre>
+          <div className="border-t border-sky-500/10 p-4">
+            {editedPrompt === null && (
+              <div className="flex gap-3 flex-wrap text-[10px] font-semibold uppercase tracking-widest mb-3">
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">Part 1 · Brief</span>
+                {mktCtx.trim() && <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400">Part 2 · Market context</span>}
+                <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400">Part 3 · Task + schema</span>
+                <span className="ml-auto text-muted-foreground/50 normal-case font-normal">Click in the box below to edit directly</span>
+              </div>
+            )}
+            <textarea
+              value={editedPrompt ?? buildFullUserPrompt()}
+              onChange={e => setEditedPrompt(e.target.value)}
+              className="w-full min-h-[400px] p-3 rounded-xl bg-muted/40 border border-sky-500/20 focus:border-sky-400/60 outline-none resize-y text-[11px] font-mono text-foreground leading-relaxed"
+            />
+            <p className="text-[10px] text-muted-foreground mt-2">
+              {editedPrompt !== null
+                ? 'You are in manual mode. GPT-4 will receive exactly what you typed above. Hit Reset to go back to auto.'
+                : 'Auto mode. Editing any field above auto-updates this. Click inside to take manual control.'}
+            </p>
           </div>
         )}
       </Card>
@@ -709,8 +736,8 @@ export default function VideoReelStudio() {
             </div>
             <button onClick={() => setContinuity(p => !p)}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${continuity
-                ? 'bg-violet-600/20 border-violet-500/40 text-violet-300'
-                : 'bg-muted/30 border-primary/10 text-muted-foreground'
+                  ? 'bg-violet-600/20 border-violet-500/40 text-violet-300'
+                  : 'bg-muted/30 border-primary/10 text-muted-foreground'
                 }`}
               title="When ON: last frame of Scene 1 is fed into Scene 2 as starting image, and Scene 2 last frame into Scene 3. Keeps lighting, room and desk consistent across all 3 clips.">
               <Zap className={`w-3 h-3 ${continuity ? 'fill-violet-400' : ''}`} />
