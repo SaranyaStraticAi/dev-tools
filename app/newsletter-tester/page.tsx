@@ -17,12 +17,10 @@
 import { useState, useEffect } from 'react';
 import { useMsal } from "@azure/msal-react";
 import { useNewsletterPage } from './hooks/useNewsletterPage';
-import RedditPanel    from './components/RedditPanel';
 import TemplateEditor from './components/TemplateEditor';
 import OutputPanel    from './components/OutputPanel';
 import ActionBar      from './components/ActionBar';
 import PromptEditor   from './components/PromptEditor';
-import VersionHistory from '@/components/VersionHistory';
 import PipelineLog    from './components/PipelineLog';
 
 export default function NewsletterTesterPage() {
@@ -132,20 +130,6 @@ export default function NewsletterTesterPage() {
                     <span>{blobLoadError}</span>
                 </div>
             )}
-
-            {/* ── Reddit posts card ────────────────────────────────────────── */}
-            <RedditPanel
-                posts={posts}
-                fetchingReddit={fetchingReddit}
-                redditFetchedAt={redditFetchedAt}
-                redditFromBlob={redditFromBlob}
-                redditError={redditError}
-                redditSubsSource={redditSubsSource}
-                redditSubsUsed={redditSubsUsed}
-                onFetchLive={fetchLiveReddit}
-                onResetSamples={resetReddit}
-                onPostsChange={setPosts}
-            />
 
             {/* ── 4 action buttons ─────────────────────────────────────────── */}
             <ActionBar
@@ -290,15 +274,6 @@ export default function NewsletterTesterPage() {
                     </div>
                 </div>
             )}
-
-            {/* ── Version History ──────────────────────────────────────────── */}
-            <VersionHistory
-                apiRoute="/api/newsletter-prompts"
-                newsletterType={type}
-                onRestore={restoreVersion}
-                className="w-full max-w-3xl"
-            />
-
         </div>
     );
 }
