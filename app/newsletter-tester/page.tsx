@@ -63,7 +63,7 @@ export default function NewsletterTesterPage() {
         // output
         rawText, emailHtml, loading, step, error,
         parsed,
-        handleGenerate, handleGeneratePipeline, downloadHtml,
+        handleGenerate, handleGeneratePipeline, downloadHtml, handleClear,
         saveStatus, saveError, handleSaveNewsletter,
         // resend
         broadcastId, sendStatus, sendError, metrics,
@@ -194,6 +194,7 @@ export default function NewsletterTesterPage() {
                     onSave={handleSaveNewsletter}
                     saveStatus={saveStatus}
                     saveError={saveError}
+                    onClear={handleClear}
                 />
             )}
 
