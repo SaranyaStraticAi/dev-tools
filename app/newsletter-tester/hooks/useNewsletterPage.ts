@@ -74,6 +74,56 @@ export function useNewsletterPage() {
     const [pipelineLog, setPipelineLog] = useState<PipelineLogEntry[]>([]);
     const pipelineLogRef = useRef<PipelineLogEntry[]>([]);
 
+    // ── Persist generated pipeline state in localStorage ──────────────────────
+    useEffect(() => {
+        try {
+            const savedRawText = localStorage.getItem('newsletter_rawText');
+            if (savedRawText) setRawText(savedRawText);
+
+            const savedEmailHtml = localStorage.getItem('newsletter_emailHtml');
+            if (savedEmailHtml) setEmailHtml(savedEmailHtml);
+
+            const savedBannerUrl = localStorage.getItem('newsletter_bannerUrl');
+            if (savedBannerUrl) setBannerUrl(savedBannerUrl);
+
+            const savedType = localStorage.getItem('newsletter_type') as NewsletterType | null;
+            if (savedType) setType(savedType);
+
+            const savedLog = localStorage.getItem('newsletter_pipelineLog');
+            if (savedLog) {
+                const parsedLog = JSON.parse(savedLog);
+                setPipelineLog(parsedLog);
+                pipelineLogRef.current = parsedLog;
+            }
+        } catch (e) {
+            console.warn('[localStorage-load] failed to load state:', e);
+        }
+    }, []);
+
+    useEffect(() => {
+        localStorage.setItem('newsletter_rawText', rawText);
+    }, [rawText]);
+
+    useEffect(() => {
+        localStorage.setItem('newsletter_emailHtml', emailHtml);
+    }, [emailHtml]);
+
+    useEffect(() => {
+        localStorage.setItem('newsletter_bannerUrl', bannerUrl);
+    }, [bannerUrl]);
+
+    useEffect(() => {
+        localStorage.setItem('newsletter_type', type);
+    }, [type]);
+
+    useEffect(() => {
+        if (pipelineLog.length > 0) {
+            localStorage.setItem('newsletter_pipelineLog', JSON.stringify(pipelineLog));
+        } else {
+            localStorage.removeItem('newsletter_pipelineLog');
+        }
+    }, [pipelineLog]);
+
     // ── On mount: load prompts + templates from Azure Blob ───────────────────
     useEffect(() => {
         (async () => {
