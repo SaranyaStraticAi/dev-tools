@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image, Link2, Network, LayoutGrid, ChevronDown, Mail } from 'lucide-react';
+import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image, Link2, Network, LayoutGrid, ChevronDown, Mail, Bell } from 'lucide-react';
 import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
 import { useState, useEffect } from 'react';
 
@@ -39,6 +39,7 @@ const navGroups = [
       { name: 'MetaAPI Connections',  href: '/metaapi-connections', icon: Network },
       { name: 'Strategy Dashboard',   href: '/strategy-dashboard',  icon: LineChart },
       { name: 'Journal Dashboard',    href: '/journal-dashboard',   icon: TrendingUp },
+      { name: 'Econ-Alert Subscribers', href: '/economic-alert-subscribers', icon: Bell },
     ],
   },
   {
