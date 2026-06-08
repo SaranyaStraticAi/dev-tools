@@ -6,7 +6,9 @@ export type NewsletterType = 'weekly' | 'puzzle';
 
 export interface RedditPost {
     rank: number;
+    subreddit?: string;
     title: string;
+    selftext?: string;
     upvotes: number;
     comments: number;
     flair: string;
@@ -16,16 +18,16 @@ export interface RedditPost {
 
 // ── Sample Reddit posts ───────────────────────────────────────────────────────
 export const SAMPLE_REDDIT_POSTS: RedditPost[] = [
-    { rank: 1, title: "I blew 40% of my account in one trade and I don't know what to do", upvotes: 2841, comments: 312, flair: "Discussion", url: "https://reddit.com/r/Forex/comments/sample1", created_utc: "2026-04-29 08:14 UTC" },
-    { rank: 2, title: "Why does my stop always get hit right before the move happens?", upvotes: 1654, comments: 187, flair: "Question", url: "https://reddit.com/r/Forex/comments/sample2", created_utc: "2026-04-30 11:02 UTC" },
-    { rank: 3, title: "Been trading 2 years, still not consistently profitable", upvotes: 1203, comments: 241, flair: "Advice", url: "https://reddit.com/r/Forex/comments/sample3", created_utc: "2026-05-01 09:45 UTC" },
-    { rank: 4, title: "My broker's spread widens by 3x during news events — is this normal?", upvotes: 987, comments: 134, flair: "Question", url: "https://reddit.com/r/Forex/comments/sample4", created_utc: "2026-04-28 14:22 UTC" },
-    { rank: 5, title: "Finally hit my first week of consistent green. Here's what changed", upvotes: 876, comments: 203, flair: "Discussion", url: "https://reddit.com/r/Forex/comments/sample5", created_utc: "2026-05-02 07:33 UTC" },
-    { rank: 6, title: "Every time I get emotional and revenge trade I lose more — how do I stop?", upvotes: 754, comments: 98, flair: "Advice", url: "https://reddit.com/r/Forex/comments/sample6", created_utc: "2026-04-30 16:55 UTC" },
-    { rank: 7, title: "EUR/USD range trading strategy that's worked for me for 6 months", upvotes: 612, comments: 88, flair: "Strategy", url: "https://reddit.com/r/Forex/comments/sample7", created_utc: "2026-04-27 10:11 UTC" },
-    { rank: 8, title: "What's the point of a trading journal if I already know what I did wrong?", upvotes: 543, comments: 76, flair: "Discussion", url: "https://reddit.com/r/Forex/comments/sample8", created_utc: "2026-04-29 19:44 UTC" },
-    { rank: 9, title: "Backtested my strategy — 68% win rate but still losing money live. Why?", upvotes: 498, comments: 112, flair: "Question", url: "https://reddit.com/r/Forex/comments/sample9", created_utc: "2026-05-01 13:20 UTC" },
-    { rank: 10, title: "Is it possible to trade Forex part-time while working full time?", upvotes: 421, comments: 67, flair: "General", url: "https://reddit.com/r/Forex/comments/sample10", created_utc: "2026-05-02 08:05 UTC" },
+    { rank: 1, subreddit: 'Forex', title: "I blew 40% of my account in one trade and I don't know what to do", selftext: "I didn't use a stop loss and overleveraged during the news release. The market moved 100 pips against me in minutes. I am completely devastated and thinking of quitting.", upvotes: 2841, comments: 312, flair: "Discussion", url: "https://reddit.com/r/Forex/comments/sample1", created_utc: "2026-04-29 08:14 UTC" },
+    { rank: 2, subreddit: 'Daytrading', title: "Why does my stop always get hit right before the move happens?", selftext: "It happens on EUR/USD almost daily. I set my stop loss at the recent swing low/high, price sweeps it by a few pips, and then goes exactly in my intended direction. Is this stop hunting by market makers?", upvotes: 1654, comments: 187, flair: "Question", url: "https://reddit.com/r/Forex/comments/sample2", created_utc: "2026-04-30 11:02 UTC" },
+    { rank: 3, subreddit: 'trading', title: "Been trading 2 years, still not consistently profitable", selftext: "I have read all the books and watched endless YouTube videos. I have green weeks and then lose it all in one day. I feel like I'm stuck in a loop of hope and failure.", upvotes: 1203, comments: 241, flair: "Advice", url: "https://reddit.com/r/Forex/comments/sample3", created_utc: "2026-05-01 09:45 UTC" },
+    { rank: 4, subreddit: 'Forex', title: "My broker's spread widens by 3x during news events — is this normal?", selftext: "During CPI or FOMC, my spread goes from 1.2 pips to 5+ pips. It instantly stops me out even if price hasn't reached my stop loss level on the chart. Is this standard practice?", upvotes: 987, comments: 134, flair: "Question", url: "https://reddit.com/r/Forex/comments/sample4", created_utc: "2026-04-28 14:22 UTC" },
+    { rank: 5, subreddit: 'Daytrading', title: "Finally hit my first week of consistent green. Here's what changed", selftext: "I stopped looking at 1-minute charts and moved to the 1-hour and 4-hour timeframes. I also limited myself to maximum 2 trades per day. Patience pays off.", upvotes: 876, comments: 203, flair: "Discussion", url: "https://reddit.com/r/Forex/comments/sample5", created_utc: "2026-05-02 07:33 UTC" },
+    { rank: 6, subreddit: 'trading', title: "Every time I get emotional and revenge trade I lose more — how do I stop?", selftext: "After a loss, I get angry and try to double my position size to win it back. I know it is wrong but I cannot control the urge in the moment. Need psychological tips.", upvotes: 754, comments: 98, flair: "Advice", url: "https://reddit.com/r/Forex/comments/sample6", created_utc: "2026-04-30 16:55 UTC" },
+    { rank: 7, subreddit: 'algotrading', title: "EUR/USD range trading strategy that's worked for me for 6 months", selftext: "I trade the Asian session range bounce using RSI divergence on the 15-minute chart. The win rate is about 62% with a 1:1.5 risk-to-reward ratio.", upvotes: 612, comments: 88, flair: "Strategy", url: "https://reddit.com/r/Forex/comments/sample7", created_utc: "2026-04-27 10:11 UTC" },
+    { rank: 8, subreddit: 'Forextrading', title: "What's the point of a trading journal if I already know what I did wrong?", selftext: "I keep a spreadsheet but I rarely look at it. I know exactly when I make mistakes (revenge trading, overleveraging). Does journaling actually help you improve?", upvotes: 543, comments: 76, flair: "Discussion", url: "https://reddit.com/r/Forex/comments/sample8", created_utc: "2026-04-29 19:44 UTC" },
+    { rank: 9, subreddit: 'Forex', title: "Backtested my strategy — 68% win rate but still losing money live. Why?", selftext: "In backtests I have no emotions, I take every trade perfectly. In live trading, I hesitate, close winners early, and let losers run. Execution is the hardest part.", upvotes: 498, comments: 112, flair: "Question", url: "https://reddit.com/r/Forex/comments/sample9", created_utc: "2026-05-01 13:20 UTC" },
+    { rank: 10, subreddit: 'Daytrading', title: "Is it possible to trade Forex part-time while working full time?", selftext: "I work 9 to 5 and trade the London/New York overlap in the evenings. It is exhausting and I'm missing setups. Has anyone successfully transitioned to part-time trading?", upvotes: 421, comments: 67, flair: "General", url: "https://reddit.com/r/Forex/comments/sample10", created_utc: "2026-05-02 08:05 UTC" },
 ];
 
 // ── REAL system prompt — exact same brief as config/system_prompt.txt ─────────
@@ -43,6 +45,17 @@ VIBE TRADER — Newsletter Playbook
 The Pain + Solution Formula — End-to-End Operating System
 Version 1.0 | April 2026 | Confidential
 2× sends per week | Tuesday = Puzzle | Thursday = Weekly | Target: 15%+ open rate
+
+=== TONE & QUALITY MANDATE (CRITICAL) ===
+Your writing must be professional, authoritative, and intelligent. Think FT Weekend, The Economist, or a high-end financial newsletter. 
+DO NOT use childish, sensational, or casual language. 
+BANNED WORDS: "chaos", "wild", "blow up", "scramble", "crazy", "insane", "huge".
+NO exclamation marks in the body copy.
+
+=== REDDIT IS PRIVATE INTEL, NEVER A CITED SOURCE ===
+The Reddit posts provided are for your internal understanding of what traders are feeling (trader pain). 
+NEVER mention Reddit in the newsletter. NEVER cite reddit.com URLs. 
+All cited sources (SOURCE1, SOURCE2, etc.) MUST come ONLY from the {external_sources} list.
 
 The core formula: Pain + Solution — "[Trader's specific pain]: [How Vibe Trader fixes it]"
 
@@ -69,7 +82,7 @@ Every weekly newsletter follows this exact 5-part structure. Do not deviate from
 PART 3 — THURSDAY WEEKLY NEWSLETTER
 Send day: Thursday 7:00 AM recipient local time
 Audience: Prospects + Newsletter subscribers (NOT app users)
-Length: 300–450 words body copy. One CTA button.
+Length: 400–600 words body copy. One CTA button.
 Formula: Pain + Solution always.
 CTA: Specific to the email content — not "Explore Vibe Trader"
 Reply hook: Mandatory.
@@ -123,19 +136,49 @@ Using the rules, tone, formula, and audience above:
 3. Match the Audience Profile tone exactly
 4. Follow all CTA rules from the Offer Info exactly
 
+=== FEATURE WHITELIST (read first — Rule 4) ===
+ONLY these Vibe Trader features may be mentioned in SECTION4_BODY:
+- Live market analysis
+- AI-powered trade insights
+- Risk management tools
+- Pattern recognition
+- Real-time alerts
+- Trade journal / journaling
+- Performance analytics
+- Educational content / learning hub
+BANNED features (never invent or mention):
+- Trade Replay
+- Fill Report
+- Signals (as a product name)
+- Broker Comparison
+- Copy Trading
+- Backtesting engine
+Rule 4 — No invented features: SECTION4_BODY must only reference features from the whitelist above. Any phrase "Vibe Trader's X" where X is not on the whitelist is a Rule 4 violation.
+
 OUTPUT FORMAT — return exactly these labels, nothing else before or after:
-SUBJECT: ...
-PREVIEW: ...
-BODY:
-[full email body — hook, insight, CTA button line formatted as [Button text →], reply hook]
+SUBJECT: [Pain + Solution. First 6 words name the pain.]
+PREVIEW: [Max 90 characters. Completes the subject. Never repeats it. Never the tagline.]
+NEWSLETTER_TITLE: [4–5 words. Different from SUBJECT. Reflects body's central theme. Sharp trading language.]
+OPENING: [2–3 sentences in the trader's own voice. No Vibe Trader mention.]
+SECTION1_TITLE: [Short, e.g. What's Driving It]
+SECTION1_BODY: [1–2 paragraphs of insight. Closes with one short Vibe Trader reference.]
+SECTION2_TITLE: [Short, e.g. What's Already Moving]
+SECTION2_BODY: [1–2 paragraphs on how traders are responding. May include hyphen bullets. Closes with one short Vibe Trader reference.]
+CTA: [Link text only. No arrows, no emojis. Tied directly to this week's topic.]
+SECTION3_TITLE: [Short, e.g. What to Watch]
+SECTION3_BODY: [1–2 paragraphs on emerging dynamics. Closes with one short Vibe Trader reference.]
+SECTION4_TITLE: [e.g. How Vibe Trader Helps, The Vibe Trader Edge, Where Vibe Trader Comes In, The Fix Inside Vibe Trader]
+SECTION4_BODY: [1–2 paragraphs. Names at least one specific feature from the WHITELIST ABOVE ONLY. Explains the mechanism. Maps it to this week's exact pain.]
+TAKEAWAY1: [One sentence.]
+TAKEAWAY2: [One sentence.]
+SOURCE1: [Real URL, copied verbatim from input. Must NOT be a reddit.com URL. Add SOURCE2, SOURCE3, etc., ONLY if additional sources are provided in the input. If no external sources exist, omit all SOURCE labels.]
+If you cannot satisfy Rule 4 (no invented features) or Rule 5 (source diversity — at least 1 non-Reddit URL if sources exist), return ERROR: VALIDATION_FAILED and nothing else. Never produce a partial newsletter.
 
 STRICT RULES:
 - Subject: Pain + Solution formula, first 6 words name the pain
 - Preview: max 90 chars, never the tagline, never repeats subject
 - Opening hook: 2–3 sentences, trader's own words, NO Vibe Trader mention
-- Body: 300–450 words total
 - One CTA only — never "Explore Vibe Trader"
-- Reply hook at the close — one direct question, mandatory
 - No investment advice, no return promises, no fake urgency`;
 
 // ── PUZZLE system prompt — separate brief for Tuesday puzzle ──────────────────
@@ -198,28 +241,35 @@ D) ...
 [Leaderboard line]
 [Reply hook — "Reply with your answer — first 3 correct get featured next week"]
 [[Submit your answer →]]
+ANSWER: [correct letter only — A, B, C, or D]
+EXPLANATION: [one sentence explaining why that answer is correct]
 
 STRICT RULES:
 - Real currency pair (e.g. EUR/USD, GBP/JPY, USD/JPY)
 - Real account size (e.g. $5,000 / $10,000 / $25,000)
 - 4 answer choices — one correct, three plausible-but-wrong
 - Subject must be unique — never repeat previous puzzle subjects
-- Never give the answer in the email
-- Body setup: 80–120 words only`;
+- Never give the answer INSIDE the BODY section — only in the ANSWER field
+- Body setup: 80–120 words only
+- ANSWER must be exactly one letter: A, B, C, or D`;
 
 // ── User prompt templates ─────────────────────────────────────────────────────
 export const WEEKLY_USER_TEMPLATE = `Today is {date}.
 
-Here are the top trending Reddit posts from r/Forex this week.
-These posts reveal what real traders are talking about, frustrated by, and asking about RIGHT NOW.
+TRADER SENTIMENT SIGNALS (PRIVATE INTEL - DO NOT CITE):
+The following posts reveal what real traders are talking about, frustrated by, and asking about RIGHT NOW. Use them to understand sentiment, but DO NOT mention them or cite them.
 
 Your job:
 1. Identify the single strongest trader PAIN (highest upvotes + most emotional language)
 2. Write the Thursday Weekly Newsletter using the Pain + Solution formula from the playbook
 3. The insight must connect directly to what these traders are actually saying this week
+4. Cite sources ONLY from the external sources list below.
 
 REDDIT POSTS THIS WEEK:
 {posts}
+
+EXTERNAL SOURCES (Use these for SOURCE1, SOURCE2, etc.):
+{external_sources}
 
 Generate the Thursday Weekly newsletter now.`;
 

@@ -14,17 +14,32 @@
 //   components/PromptEditor.tsx     — Prompt editor drawer (unchanged)
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { useState, useEffect } from 'react';
+import { useMsal } from "@azure/msal-react";
 import { useNewsletterPage } from './hooks/useNewsletterPage';
-import RedditPanel    from './components/RedditPanel';
 import TemplateEditor from './components/TemplateEditor';
 import OutputPanel    from './components/OutputPanel';
 import ActionBar      from './components/ActionBar';
 import PromptEditor   from './components/PromptEditor';
+import PipelineLog    from './components/PipelineLog';
 
 export default function NewsletterTesterPage() {
+    const { accounts } = useMsal();
+    const [employeeAccount, setEmployeeAccount] = useState<string | null>(null);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+        const saved = localStorage.getItem('employee_session');
+        if (saved) setEmployeeAccount(saved);
+    }, []);
+
+    const userEmail = accounts[0]?.username;
+    const isAllowed = userEmail === 'masood@aity.dev' || employeeAccount === 'ketki@vibetrader.com' || userEmail === 'ketki@vibetrader.com';
+
     const {
         // types
-        type, templateType, setTemplateType,
+        type, setType, templateType, setTemplateType,
         // prompts
         weeklySystem, setWeeklySystem,
         weeklyUser,   setWeeklyUser,
@@ -33,21 +48,45 @@ export default function NewsletterTesterPage() {
         showPrompts,  setShowPrompts,
         // reddit
         posts, setPosts,
-        fetchingReddit, redditFetchedAt, redditError,
+        fetchingReddit, redditFetchedAt, redditError, redditFromBlob,
+        redditSubsSource, redditSubsUsed,
         fetchLiveReddit, resetReddit,
         // azure
         promptsLoading, publishing, publishStatus,
         azureSource, lastPublishedAt,
         blobLoadError,
         publishToAzure,
+        publishTemplatesToAzure,
+        restoreVersion,
         // templates
         weeklyTemplate, puzzleTemplate,
         handleTemplateChange, reloadTemplateFromAzure,
         // output
         rawText, emailHtml, loading, step, error,
         parsed,
-        handleGenerate, downloadHtml,
+        handleGenerate, handleGeneratePipeline, downloadHtml, handleClear,
+        saveStatus, saveError, handleSaveNewsletter,
+        // resend
+        broadcastId, sendStatus, sendError, metrics,
+        handleSendViaResend,
+        segments, selectedSegs, setSelectedSegs,
+        showSendModal, setShowSendModal,
+        // pipeline log
+        pipelineLog,
     } = useNewsletterPage();
+
+    if (!mounted) return null;
+
+    if (!isAllowed) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen bg-background">
+                <div className="text-center flex flex-col gap-2">
+                    <span className="text-2xl">🔒</span>
+                    <p className="text-sm text-muted-foreground">Access Denied. Only Masood and Ketki are allowed.</p>
+                </div>
+            </div>
+        );
+    }
 
     // ── Loading screen ────────────────────────────────────────────────────────
     if (promptsLoading) return (
@@ -66,13 +105,23 @@ export default function NewsletterTesterPage() {
             <div className="text-center">
                 <h1 className="text-2xl font-bold tracking-tight">Newsletter Tester</h1>
                 <p className="text-sm text-muted-foreground mt-1">Generate · edit prompts · edit template · preview · publish</p>
-                <div className="mt-2 flex items-center justify-center gap-1.5">
-                    <span className={`w-1.5 h-1.5 rounded-full ${azureSource ? 'bg-green-500' : 'bg-yellow-500'}`}/>
-                    <span className="text-[10px] text-muted-foreground">
-                        {azureSource
-                            ? `Loaded from Azure${lastPublishedAt ? ` · ${new Date(lastPublishedAt).toLocaleString()}` : ''}`
-                            : 'Using local defaults'}
-                    </span>
+                <div className="mt-2 flex items-center justify-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-1.5">
+                        <span className={`w-1.5 h-1.5 rounded-full ${azureSource ? 'bg-green-500' : 'bg-yellow-500'}`}/>
+                        <span className="text-[10px] text-muted-foreground">
+                            {azureSource
+                                ? `Loaded from Azure${lastPublishedAt ? ` · ${new Date(lastPublishedAt).toLocaleString()}` : ''}`
+                                : 'Using local defaults'}
+                        </span>
+                    </div>
+                    <a href="/audience-manager"
+                        className="text-[10px] font-bold px-2.5 py-1 rounded-lg border border-orange-500/30 text-orange-400 hover:bg-orange-500/10 transition-all">
+                        👥 Manage Audience →
+                    </a>
+                    <a href="/email-campaigns"
+                        className="text-[10px] font-bold px-2.5 py-1 rounded-lg border border-purple-500/30 text-purple-400 hover:bg-purple-500/10 transition-all">
+                        📧 Email Campaigns →
+                    </a>
                 </div>
             </div>
 
@@ -83,17 +132,6 @@ export default function NewsletterTesterPage() {
                 </div>
             )}
 
-            {/* ── Reddit posts card ────────────────────────────────────────── */}
-            <RedditPanel
-                posts={posts}
-                fetchingReddit={fetchingReddit}
-                redditFetchedAt={redditFetchedAt}
-                redditError={redditError}
-                onFetchLive={fetchLiveReddit}
-                onResetSamples={resetReddit}
-                onPostsChange={setPosts}
-            />
-
             {/* ── 4 action buttons ─────────────────────────────────────────── */}
             <ActionBar
                 activeType={type}
@@ -101,9 +139,14 @@ export default function NewsletterTesterPage() {
                 showPrompts={showPrompts}
                 publishing={publishing}
                 publishStatus={publishStatus}
-                onGenerate={handleGenerate}
+                sendStatus={sendStatus}
+                hasHtml={!!emailHtml}
+                onGeneratePipeline={() => handleGeneratePipeline(false, 'weekly')}
+                onGeneratePuzzle={() => handleGeneratePipeline(false, 'puzzle')}
+                onTypeSwitch={setType}
                 onTogglePrompts={() => setShowPrompts(v => !v)}
                 onPublish={publishToAzure}
+                onSend={() => setShowSendModal(true)}
             />
 
             {/* ── Publish success banner ───────────────────────────────────── */}
@@ -136,6 +179,8 @@ export default function NewsletterTesterPage() {
                 onTemplateTypeChange={setTemplateType}
                 onTemplateChange={handleTemplateChange}
                 onReloadFromAzure={reloadTemplateFromAzure}
+                onPublishTemplates={publishTemplatesToAzure}
+                publishing={publishing}
                 parsed={parsed}
             />
 
@@ -146,8 +191,23 @@ export default function NewsletterTesterPage() {
                     rawText={rawText}
                     parsed={parsed}
                     newsletterType={type}
+                    broadcastId={broadcastId}
+                    metrics={metrics}
+                    sendError={sendError}
+                    onSave={handleSaveNewsletter}
+                    saveStatus={saveStatus}
+                    saveError={saveError}
+                    onClear={handleClear}
                 />
             )}
+
+            {/* ── Pipeline Process Log (Full) ──────────────── */}
+            <PipelineLog entries={pipelineLog} title="Pipeline Process Log (Full)" promptMode="full" />
+            
+            <div className="h-4" />
+
+            {/* ── Pipeline Process Log (Compressed) ──────────────── */}
+            <PipelineLog entries={pipelineLog} title="Compressed Pipeline Log" promptMode="compressed" />
 
             {/* ── Prompt editor drawer ─────────────────────────────────────── */}
             {showPrompts && (
@@ -164,6 +224,60 @@ export default function NewsletterTesterPage() {
                 </div>
             )}
 
+            {/* ── Send Modal ────────────────────────────────────────────────── */}
+            {showSendModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-card border rounded-2xl p-6 max-w-md w-full flex flex-col gap-4 shadow-xl">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-xl font-bold">Select Segments</h2>
+                            <button onClick={() => setShowSendModal(false)} className="text-muted-foreground hover:text-foreground">✕</button>
+                        </div>
+                        <p className="text-sm text-muted-foreground">Select the segments you want to send this newsletter to. If none selected, it will send to the default audience.</p>
+                        
+                        <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
+                            {segments.map(seg => (
+                                <label key={seg.id} className="flex items-center gap-3 p-2 hover:bg-muted rounded-lg cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedSegs.includes(seg.id)}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                setSelectedSegs([...selectedSegs, seg.id]);
+                                            } else {
+                                                setSelectedSegs(selectedSegs.filter(id => id !== seg.id));
+                                            }
+                                        }}
+                                        className="rounded border-muted text-orange-500 focus:ring-orange-500"
+                                    />
+                                    <span className="text-sm font-medium">{seg.name}</span>
+                                </label>
+                            ))}
+                            {segments.length === 0 && (
+                                <p className="text-sm text-muted-foreground text-center py-4">No segments found.</p>
+                            )}
+                        </div>
+
+                        <div className="flex gap-3 justify-end mt-2">
+                            <button
+                                onClick={() => setShowSendModal(false)}
+                                className="px-4 py-2 border rounded-xl text-sm font-medium hover:bg-muted"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowSendModal(false);
+                                    handleSendViaResend();
+                                }}
+                                disabled={sendStatus === 'sending'}
+                                className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-medium disabled:opacity-50"
+                            >
+                                {sendStatus === 'sending' ? 'Sending…' : 'Send Now'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

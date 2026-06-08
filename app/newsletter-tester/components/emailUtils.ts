@@ -32,15 +32,17 @@ export function parseNewsletter(raw: string) {
     };
 
     // Regex explanation:
-    // ^([A-Z0-9_]+):    -> Matches a label at the start of a line (e.g., SUBJECT:)
-    // \s*               -> Matches optional whitespace
-    // ([\s\S]*?)        -> Captures everything (including newlines) lazily
-    // (?=\n[A-Z0-9_]+:|$) -> Until it sees another label at start of line OR end of string
-    const regex = /^([A-Z0-9_]+):\s*([\s\S]*?)(?=\n[A-Z0-9_]+:|$)/gim;
+    // (?:\n|^)          -> Matches newline or start of string
+    // ([A-Z0-9_]{3,})   -> Strict: 3+ uppercase chars/numbers/underscores (no spaces)
+    // \s*:\s*           -> Followed by a colon (with optional spacing)
+    // ([\s\S]*?)        -> Captures everything lazily
+    // (?=\n[A-Z0-9_]{3,}\s*:|$) -> Until the next valid strict label or end of string
+    const regex = /(?:\n|^)([A-Z0-9_]{3,})\s*:\s*([\s\S]*?)(?=\n[A-Z0-9_]{3,}\s*:|$)/g;
 
     let match;
     while ((match = regex.exec(raw)) !== null) {
-        const label = match[1].toLowerCase();
+        // Trim, lower-case, and replace any spaces with underscores so tokens are standard
+        const label = match[1].trim().toLowerCase().replace(/\s+/g, '_');
         const value = match[2].trim();
         results[label] = value;
     }
@@ -70,7 +72,11 @@ export function renderTemplate(
     // 1.5 Handle virtual "list" tokens (e.g. {sources_list} replaces all SOURCE1, SOURCE2... items)
     const buildList = (prefix: string, formatter: (v: string) => string) => {
         return Object.entries(parsed)
-            .filter(([k]) => k.startsWith(prefix))
+            .filter(([k, v]) => {
+                if (!k.startsWith(prefix)) return false;
+                const val = v.trim().toLowerCase();
+                return val !== '' && val !== 'none' && val !== '[none]';
+            })
             .sort((a, b) => a[0].localeCompare(b[0]))
             .map(([_, v]) => formatter(v))
             .join('');
@@ -117,10 +123,10 @@ function parsePuzzleBody(body: string) {
     let curLetter = '', curLines: string[] = [], inOpts = false;
     for (const raw of lines) {
         const s = raw.trim();
-        const opt = s.match(/^([A-D])\)\s*(.*)/);
+        const opt = s.match(/^(?:(?:\*\*|\*)?\s*(?:Option\s*)?)?([A-D])[\)\.\:]\s*(?:\*\*|\*)?\s*(.*)/i);
         if (opt) {
             if (curLetter) result.options.push({ letter: curLetter, text: curLines.join('\n').trim() });
-            curLetter = opt[1]; curLines = [opt[2]]; inOpts = true; continue;
+            curLetter = opt[1].toUpperCase(); curLines = [opt[2]]; inOpts = true; continue;
         }
         if (curLetter && inOpts) {
             if (/^\[.+\]/.test(s) || /last week/i.test(s) || /reply with/i.test(s)) {
@@ -141,53 +147,103 @@ function parsePuzzleBody(body: string) {
     return result;
 }
 
-function puzzleOptionBox(letter: string, text: string): string {
-    const formatted = text.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
-    return `<table width="100%" cellpadding="0" cellspacing="0" style="margin:12px 0;background:#eef0f6;border-radius:8px;">
-      <tr><td style="padding:12px;font-size:14px;color:#333;">${formatted}</td></tr>
-      <tr><td align="center" style="padding:10px;">
-        <a href="https://www.vibetrader.com/puzzle?option=${letter}" style="background:#4b3fa0;color:#fff;text-decoration:none;padding:10px 20px;border-radius:20px;display:inline-block;font-weight:bold;">Select Option ${letter}</a>
-      </td></tr>
+// ── Option box — 100% script-free, email-safe ────────────────────────────────
+// Links to vibetrader.com/puzzle?option=A&correct=C&explanation=...
+// The existing /puzzle page on the landing site reads these params and shows ✅/❌.
+// No onclick, no JS — safe for HubSpot, Resend, Gmail, Outlook.
+function puzzleOptionBox(letter: string, text: string, correctAnswer: string, explanation: string): string {
+    const formatted = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+    const href = `https://vibetrader.com/puzzle?option=${encodeURIComponent(letter)}&correct=${encodeURIComponent(correctAnswer)}&explanation=${encodeURIComponent(explanation)}`;
+    return `<table class="vt-opt" data-letter="${letter}" width="100%" cellpadding="0" cellspacing="0"
+      style="margin:12px 0;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;border-left:4px solid #b624e0;">
+      <tr>
+        <td style="padding:16px;vertical-align:middle;">
+          <table cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="padding-right:12px;vertical-align:middle;">
+                <div style="width:18px;height:18px;border-radius:50%;border:2px solid #94a3b8;background:#ffffff;display:inline-block;vertical-align:middle;">
+                  <div style="width:8px;height:8px;border-radius:50%;background:#94a3b8;margin:5px auto 0;"></div>
+                </div>
+              </td>
+              <td style="vertical-align:middle;font-size:15px;color:#1e293b;line-height:1.5;">
+                ${formatted}
+              </td>
+            </tr>
+          </table>
+        </td>
+        <td align="right" style="padding:16px;vertical-align:middle;width:130px;min-width:130px;">
+          <a class="vt-btn" data-letter="${letter}" href="${href}"
+            style="background:linear-gradient(90deg, #0056D2 0%, #B624E0 100%);color:#ffffff;text-decoration:none;padding:10px 16px;border-radius:20px;font-weight:bold;font-size:13px;display:inline-block;text-align:center;box-shadow:0 2px 6px rgba(0,86,210,0.15);">
+            Select Option ${letter}
+          </a>
+        </td>
+      </tr>
     </table>`;
 }
 
-export function buildEmailHtml(subject: string, preview: string, body: string, type: 'weekly'|'puzzle'): string {
-    if (type !== 'puzzle') throw new Error('Weekly must use renderTemplate() with blob template');
-    const p = parsePuzzleBody(body);
-    const setupHtml   = p.setup.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>');
-    const optionsHtml = p.options.map(o => puzzleOptionBox(o.letter, o.text)).join('');
-    const leaderHtml  = p.leaderboard ? `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #D8C9F3;border-radius:6px;margin:15px 0;"><tr><td style="font-size:14px;padding:10px;">&#127942; Last Week's Winner</td></tr><tr><td style="font-size:13px;color:#555;padding:0 10px 10px;">${p.leaderboard}</td></tr></table>` : '';
+// ── Preview-only interactive script — injected into iframe srcDoc by OutputPanel.
+// NEVER put this in emailHtml — email clients and HubSpot reject <script> tags.
+export function buildPuzzlePreviewScript(correctAnswer: string): string {
+    return `<script>
+(function(){
+  var C=${JSON.stringify(correctAnswer)};
+  function wire(){
+    document.querySelectorAll('.vt-btn').forEach(function(link){
+      link.addEventListener('click',function(e){
+        e.preventDefault();
+        var chosen=(link.getAttribute('data-letter')||'').toUpperCase();
+        var right=C&&chosen===C;
+        document.querySelectorAll('.vt-opt').forEach(function(box){
+          box.style.background='#f8fafc';
+          box.style.border='1px solid #e2e8f0';
+          box.style.borderLeft='4px solid #b624e0';
+          var badge=box.querySelector('.vt-badge');if(badge)badge.remove();
+          var b=box.querySelector('.vt-btn');
+          if(b){b.style.background='linear-gradient(90deg, #0056D2 0%, #B624E0 100%)';b.textContent='Select Option '+b.getAttribute('data-letter');}
+        });
+        var box=link.closest('.vt-opt');
+        if(box){
+          box.style.background=right?'#d1fae5':'#fee2e2';
+          box.style.border='1px solid '+(right?'#34d399':'#f87171');
+          box.style.borderLeft='4px solid '+(right?'#059669':'#dc2626');
+          var badge=document.createElement('div');
+          badge.className='vt-badge';
+          badge.style.cssText='font-size:13px;font-weight:bold;padding:6px 0 4px;text-align:center;color:'+(right?'#065f46':'#991b1b');
+          badge.textContent=right?'\u2705 Correct! Well done.':(C?'\u274c Wrong \u2014 the answer is '+C+'.':'\u274c Incorrect.');
+          box.appendChild(badge);
+        }
+        link.style.background=right?'#059669':'#dc2626';
+        link.textContent=right?'\u2714 Correct!':'\u2716 Wrong';
+      });
+    });
+  }
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',wire);}else{wire();}
+})();
+<\/script>`;
+}
+
+export function processPuzzleTokens(parsed: Record<string, string>): Record<string, string> {
+    if (!parsed.body) return parsed;
+
+    const correctAnswer = (parsed.answer || '').trim().toUpperCase().replace(/[^A-D]/g, '');
+    const explanation   = (parsed.explanation || '').trim();
+
+    const p           = parsePuzzleBody(parsed.body);
+    const setupHtml   = p.setup.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+    // Clean email-safe option boxes — NO <script>, NO onclick
+    const optionsHtml = p.options.map(o => puzzleOptionBox(o.letter, o.text, correctAnswer, explanation)).join('');
+    const leaderHtml  = p.leaderboard
+        ? `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #D8C9F3;border-radius:6px;margin:15px 0;"><tr><td style="font-size:14px;padding:10px;">&#127942; Last Week's Winner</td></tr><tr><td style="font-size:13px;color:#555;padding:0 10px 10px;">${p.leaderboard}</td></tr></table>`
+        : '';
     const replyHtml   = p.replyHook ? `<p style="font-size:14px;color:#333;margin:10px 0;">${p.replyHook}</p>` : '';
-    return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional //EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
-<head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>${subject}</title>
-<style>body{margin:0;padding:0;font-family:Arial,sans-serif;background:#f5f5f5;}table{border-spacing:0;border-collapse:collapse;}p{margin:0 0 10px 0;}</style>
-</head>
-<body style="margin:0;padding:0;background:#f5f5f5;">
-<div style="display:none;font-size:1px;color:#f5f5f5;max-height:0;overflow:hidden;">${preview}&nbsp;</div>
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;">
-  <tr><td align="center" style="padding:20px 10px;">
-    <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#fff;border:1px solid #ccc;border-radius:6px;">
-      <tr><td style="background:#4b3fa0;color:#fff;text-align:center;padding:16px;font-size:20px;font-weight:bold;border-radius:6px 6px 0 0;">Your Weekly Market Challenge</td></tr>
-      <tr><td style="padding:20px;">
-        <p style="font-size:16px;font-weight:bold;color:#000;margin-bottom:14px;">${subject}</p>
-        <p style="font-size:13px;font-weight:bold;margin-bottom:10px;color:#000;">THE SETUP</p>
-        <p style="font-size:15px;line-height:1.6;color:#333;">${setupHtml}</p>
-        <p style="font-size:13px;font-weight:bold;margin-top:20px;margin-bottom:8px;color:#000;">THE QUESTION</p>
-        <p style="font-size:15px;line-height:1.6;color:#333;">Based on the setup above, which read is most accurate — and what should you do next?</p>
-        ${optionsHtml}${replyHtml}
-        <table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;">
-          <tr><td align="center"><a href="https://www.vibetrader.com/" style="border:2px solid #4b3fa0;color:#4b3fa0;text-decoration:none;padding:10px 24px;border-radius:25px;display:inline-block;font-weight:bold;font-size:14px;">Explore Vibe Trader</a></td></tr>
-        </table>
-        ${leaderHtml}
-        <p style="font-size:14px;font-weight:bold;color:#5b3fa0;margin:15px 0;">Expert Tip: Discover the one mistake that causes 80% of traders to blow their accounts — even when their analysis is spot-on.</p>
-        <p style="font-size:14px;color:#333;margin:15px 0;">Good luck solving the puzzle,<br><strong>&#8211; Vibe Trader</strong></p>
-        <hr style="border:none;border-top:1px solid #ddd;margin:15px 0;">
-        <p style="font-size:11px;color:#777;line-height:1.6;">&#9888; <strong>Disclaimer:</strong> Vibe Trader, Inc provides AI-powered tools for educational and informational purposes only. We do not offer financial, legal, or investment advice. Trading involves risk. Past performance is not indicative of future results.</p>
-        <p style="font-size:12px;color:#333;margin-top:6px;"><strong>Contact us:</strong> <a href="mailto:team@vibetrader.com" style="color:#4b3fa0;text-decoration:none;">team@vibetrader.com</a></p>
-      </td></tr>
-    </table>
-  </td></tr>
-</table>
-</body></html>`;
+
+    return {
+        ...parsed,
+        setup:          setupHtml,
+        options:        optionsHtml,   // ← clean HTML, no <script>
+        leaderboard:    leaderHtml,
+        reply_hook:     replyHtml,
+        _correctAnswer: correctAnswer, // ← passed to OutputPanel for preview script + banner
+        _explanation:   explanation,
+    };
 }

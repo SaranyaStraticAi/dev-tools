@@ -8,77 +8,66 @@ export async function POST(req: NextRequest) {
         const subject = body.subject || '';
 
         // Generate the PNG using next/og
+        // Split subject into two lines for the Canva design
+        // Split subject into two lines for the Canva design
+        let part1 = '';
+        let part2 = '';
+        if (subject.includes(':')) {
+            const parts = subject.split(':');
+            part1 = parts[0].trim() + ':';
+            part2 = parts.slice(1).join(':').trim();
+        } else {
+            const words = subject.trim().split(/\s+/);
+            const mid = Math.floor(words.length / 2);
+            part1 = words.slice(0, mid).join(' ');
+            part2 = words.slice(mid).join(' ');
+        }
+
+        const wordsPart1 = part1.split(/\s+/).filter(Boolean);
+        const wordsPart2 = part2.split(/\s+/).filter(Boolean);
+
+        const protocol = req.headers.get('x-forwarded-proto') || 'http';
+        const host = req.headers.get('host') || 'localhost:3000';
+        const bgUrl = `${protocol}://${host}/banner-bg.png`;
+
         const imageResponse = new ImageResponse(
             (
-                <div
-                    style={{
-                        width: '100%',
-                        height: '100%',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        padding: '60px 80px',
-                        background: 'linear-gradient(to bottom right, #B8A4E8, #C084E8, #D870C0, #F472B6)',
-                        fontFamily: 'Arial, sans-serif',
-                        position: 'relative',
-                        overflow: 'hidden',
-                    }}
-                >
-                    {/* Top right branding */}
-                    <div style={{
-                        position: 'absolute',
-                        top: 50,
-                        right: 80,
-                        display: 'flex',
-                        alignItems: 'center',
-                    }}>
-                        <span style={{ fontSize: 24, fontWeight: 300, color: 'rgba(255,255,255,0.95)', marginRight: 6 }}>vibe</span>
-                        <span style={{ fontSize: 18, fontWeight: 700, color: 'white', marginRight: 4 }}>⚡</span>
-                        <span style={{ fontSize: 32, fontWeight: 700, color: 'white' }}>trader</span>
-                    </div>
+                <div style={{
+                    width: '100%', height: '100%', display: 'flex', flexDirection: 'column',
+                    justifyContent: 'center', alignItems: 'flex-start',
+                    padding: '0 100px',
+                    fontFamily: 'sans-serif', position: 'relative', overflow: 'hidden',
+                }}>
+                    {/* Background Image from Canva */}
+                    <img src={bgUrl} style={{ position: 'absolute', top: 0, left: 0, width: '1200px', height: '500px', objectFit: 'cover' }} />
 
-                    {/* Main text */}
+                    {/* Dynamic Text Box Safe Area (Avoids logo on top right and pill on bottom left) */}
                     <div style={{ 
+                        position: 'absolute', 
+                        top: '80px', 
+                        bottom: '160px', 
+                        left: '150px', 
+                        right: '80px',
                         display: 'flex', 
-                        marginTop: 100, 
-                        width: '1040px',
-                        fontSize: 60,
-                        fontWeight: 700,
-                        color: 'white',
-                        lineHeight: 1.2,
-                        flexWrap: 'wrap',
+                        flexDirection: 'column', 
+                        justifyContent: 'center',
+                        zIndex: 10 
                     }}>
-                        {subject}
-                    </div>
-
-                    {/* Bottom buttons */}
-                    <div style={{ display: 'flex', marginTop: 'auto', marginBottom: 20 }}>
-                        <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: 262,
-                            height: 52,
-                            borderRadius: 26,
-                            background: 'rgba(45,20,90,0.88)',
-                            color: 'white',
-                            fontSize: 17,
-                            marginRight: 15,
-                        }}>
-                            Explore <span style={{ fontWeight: 700, marginLeft: 6 }}>Vibe Trader</span>
+                        {/* Part 1 */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', marginBottom: 12 }}>
+                            {wordsPart1.map((word: string, i: number) => (
+                                <span key={`p1-${i}`} style={{ fontSize: 38, fontWeight: 400, color: 'white', letterSpacing: '0.02em', marginRight: 10 }}>
+                                    {word}
+                                </span>
+                            ))}
                         </div>
-                        <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: 220,
-                            height: 52,
-                            borderRadius: 26,
-                            background: 'rgba(255,255,255,0.15)',
-                            border: '1.5px solid rgba(255,255,255,0.5)',
-                            color: 'rgba(255,255,255,0.9)',
-                            fontSize: 15,
-                        }}>
-                            vibetrader.com
+                        {/* Part 2 */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+                            {wordsPart2.map((word: string, i: number) => (
+                                <span key={`p2-${i}`} style={{ fontSize: 56, fontWeight: 600, color: 'white', lineHeight: 1.2, letterSpacing: '-0.02em', textShadow: '0px 10px 20px rgba(0,0,0,0.2)', marginRight: 14 }}>
+                                    {word}
+                                </span>
+                            ))}
                         </div>
                     </div>
                 </div>
@@ -109,7 +98,11 @@ export async function POST(req: NextRequest) {
             blobHTTPHeaders: { blobContentType: 'image/png' }
         });
 
-        return NextResponse.json({ url: blockBlobClient.url });
+        // Use BANNER_BASE_URL env var to serve assets from vibetrader.com
+        // instead of the internal dev-tools domain (e.g. dev-tools.vercel.app)
+        const bannerBaseUrl = process.env.BANNER_BASE_URL || `${protocol}://${host}`;
+        const proxiedUrl = `${bannerBaseUrl}/api/assets/${blobName}`;
+        return NextResponse.json({ url: proxiedUrl });
 
     } catch (error: any) {
         console.error('Error generating banner:', error);

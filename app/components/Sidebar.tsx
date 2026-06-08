@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image, Link2, Network, LayoutGrid, ChevronDown, Mail, Bell } from 'lucide-react';
+import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image, Link2, Network, LayoutGrid, ChevronDown, Mail, Video, GraduationCap, Download, Brain, Newspaper, Edit, ShieldCheck, Inbox, Puzzle, Bell } from 'lucide-react';
 import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
 import { useState, useEffect } from 'react';
 
@@ -60,9 +60,34 @@ const navGroups = [
     label: 'Marketing',
     items: [
       { name: 'Newsletter Tester',   href: '/newsletter-tester',   icon: Mail },
+      { name: 'Saved Newsletters',   href: '/newsletter-tester/saved', icon: Inbox },
+      { name: 'Edu Content Tester',  href: '/edu-content',         icon: GraduationCap },
       { name: 'Image Generator',     href: '/image-generator',     icon: Image },
+      { name: 'Video Generator',     href: '/video-generator',     icon: Video },
       { name: 'Link Tracker',        href: '/link-tracker',        icon: Link2 },
       { name: 'Prompt Tester',       href: '/prompt',              icon: Code },
+    ],
+  },
+  {
+    label: 'Newsletter Pipeline',
+    items: [
+      { name: '01: Reddit Discoverer',   href: '/newsletter-tester/reddit-discover', icon: Search },
+      { name: '02: Subreddit Selector',  href: '/newsletter-tester/pick-subreddits',  icon: Layers },
+      { name: '03: Reddit Post Fetcher', href: '/newsletter-tester/fetch-posts',      icon: Download },
+      { name: '04: AI Deep Analysis',    href: '/newsletter-tester/deep-analysis',    icon: Brain },
+      { name: '05: Market News Fetcher', href: '/newsletter-tester/news-context',     icon: Newspaper },
+      { name: '06: Newsletter Writer',   href: '/newsletter-tester/newsletter-writer', icon: Edit },
+      { name: '07: Compliance Reviewer', href: '/newsletter-tester/compliance-review', icon: ShieldCheck },
+      { name: '08: Newsletter Banner',   href: '/newsletter-tester/generate-banner',   icon: Image },
+    ],
+  },
+  {
+    label: 'Tuesday Puzzle Pipeline',
+    items: [
+      { name: '01: Reddit Discoverer',   href: '/newsletter-tester/reddit-discover', icon: Search },
+      { name: '02: Subreddit Selector',  href: '/newsletter-tester/pick-subreddits',  icon: Layers },
+      { name: '03: Reddit Post Fetcher', href: '/newsletter-tester/fetch-posts',      icon: Download },
+      { name: '06b: Puzzle Writer',      href: '/newsletter-tester/puzzle-writer',    icon: Puzzle },
     ],
   },
   {
@@ -72,7 +97,6 @@ const navGroups = [
     ],
   },
 ];
-
 
 
 function CollapsibleNavGroup({
@@ -85,7 +109,6 @@ function CollapsibleNavGroup({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  // If route changes into this group later, auto-expand it.
   useEffect(() => { if (defaultOpen) setOpen(true); }, [defaultOpen]);
 
   return (
@@ -126,9 +149,7 @@ export default function AppSidebar() {
   }, []);
 
   const handleLogin = () => {
-    instance.loginPopup(loginRequest).catch(e => {
-      console.error(e);
-    });
+    instance.loginPopup(loginRequest).catch(e => { console.error(e); });
   };
 
   const handleLogout = () => {
@@ -147,9 +168,7 @@ export default function AppSidebar() {
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex flex-col gap-1 px-2 py-2">
           <h2 className="text-lg font-bold">Dev Tools</h2>
-          <p className="text-xs text-muted-foreground">
-            Database & Auth Tools
-          </p>
+          <p className="text-xs text-muted-foreground">Database & Auth Tools</p>
         </div>
       </SidebarHeader>
 
@@ -157,21 +176,13 @@ export default function AppSidebar() {
         {navGroups.map((group) => {
           const groupHasActive = group.items.some((i) => i.href === pathname);
           return (
-            <CollapsibleNavGroup
-              key={group.label}
-              label={group.label}
-              defaultOpen={groupHasActive}
-            >
+            <CollapsibleNavGroup key={group.label} label={group.label} defaultOpen={groupHasActive}>
               <SidebarMenu>
                 {group.items.map((item) => {
                   const isActive = pathname === item.href;
                   return (
                     <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={isActive}
-                        tooltip={item.name}
-                      >
+                      <SidebarMenuButton asChild isActive={isActive} tooltip={item.name}>
                         <Link href={item.href}>
                           <item.icon />
                           <span>{item.name}</span>
@@ -189,9 +200,7 @@ export default function AppSidebar() {
       <SidebarFooter className="border-t border-sidebar-border">
         {currentAccount ? (
           <div className="flex flex-col gap-2 px-2 py-2">
-            <div className="text-sm text-muted-foreground truncate font-medium">
-              {currentAccount}
-            </div>
+            <div className="text-sm text-muted-foreground truncate font-medium">{currentAccount}</div>
             <button
               onClick={handleLogout}
               className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors group"

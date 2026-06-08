@@ -36,7 +36,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         const allowedEmployees = [
             { email: 'gowtham@vibetradingai.com', password: 'Gowtham@video' },
             { email: 'kalyani@vibetradingai.com', password: 'kalyani@video' },
-            { email: 'ketki@vibetrader.com', password: 'ketki@designer' }
+            { email: 'ketki@vibetrader.com', password: 'ketki@designer' },
+            { email: 'tony@vibetradingai.com', password: 'Tony@trading' }
         ];
 
         const match = allowedEmployees.find(emp => emp.email === email && emp.password === password);
