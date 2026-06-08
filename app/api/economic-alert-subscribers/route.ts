@@ -12,11 +12,14 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 
-const SECRET = process.env.VIBE_TRADER_API_SECRET || '';
-const BASE =
+// .trim() guards against a stray newline/space in the env value breaking the
+// x-api-key match (Vercel kept a trailing newline once when set via piped echo).
+const SECRET = (process.env.VIBE_TRADER_API_SECRET || '').trim();
+const BASE = (
   process.env.NODE_ENV === 'production'
     ? process.env.VIBE_TRADER_API_URL_PROD || 'https://app.vibetrader.com'
-    : process.env.VIBE_TRADER_API_URL_DEV || 'http://localhost:3000';
+    : process.env.VIBE_TRADER_API_URL_DEV || 'http://localhost:3000'
+).trim();
 
 const PATH = '/api/economic-alert/subscribers';
 
