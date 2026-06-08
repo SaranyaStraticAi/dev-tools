@@ -17,6 +17,8 @@ interface TemplateEditorProps {
     onTemplateTypeChange: (t: NewsletterType) => void;
     onTemplateChange: (val: string) => void;
     onReloadFromAzure: (type: NewsletterType) => void;
+    onPublishTemplates: () => void;
+    publishing: boolean;
     parsed: Record<string, string> | null;
 }
 
@@ -27,6 +29,8 @@ export default function TemplateEditor({
     onTemplateTypeChange,
     onTemplateChange,
     onReloadFromAzure,
+    onPublishTemplates,
+    publishing,
     parsed,
 }: TemplateEditorProps) {
     const [showTemplate, setShowTemplate] = useState(false);
@@ -74,11 +78,19 @@ export default function TemplateEditor({
 
                 <div className="flex items-center gap-3">
                     {showTemplate && (
-                        <button type="button"
-                            className="text-[10px] text-purple-500 font-bold hover:underline"
-                            onClick={e => { e.stopPropagation(); onReloadFromAzure(templateType); }}>
-                            Reload from Azure
-                        </button>
+                        <>
+                            <button type="button"
+                                className="text-[10px] text-purple-500 font-bold hover:underline"
+                                onClick={e => { e.stopPropagation(); onReloadFromAzure(templateType); }}>
+                                Reload from Azure
+                            </button>
+                            <button type="button"
+                                disabled={publishing}
+                                className={`text-[10px] px-2 py-1 rounded-md font-bold transition-all disabled:opacity-50 ${publishing ? 'bg-blue-800 text-white cursor-wait' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
+                                onClick={e => { e.stopPropagation(); onPublishTemplates(); }}>
+                                {publishing ? 'Publishing...' : '☁️ Publish Template to Azure'}
+                            </button>
+                        </>
                     )}
                     <span className={`text-muted-foreground text-xs transition-transform duration-200 ${showTemplate ? 'rotate-180' : ''}`}>▾</span>
                 </div>
