@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { BlobServiceClient } from '@azure/storage-blob';
 
+export const dynamic = 'force-dynamic';
+
 const CONTAINER   = 'newsletter-prompts';
 const BLOB_NAME   = 'active-prompts.json';
 const HISTORY_DIR = 'history';

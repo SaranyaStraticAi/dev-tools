@@ -512,7 +512,7 @@ export const WEEKLY_TEMPLATE = `<table width="100%" cellpadding="0" cellspacing=
     </tr></table>
     <p style="font-size:10px;color:#aaa;text-align:center;margin:15px 0 0;">
       Vibe Trader, Inc., 1111B S Governors Ave STE 48176, Dover, DE 19904<br>
-      <a href="https://www.vibetrader.com/unsubscribe" style="color:#888;text-decoration:underline;">Unsubscribe</a> | <a href="https://www.vibetrader.com/preferences" style="color:#888;text-decoration:underline;">Preferences</a>
+      <a href="{{{RESEND_UNSUBSCRIBE_URL}}}" style="color:#888;text-decoration:underline;">Unsubscribe</a>
     </p>
   </td></tr>
 </table>`;
@@ -650,6 +650,10 @@ export const PUZZLE_TEMPLATE = `<table width="100%" cellpadding="0" cellspacing=
     <p style="font-size:12px;color:#1e293b;margin:0;">
       <strong>Contact us:</strong>
       <a href="mailto:team@vibetradingai.com" style="color:#b624e0;text-decoration:none;font-weight:bold;">team@vibetradingai.com</a>
+    </p>
+    <p style="font-size:10px;color:#aaa;text-align:center;margin:15px 0 0;">
+      Vibe Trader, Inc., 1111B S Governors Ave STE 48176, Dover, DE 19904<br>
+      <a href="{{{RESEND_UNSUBSCRIBE_URL}}}" style="color:#888;text-decoration:underline;">Unsubscribe</a>
     </p>
 
   </td></tr>
