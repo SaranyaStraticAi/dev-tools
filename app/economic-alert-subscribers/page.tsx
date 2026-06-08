@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Plus, Trash2, CheckCircle, AlertTriangle, Bell, Mail } from 'lucide-react';
+import { RefreshCw, Plus, Trash2, CheckCircle, AlertTriangle, Bell, Mail, Zap } from 'lucide-react';
 
 interface Subscriber {
   userId: string;
@@ -11,6 +11,8 @@ interface Subscriber {
   active?: boolean;
   addedAt?: string;
   addedBy?: string;
+  /** Opt-in to auto-execution of TRADE setups (notify-only is the default). */
+  autoTrade?: boolean;
 }
 
 // Environment is implicit: dev-tools in dev → dev data, in prod → prod data.
@@ -83,6 +85,51 @@ export default function EconomicAlertSubscribersPage() {
       setMsg({ kind: 'err', text: `Add failed: ${err instanceof Error ? err.message : String(err)}` });
     } finally {
       setAdding(false);
+    }
+  };
+
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const toggleAutoTrade = async (sub: Subscriber) => {
+    if (!sub.email) {
+      setMsg({ kind: 'err', text: 'Cannot toggle auto-trade: subscriber has no email to resolve.' });
+      return;
+    }
+    const next = !sub.autoTrade;
+    if (
+      next &&
+      !confirm(
+        `Enable AUTO-EXECUTION for ${sub.email}? They will have the agent's TRADE setups placed automatically, not just notified.`
+      )
+    )
+      return;
+    setTogglingId(sub.userId);
+    setMsg(null);
+    // Optimistic update — reconciled by the load() below.
+    setSubscribers((prev) =>
+      prev.map((s) => (s.userId === sub.userId ? { ...s, autoTrade: next } : s))
+    );
+    try {
+      const res = await fetch('/api/economic-alert-subscribers', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: sub.email, autoTrade: next, addedBy: 'dev-tools' }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.ok === false) throw new Error(json.error || `HTTP ${res.status}`);
+      setMsg({
+        kind: 'ok',
+        text: `Auto-trade ${next ? 'enabled' : 'disabled'} for ${sub.email}.`,
+      });
+      await load();
+    } catch (err) {
+      setMsg({
+        kind: 'err',
+        text: `Auto-trade update failed: ${err instanceof Error ? err.message : String(err)}`,
+      });
+      await load(); // revert optimistic change to server truth
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -173,6 +220,7 @@ export default function EconomicAlertSubscribersPage() {
             <tr>
               <th className="px-4 py-2 font-medium">Email</th>
               <th className="px-4 py-2 font-medium">Telegram</th>
+              <th className="px-4 py-2 font-medium">Auto-Trade</th>
               <th className="px-4 py-2 font-medium">Chat ID</th>
               <th className="px-4 py-2 font-medium">Added</th>
               <th className="px-4 py-2 font-medium"></th>
@@ -181,7 +229,7 @@ export default function EconomicAlertSubscribersPage() {
           <tbody>
             {subscribers.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
                   {loading ? 'Loading…' : 'No subscribers on this allowlist yet.'}
                 </td>
               </tr>
@@ -202,6 +250,41 @@ export default function EconomicAlertSubscribersPage() {
                       <AlertTriangle className="w-3 h-3" /> Pending
                     </span>
                   )}
+                </td>
+                <td className="px-4 py-2">
+                  <button
+                    onClick={() => toggleAutoTrade(s)}
+                    disabled={togglingId === s.userId}
+                    title={
+                      s.autoTrade
+                        ? 'Auto-execution ON — click to switch to notify-only'
+                        : 'Notify-only — click to enable auto-execution'
+                    }
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:opacity-50 ${
+                      s.autoTrade ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                        s.autoTrade ? 'translate-x-4' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                  <span
+                    className={`ml-2 inline-flex items-center gap-1 align-middle text-xs font-semibold ${
+                      s.autoTrade
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-gray-400'
+                    }`}
+                  >
+                    {s.autoTrade ? (
+                      <>
+                        <Zap className="w-3 h-3" /> Auto
+                      </>
+                    ) : (
+                      'Notify'
+                    )}
+                  </span>
                 </td>
                 <td className="px-4 py-2 font-mono text-xs text-gray-500">{s.chatId || '—'}</td>
                 <td className="px-4 py-2 text-xs text-gray-500">
