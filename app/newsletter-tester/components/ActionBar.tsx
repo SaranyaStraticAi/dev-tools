@@ -52,6 +52,14 @@ export default function ActionBar({
             </button>
             
             <button
+                onClick={onPublish}
+                disabled={publishing}
+                className={`px-8 py-4 rounded-2xl font-bold text-sm transition-all shadow-lg active:scale-95 flex items-center gap-2 disabled:opacity-60 ${publishing ? 'bg-blue-800 text-white cursor-wait' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
+            >
+                {publishing ? <span className="w-4 h-4 border-2 border-white/30 border-t-white animate-spin rounded-full"/> : '☁️'} Publish to Azure
+            </button>
+            
+            <button
                 onClick={onSend}
                 disabled={!hasHtml || sendStatus === 'sending'}
                 className={sendClass()}
