@@ -56,6 +56,7 @@ export default function NewsletterTesterPage() {
         azureSource, lastPublishedAt,
         blobLoadError,
         publishToAzure,
+        publishTemplatesToAzure,
         restoreVersion,
         // templates
         weeklyTemplate, puzzleTemplate,
@@ -178,6 +179,8 @@ export default function NewsletterTesterPage() {
                 onTemplateTypeChange={setTemplateType}
                 onTemplateChange={handleTemplateChange}
                 onReloadFromAzure={reloadTemplateFromAzure}
+                onPublishTemplates={publishTemplatesToAzure}
+                publishing={publishing}
                 parsed={parsed}
             />
 

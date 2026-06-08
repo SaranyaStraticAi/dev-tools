@@ -261,6 +261,25 @@ export function useNewsletterPage() {
         } finally { setPublishing(false); }
     };
 
+    // ── Publish ONLY templates to Azure ─────────────────────────────────────────
+    const publishTemplatesToAzure = async () => {
+        setPublishing(true); setPublishStatus('idle');
+        try {
+            const res = await fetch('/api/newsletter-prompts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ weeklyTemplate, puzzleTemplate, changedType: type }),
+            });
+            if (!res.ok) throw new Error('Publish failed');
+            setPublishStatus('success'); setAzureSource(true);
+            setLastPublishedAt(new Date().toISOString());
+            setTimeout(() => setPublishStatus('idle'), 4000);
+        } catch {
+            setPublishStatus('error');
+            setTimeout(() => setPublishStatus('idle'), 4000);
+        } finally { setPublishing(false); }
+    };
+
     // ── Fetch live Reddit posts ───────────────────────────────────────────────
     // rediscover=true → bypass 7-day blob cache, force fresh Reddit search + LLM pick
     const fetchLiveReddit = async (rediscover = false) => {
@@ -668,6 +687,7 @@ ${newsData.referenceLinks?.map((l: any) => `- ${l.title}: ${l.url}`).join('\n') 
         azureSource, lastPublishedAt,
         blobLoadError,
         publishToAzure,
+        publishTemplatesToAzure,
         restoreVersion,
         // Templates
         weeklyTemplate, puzzleTemplate,
