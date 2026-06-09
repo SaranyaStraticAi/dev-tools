@@ -12,7 +12,6 @@ import { Card } from '@/components/ui/card';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Scene = { duration_seconds: number; script_lines: string[]; sora_prompt: string };
-type Reel = { voice: string; content_type: string; scene_1: Scene; scene_2: Scene; scene_3: Scene; instagram_caption: string };
 type ClipSt = { status: 'idle' | 'submitting' | 'polling' | 'downloading' | 'done' | 'error'; elapsed: number; url: string | null; err: string | null };
 type DayKey = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday';
 type SavedConfig = {
@@ -72,82 +71,29 @@ VibeTrader is a company. Not a trader. Not a founder. Not a personal brand.
 Three voices — pick the right one:
 
 Voice 1 (Company): calm team that built the infrastructure to fix trader inconsistency.
-  Example: "We built VibeTrader for the trader who already knows what to do."
 Voice 2 (Observer): studies traders from the outside. Precise. Psychologically sharp.
-  Example: "Most traders know exactly what they did wrong — after the trade closes."
-  Never: first-person trader confessions, "I've been there" language.
 Voice 3 (Product): the product speaking. Calm, functional, no hype.
-  Example: "VibeTrader doesn't override your strategy. It executes it."
 
-## AUDIENCE
-Global retail forex traders who already know their strategy — the problem is behavior under pressure.
-They respond to: emotional accuracy, specific observed behaviors, psychological truth.
-They reject: motivational content, profit claims, guru energy.
-
-## REEL STRUCTURE — ALWAYS 3 SCENES
-Scene 1 — HOOK (12s): Pattern interrupt. Max 10 words on screen.
-Scene 2 — BUILD (12s): Deepen the tension. The line they nod at. No filler.
-Scene 3 — LAND (8s): The insight lands. The reframe. Silence is powerful.
-
-## DURATION RULE — CRITICAL
-Sora 2 only accepts EXACTLY 4, 8, or 12 seconds.
+## REEL STRUCTURE
+Scenes: HOOK, BUILD, LAND.
 
 ## SCRIPT RULES
 - On-screen text only. Grade 6 reading level. Max 4 words per frame.
 - Hard cuts between frames. Fast-fast-PAUSE rhythm.
-- NEVER first-person trader confessions as the brand voice.
 
 ## SORA 2 VISUAL DIRECTION
 Lead with shot type. Under 150 words. NO humans, NO silhouettes, NO characters, NO hands, NO shoulders, NO body parts, NO faces, NO brand logos. (Strict Azure safety moderation compliance).
-NEVER use words like "trader", "person", "human", "man", "woman", "hand", "finger", "shoulder", "head", or "silhouette" in any sora_prompt. Focus entirely on objects, devices, charts, and empty spaces.
 
-## IMAGE & VIDEO GENERATION PIPELINE FLOW (CRITICAL FOR PROMPT WRITING)
-1. IMAGE STEP: For each scene, the system first generates a static reference image by combining a hardcoded environment background anchor (defining a dark, professional empty trading room) with your generated sora_prompt. Therefore, write the prompt so that it describes a clear, static visual setup first.
-2. VIDEO STEP: The static image generated in step 1 is then fed directly into Sora as the First Frame (input_reference) of the video clip. The generated sora_prompt will guide the video's motion starting from that image.
-3. WRITING RULE: Ensure each scene's sora_prompt describes a clear starting configuration of charts, screens, or abstract elements (which DALL-E can draw in the image step), followed by the specific camera movement or animation (which Sora can execute in the video step).
-
-VISUAL CONTINUITY — CRITICAL:
-All 3 scenes are ONE continuous reel, not 3 separate videos.
 Every sora_prompt MUST open with the same environment anchor line:
 "Dark trading room. Single monitor glow. Same desk, same scene. Empty environment, no people."
 Then describe the specific shot for that scene.
-Same room, same desk, same cold blue-black lighting across all 3 scenes.
-Camera angle and framing can change — the ENVIRONMENT must not.
-
-Visual vocabulary:
-- Trading desk at night, monitor glow only, rest of room dark, empty room
-- Slow camera push in toward the glowing monitor with a chart
-- Wide shot of empty desk — cold coffee, phone face-down, second monitor dark
-- Chart on screen with red candles, position open, numbers showing
-- Abstract data streams in deep blue space, numbers flying
-- Gold bars stacked on dark surface, warm amber light circling slowly
-- Dark storm clouds over bright horizon — bearish environment
-Lighting: monitor glow as primary. NEVER bright studio lighting.
-No characters or people in any scene.
 
 ## CAPTION FORMULA
 Line 1: Hook — 1 line, max 10 words.
-[blank line]
 Body — 2 lines max.
-[blank line]
 Engagement CTA. Follow CTA with concrete reason.
-[blank line]
 #forextrading #tradingpsychology #aitrading #forexeducation #vibetrader
-[blank line]
-Disclaimer: VibeTrader, Inc. is a technology company providing behavioral analytics and educational software tools. It is not a registered investment adviser, broker-dealer, or financial planner. The platform does not provide personalized investment advice, trading recommendations, or portfolio management. All information is for educational purposes only. Users are solely responsible for their trading decisions. Trading financial instruments involves substantial risk of loss. Past performance is not indicative of future results.
-
-ABSOLUTE RULES — NEVER: first-person confessions, profit claims, link in bio, more than 5 hashtags.
-ALWAYS: observer/company/product voice, full disclaimer last, follow CTA every post.`;
-
-const OUTPUT_SCHEMA_DISPLAY = `{
-  "voice": "Observer | Company | Product",
-  "content_type": "Pain | Psychology | Education | Market | Product | Entertainment | Puzzle",
-  "scene_1": { "duration_seconds": 12, "script_lines": ["line 1", "line 2", "line 3"], "sora_prompt": "..." },
-  "scene_2": { "duration_seconds": 12, "script_lines": ["line 1", "line 2", "line 3"], "sora_prompt": "..." },
-  "scene_3": { "duration_seconds": 8,  "script_lines": ["line 1", "line 2"],           "sora_prompt": "..." },
-  "instagram_caption": "Full caption matching the formula above exactly."
-}
-CRITICAL: duration_seconds must be exactly 4, 8, or 12.`;
+Disclaimer: VibeTrader, Inc. is a technology company providing behavioral analytics and educational software tools.`;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -185,32 +131,36 @@ function CopyBtn({ text }: { text: string }) {
 
 // ─── Scene card ───────────────────────────────────────────────────────────────
 
-function SceneCard({ n, scene, onUpdate, onGenerate, clip, refImage, refBusy, onGenerateRef, prevLastFrame, continuity, isBlocked }: {
-  n: 1 | 2 | 3; scene: Scene; onUpdate: (s: Scene) => void; onGenerate: () => void; clip: ClipSt;
+function SceneCard({ n, scene, onUpdate, onGenerate, onDelete, clip, refImage, refBusy, onGenerateRef, prevLastFrame, continuity }: {
+  n: number; scene: Scene; onUpdate: (s: Scene) => void; onGenerate: () => void; onDelete: () => void; clip: ClipSt;
   refImage: string | null; refBusy: boolean; onGenerateRef: () => void;
-  prevLastFrame: string | null; continuity: boolean; isBlocked: boolean;
+  prevLastFrame: string | null; continuity: boolean;
 }) {
   const busy = ['submitting', 'polling', 'downloading'].includes(clip.status);
   return (
     <Card className="p-4 bg-background/50 border-primary/10 space-y-3">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-bold text-violet-400">Scene {n}</span>
-        <div className="flex gap-1">
-          {DURATIONS.map(d => (
-            <button key={d} onClick={() => onUpdate({ ...scene, duration_seconds: d })} disabled={busy}
-              className={`px-2 py-0.5 rounded text-xs font-semibold border transition-all ${scene.duration_seconds === d ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted/30 text-muted-foreground border-primary/10 hover:border-primary/30'}`}>
-              {d}s
-            </button>
-          ))}
+        <span className="text-sm font-bold text-violet-400">Clip {n}</span>
+        <div className="flex gap-2 items-center">
+          <div className="flex gap-1">
+            {DURATIONS.map(d => (
+              <button key={d} onClick={() => onUpdate({ ...scene, duration_seconds: d })} disabled={busy}
+                className={`px-2 py-0.5 rounded text-xs font-semibold border transition-all ${scene.duration_seconds === d ? 'bg-violet-600 text-white border-violet-600' : 'bg-muted/30 text-muted-foreground border-primary/10 hover:border-primary/30'}`}>
+                {d}s
+              </button>
+            ))}
+          </div>
+          <button onClick={onDelete} disabled={busy} className="p-1 rounded-md hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-colors">
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
       <div className="space-y-1">
-        <label className="text-[10px] font-semibold text-emerald-400 uppercase tracking-widest">On-screen text</label>
-        {scene.script_lines.map((line, i) => (
-          <input key={i} value={line} disabled={busy}
-            onChange={e => { const l = [...scene.script_lines]; l[i] = e.target.value; onUpdate({ ...scene, script_lines: l }); }}
-            className="w-full px-2.5 py-1.5 rounded-lg bg-muted/40 border border-primary/10 focus:border-emerald-400/50 outline-none text-xs text-foreground font-mono" />
-        ))}
+        <label className="text-[10px] font-semibold text-emerald-400 uppercase tracking-widest">On-screen text (optional)</label>
+        <textarea value={scene.script_lines.join('\\n')} disabled={busy}
+          onChange={e => { const l = e.target.value.split('\\n'); onUpdate({ ...scene, script_lines: l }); }}
+          placeholder="Lines of text to burn into the video (one per line)..."
+          className="w-full px-2.5 py-1.5 min-h-[60px] rounded-lg bg-muted/40 border border-primary/10 focus:border-emerald-400/50 outline-none text-xs text-foreground font-mono" />
       </div>
       <div className="space-y-1">
         <label className="text-[10px] font-semibold text-fuchsia-400 uppercase tracking-widest">
@@ -228,7 +178,7 @@ function SceneCard({ n, scene, onUpdate, onGenerate, clip, refImage, refBusy, on
             {refImage ? (
               <span className="font-normal normal-case text-emerald-400 ml-1">· feeds into Sora as first frame</span>
             ) : (
-              n > 1 && continuity && prevLastFrame && <span className="font-normal normal-case text-emerald-400 ml-1">· auto-extracted from Scene {n-1} end</span>
+              n > 1 && continuity && prevLastFrame && <span className="font-normal normal-case text-emerald-400 ml-1">· auto-extracted from Clip {n-1} end</span>
             )}
           </label>
           <button onClick={onGenerateRef} disabled={busy || refBusy}
@@ -238,34 +188,34 @@ function SceneCard({ n, scene, onUpdate, onGenerate, clip, refImage, refBusy, on
         </div>
         {refImage ? (
           <div className="rounded-lg overflow-hidden border border-amber-500/20 bg-black" style={{ aspectRatio: '9/16', maxHeight: '160px' }}>
-            <img src={`data:image/jpeg;base64,${refImage}`} alt={`Scene ${n} reference`} className="w-full h-full object-cover" />
+            <img src={`data:image/jpeg;base64,\${refImage}`} alt={`Clip \${n} reference`} className="w-full h-full object-cover" />
           </div>
         ) : n > 1 && continuity && prevLastFrame ? (
           <div className="rounded-lg overflow-hidden border border-emerald-500/20 bg-black" style={{ aspectRatio: '9/16', maxHeight: '160px' }}>
-            <img src={`data:image/jpeg;base64,${prevLastFrame}`} alt={`Scene ${n} starting frame`} className="w-full h-full object-cover" />
+            <img src={`data:image/jpeg;base64,\${prevLastFrame}`} alt={`Clip \${n} starting frame`} className="w-full h-full object-cover" />
           </div>
         ) : (
           <div className="rounded-lg border border-dashed border-primary/10 bg-muted/20 flex items-center justify-center text-[10px] text-muted-foreground/40 p-2 text-center" style={{ aspectRatio: '9/16', maxHeight: '80px' }}>
-            {n === 1 ? 'no reference yet' : continuity ? `Waiting for Scene ${n-1} video...` : 'no reference (will generate from text)'}
+            {n === 1 ? 'no reference yet' : continuity ? `Waiting for Clip \${n-1} video...` : 'no reference (will generate from text)'}
           </div>
         )}
       </div>
       <Button onClick={onGenerate} disabled={busy || !scene.sora_prompt.trim()} size="sm"
         className="w-full bg-gradient-to-r from-fuchsia-600 to-pink-600 hover:from-fuchsia-500 hover:to-pink-500 text-white text-xs font-semibold disabled:opacity-40 h-8">
-        {busy ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />{clip.status === 'polling' ? `${clip.elapsed}s...` : clip.status === 'submitting' ? 'Queuing...' : 'Downloading...'}</>
+        {busy ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />{clip.status === 'polling' ? `\${clip.elapsed}s...` : clip.status === 'submitting' ? 'Queuing...' : 'Downloading...'}</>
           : clip.status === 'done' ? <><RefreshCw className="w-3 h-3 mr-1" />Re-gen</>
             : <><Play className="w-3 h-3 mr-1" />Generate Clip {n}</>}
       </Button>
       {clip.status === 'polling' && (
         <div className="h-0.5 bg-muted/40 rounded-full overflow-hidden">
-          <div className="h-full bg-gradient-to-r from-fuchsia-500 to-pink-500 rounded-full transition-all duration-1000" style={{ width: `${Math.min((clip.elapsed / 120) * 100, 92)}%` }} />
+          <div className="h-full bg-gradient-to-r from-fuchsia-500 to-pink-500 rounded-full transition-all duration-1000" style={{ width: `\${Math.min((clip.elapsed / 120) * 100, 92)}%` }} />
         </div>
       )}
       {clip.status === 'error' && <p className="text-[10px] text-destructive">❌ {clip.err}</p>}
       {clip.url && (
         <div className="relative rounded-lg overflow-hidden bg-black border border-primary/10" style={{ aspectRatio: '9/16', maxHeight: '220px' }}>
           <video src={clip.url} controls autoPlay loop playsInline className="w-full h-full object-contain" />
-          <a href={clip.url} download={`scene_${n}.mp4`} className="absolute top-2 right-2 p-1 rounded-md bg-black/60 border border-white/10">
+          <a href={clip.url} download={`clip_\${n}.mp4`} className="absolute top-2 right-2 p-1 rounded-md bg-black/60 border border-white/10">
             <Download className="w-3.5 h-3.5 text-white" />
           </a>
         </div>
@@ -279,24 +229,22 @@ function SceneCard({ n, scene, onUpdate, onGenerate, clip, refImage, refBusy, on
 export default function VideoReelStudio() {
   const [day, setDay] = useState<DayKey>('monday');
   const [sysP, setSysP] = useState(DEFAULT_SYSTEM);
-  const [notes, setNotes] = useState(DAYS.monday.notes);
-  const [mktCtx, setMktCtx] = useState(MOCK_TA);
   const [showSys, setShowSys] = useState(false);
-  const [showCtx, setShowCtx] = useState(true);
   const [showPrompt, setShowPrompt] = useState(false);
   const [editedPrompt, setEditedPrompt] = useState<string | null>(null); // null = auto-assembled
   const [genBusy, setGenBusy] = useState(false);
   const [genErr, setGenErr] = useState<string | null>(null);
-  const [reel, setReel] = useState<Reel | null>(null);
-  const [clips, setClips] = useState<[ClipSt, ClipSt, ClipSt]>([initClip(), initClip(), initClip()]);
+  const [rawScript, setRawScript] = useState('');
+  const [scenes, setScenes] = useState<Scene[]>([]);
+  const [clips, setClips] = useState<ClipSt[]>([]);
+  const [lastFrames, setLastFrames] = useState<(string | null)[]>([]);
+  const [refImages, setRefImages] = useState<(string | null)[]>([]);
+  const [refBusy, setRefBusy] = useState<boolean[]>([]);
   const [merging, setMerging] = useState(false);
   const [mergedUrl, setMergedUrl] = useState<string | null>(null);
   const [mergeErr, setMergeErr] = useState<string | null>(null);
   const [mergeStatus, setMergeStatus] = useState('');
   const [continuity, setContinuity] = useState(true);
-  const [lastFrames, setLastFrames] = useState<[string | null, string | null, string | null]>([null, null, null]);
-  const [refImages,  setRefImages]  = useState<[string|null,string|null,string|null]>([null,null,null]);
-  const [refBusy,    setRefBusy]    = useState<[boolean,boolean,boolean]>([false,false,false]);
 
   // Saved configs
   const [configs, setConfigs] = useState<SavedConfig[]>([]);
@@ -321,15 +269,23 @@ export default function VideoReelStudio() {
     try {
       const r = await fetch('/api/video-reel/prompts', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: saveName, day, systemPrompt: sysP, notes, marketContext: mktCtx, savedBy }),
+        body: JSON.stringify({ name: saveName, day, systemPrompt: sysP, savedBy }),
       });
       if (r.ok) { const cfg = await r.json(); setConfigs(prev => [cfg, ...prev]); setSaveName(''); setShowSaveForm(false); }
     } catch { } finally { setSaving(false); }
   }
 
   function handleLoad(cfg: SavedConfig) {
-    setSysP(cfg.systemPrompt); setNotes(cfg.notes); setMktCtx(cfg.marketContext);
-    if (cfg.day !== day) { setDay(cfg.day); setReel(null); setClips([initClip(), initClip(), initClip()]); }
+    setSysP(cfg.systemPrompt);
+    if (cfg.day !== day) {
+      setDay(cfg.day);
+      setRawScript('');
+      setScenes([]);
+      setClips([]);
+      setLastFrames([]);
+      setRefImages([]);
+      setRefBusy([]);
+    }
     setShowConfigs(false);
   }
 
@@ -353,19 +309,44 @@ export default function VideoReelStudio() {
   }
 
   function changeDay(d: DayKey) {
-    setDay(d); setNotes(DAYS[d].notes);
-    setMktCtx(DAYS[d].dataType === 'ta' ? MOCK_TA : DAYS[d].dataType === 'news' ? MOCK_NEWS : '');
-    setReel(null); setClips([initClip(), initClip(), initClip()]);
-    setLastFrames([null, null, null]); setEditedPrompt(null);
-    setRefImages([null,null,null]); setRefBusy([false,false,false]);
+    setDay(d);
+    setRawScript('');
+    setScenes([]);
+    setClips([]);
+    setLastFrames([]);
+    setEditedPrompt(null);
+    setRefImages([]);
+    setRefBusy([]);
     setGenErr(null); setMergedUrl(null); setMergeErr(null);
   }
 
-  async function generateRefImage(idx: number, reelOverride?: Reel) {
-    const activeReel = reelOverride || reel;
-    if (!activeReel) return;
-    const scene = activeReel[`scene_${idx+1}` as keyof Reel] as Scene;
-    setRefBusy(prev => { const b=[...prev] as [boolean,boolean,boolean]; b[idx]=true; return b; });
+  function addScene() {
+    setScenes([...scenes, { duration_seconds: 12, script_lines: [], sora_prompt: '' }]);
+    setClips([...clips, initClip()]);
+    setLastFrames([...lastFrames, null]);
+    setRefImages([...refImages, null]);
+    setRefBusy([...refBusy, false]);
+  }
+
+  function removeScene(idx: number) {
+    setScenes(s => s.filter((_, i) => i !== idx));
+    setClips(c => c.filter((_, i) => i !== idx));
+    setLastFrames(f => f.filter((_, i) => i !== idx));
+    setRefImages(r => r.filter((_, i) => i !== idx));
+    setRefBusy(b => b.filter((_, i) => i !== idx));
+  }
+
+  function updateScene(idx: number, s: Scene) {
+    const newScenes = [...scenes];
+    newScenes[idx] = s;
+    setScenes(newScenes);
+  }
+
+  async function generateRefImage(idx: number) {
+    if (idx < 0 || idx >= scenes.length) return;
+    const scene = scenes[idx];
+    
+    setRefBusy(prev => { const b=[...prev]; b[idx]=true; return b; });
     try {
       const cfg = await fetch('/api/generate-image').then(r => r.json());
       if (cfg.error) throw new Error(cfg.error);
@@ -400,11 +381,11 @@ export default function VideoReelStudio() {
         b64 = btoa(binary);
       }
 
-      setRefImages(prev => { const r=[...prev] as [string|null,string|null,string|null]; r[idx]=b64; return r; });
+      setRefImages(prev => { const r=[...prev]; r[idx]=b64; return r; });
     } catch(e:any) {
-      console.error(`[ref-image] Scene ${idx+1}:`, e.message);
+      console.error(`[ref-image] Clip ${idx+1}:`, e.message);
     } finally {
-      setRefBusy(prev => { const b=[...prev] as [boolean,boolean,boolean]; b[idx]=false; return b; });
+      setRefBusy(prev => { const b=[...prev]; b[idx]=false; return b; });
     }
   }
 
@@ -437,52 +418,41 @@ export default function VideoReelStudio() {
   function buildBrief() {
     const d = DAYS[day];
     return ['## TODAY\'S CONTENT BRIEF', `Day: ${d.label}`, `Format: ${d.format} -- ${d.type}`,
-      `CTA goal: Comments + Follows`, `Engagement CTA: ${d.cta}`, `Follow CTA hint: ${d.follow}`,
-      `Director notes: ${notes}`].join('\n');
+      `CTA goal: Comments + Follows`, `Engagement CTA: ${d.cta}`, `Follow CTA hint: ${d.follow}`].join('\n');
   }
 
   function buildFullUserPrompt() {
     const parts = [buildBrief()];
-    if (mktCtx.trim()) parts.push('\n' + mktCtx);
     parts.push('\n## YOUR TASK');
-    parts.push('Generate a complete Instagram reel package following the v6 skill above.');
-    parts.push('Respond ONLY with valid raw JSON matching this schema — no preamble, no fences:');
-    parts.push(''); parts.push(OUTPUT_SCHEMA_DISPLAY);
+    parts.push('Generate a complete script for this Reel.');
+    parts.push('Write naturally, no JSON format required. Provide the full script and visual directions.');
     return parts.join('\n');
   }
 
   async function handleGenerateScript() {
-    setGenBusy(true); setGenErr(null); setReel(null);
-    setClips([initClip(), initClip(), initClip()]); setMergedUrl(null); setMergeErr(null);
+    setGenBusy(true); setGenErr(null); setRawScript('');
     try {
-      // Use editedPrompt if designer modified the preview, otherwise assemble from parts
       const body = editedPrompt
-        ? { systemPrompt: sysP, fullPrompt: editedPrompt, temperature: 0.85 }
-        : { systemPrompt: sysP, brief: buildBrief(), marketContext: mktCtx, temperature: 0.85 };
+        ? { systemPrompt: sysP, userPrompt: editedPrompt, temperature: 0.85 }
+        : { systemPrompt: sysP, userPrompt: buildFullUserPrompt(), temperature: 0.85 };
 
       const r = await fetch('/api/video-reel', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
       const data = await r.json();
-      const parsedReel = data as Reel;
-      setReel(parsedReel);
-      // Automatically trigger image generation for all 3 scenes in parallel
-      Promise.all([
-        generateRefImage(0, parsedReel),
-        generateRefImage(1, parsedReel),
-        generateRefImage(2, parsedReel)
-      ]).catch(err => console.error('[auto-ref-gen] Failed to generate reference images:', err));
+      if (!r.ok) throw new Error(data.error || 'Failed');
+      setRawScript(data.script);
     } catch (e: any) { setGenErr(e.message || 'Script generation failed'); }
     finally { setGenBusy(false); }
   }
 
   async function handleGenerateClip(idx: number) {
-    if (!reel) return;
-    const scene = reel[`scene_${idx + 1}` as keyof Reel] as Scene;
+    if (idx < 0 || idx >= scenes.length) return;
+    const scene = scenes[idx];
     if (!scene.sora_prompt.trim()) return;
     setMergedUrl(null); setMergeErr(null);
-    function upd(p: Partial<ClipSt>) { setClips(prev => { const c = [...prev] as [ClipSt, ClipSt, ClipSt]; c[idx] = { ...c[idx], ...p }; return c; }); }
+    function upd(p: Partial<ClipSt>) { setClips(prev => { const c = [...prev]; c[idx] = { ...c[idx], ...p }; return c; }); }
     upd({ status: 'submitting', elapsed: 0, url: null, err: null });
     try {
       const cfg = await fetch('/api/generate-video').then(r => r.json());
@@ -515,7 +485,7 @@ export default function VideoReelStudio() {
         soraBody.input_reference = {
           image_url: `data:image/jpeg;base64,${anchor}`
         };
-        console.log(`[sora] Scene ${idx+1}: conditioning from ${refFrame ? 'reference image' : 'prev clip last frame'}`);
+        console.log(`[sora] Clip ${idx+1}: conditioning from ${refFrame ? 'reference image' : 'prev clip last frame'}`);
       }
 
       const sub = await fetch(cfg.submitUrl, {
@@ -552,9 +522,12 @@ export default function VideoReelStudio() {
 
       // Extract last frame for next scene's continuity conditioning
       const frame = await extractLastFrame(blobUrl);
-      if (frame) setLastFrames(prev => { const f = [...prev] as [string | null, string | null, string | null]; f[idx] = frame; return f; });
+      if (frame) setLastFrames(prev => { const f = [...prev]; f[idx] = frame; return f; });
 
-    } catch (e: any) { clearInterval(pollRefs[idx].current); upd({ status: 'error', err: e.message || 'Unknown' }); }
+    } catch (e: any) { 
+      if (pollRefs[idx]) clearInterval(pollRefs[idx].current); 
+      upd({ status: 'error', err: e.message || 'Unknown' }); 
+    }
   }
 
   // Client-side merge via ffmpeg.wasm — works on Vercel, no server needed
@@ -588,20 +561,19 @@ export default function VideoReelStudio() {
 
       // Process and burn captions on each clip
       const entries: string[] = [];
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < clips.length; i++) {
         if (clips[i].status === 'done' && clips[i].url) {
           const rawName = `clip${i}.mp4`;
           const textName = `clip_text${i}.mp4`;
           
-          setMergeStatus(`Processing Scene ${i + 1} video...`);
+          setMergeStatus(`Processing Clip ${i + 1} video...`);
           await ffmpeg.writeFile(rawName, await fetchFile(clips[i].url!));
 
-          const sceneKey = `scene_${i + 1}` as keyof Reel;
-          const scene = reel?.[sceneKey] as Scene | undefined;
+          const scene = scenes[i];
 
-          if (scene && scene.script_lines?.length > 0) {
-            setMergeStatus(`Burning captions onto Scene ${i + 1}...`);
-            const lines = scene.script_lines;
+          if (scene && scene.script_lines?.length > 0 && scene.script_lines.some(l => l.trim().length > 0)) {
+            setMergeStatus(`Burning captions onto Clip ${i + 1}...`);
+            const lines = scene.script_lines.filter(l => l.trim().length > 0);
             const totalDur = scene.duration_seconds || 8;
             const lineDur = totalDur / lines.length;
 
@@ -661,22 +633,6 @@ export default function VideoReelStudio() {
       setMergeErr(e.message || 'Merge failed');
       setMergeStatus('');
     } finally { setMerging(false); }
-  }
-
-  function updateScene(n: 1 | 2 | 3, s: Scene) { if (reel) setReel({ ...reel, [`scene_${n}`]: s }); }
-
-  function buildScriptTxt() {
-    if (!reel) return '';
-    let t = 0; const out = [`VIBETRADER REEL — ${DAYS[day].label.toUpperCase()}\n`];
-    ([1, 2, 3] as const).forEach(n => {
-      const sc = reel[`scene_${n}`]; const dur = sc.duration_seconds;
-      out.push(`Scene ${n}  [${t}s–${t + dur}s]  (${dur}s)`);
-      sc.script_lines.forEach((l, i) => out.push(`  [${t + Math.round(i * (dur / sc.script_lines.length))}s]  ${l}`));
-      out.push(''); t += dur;
-    });
-    out.push(`Total: ${t}s\n\nSORA PROMPTS`);
-    ([1, 2, 3] as const).forEach(n => out.push(`\nScene ${n}:\n${reel[`scene_${n}`].sora_prompt}`));
-    return out.join('\n');
   }
 
   const d = DAYS[day];
@@ -795,34 +751,7 @@ export default function VideoReelStudio() {
         )}
       </Card>
 
-      {/* Director notes */}
-      <Card className="p-4 bg-background/40 border-primary/10 space-y-2">
-        <label className="text-xs font-semibold text-amber-400 uppercase tracking-widest">
-          Director notes <span className="font-normal normal-case text-muted-foreground ml-2">shapes the angle and energy of this day's reel</span>
-        </label>
-        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
-          className="w-full p-3 rounded-xl bg-muted/40 border border-primary/10 focus:border-amber-400/40 outline-none resize-y text-sm text-foreground" />
-      </Card>
 
-      {/* Market context */}
-      {d.dataType !== 'none' && (
-        <Card className="bg-background/40 border-primary/10 overflow-hidden">
-          <button className="w-full p-4 flex items-center justify-between text-sm font-semibold hover:text-foreground"
-            onClick={() => setShowCtx(!showCtx)}>
-            <span className={d.dataType === 'ta' ? 'text-teal-400' : 'text-amber-400'}>
-              {d.dataType === 'ta' ? '📈 Market Context' : '📰 News Trigger'}
-              <span className="font-normal normal-case text-muted-foreground ml-2">(injected into GPT-4 prompt — edit freely)</span>
-            </span>
-            {showCtx ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
-          {showCtx && (
-            <div className="px-4 pb-4 pt-2 border-t border-primary/10">
-              <textarea value={mktCtx} onChange={e => setMktCtx(e.target.value)}
-                className="w-full min-h-[160px] p-3 rounded-xl bg-muted/40 border border-primary/10 focus:border-teal-400/40 outline-none resize-y text-xs font-mono text-muted-foreground leading-relaxed" />
-            </div>
-          )}
-        </Card>
-      )}
 
       {/* Full user prompt preview — editable */}
       <Card className="bg-background/40 border-sky-500/20 overflow-hidden">
@@ -851,8 +780,7 @@ export default function VideoReelStudio() {
             {editedPrompt === null && (
               <div className="flex gap-3 flex-wrap text-[10px] font-semibold uppercase tracking-widest mb-3">
                 <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400">Part 1 · Brief</span>
-                {mktCtx.trim() && <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400">Part 2 · Market context</span>}
-                <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400">Part 3 · Task + schema</span>
+                <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400">Part 2 · Task</span>
                 <span className="ml-auto text-muted-foreground/50 normal-case font-normal">Click in the box below to edit directly</span>
               </div>
             )}
@@ -908,124 +836,115 @@ export default function VideoReelStudio() {
       {/* Generate script */}
       <Button onClick={handleGenerateScript} disabled={genBusy}
         className="w-full h-12 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white font-bold text-base disabled:opacity-40">
-        {genBusy ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" />GPT-4 generating 3-scene script...</>
-          : reel ? <><RefreshCw className="w-5 h-5 mr-2" />Re-generate Script</>
-            : <><Wand2 className="w-5 h-5 mr-2" />Generate 3-Scene Script</>}
+        {genBusy ? <><Loader2 className="w-5 h-5 mr-2 animate-spin" />GPT-4 generating script...</>
+          : rawScript ? <><RefreshCw className="w-5 h-5 mr-2" />Re-generate Script</>
+            : <><Wand2 className="w-5 h-5 mr-2" />Generate Raw Script</>}
       </Button>
 
       {genErr && <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">❌ {genErr}</div>}
 
-      {/* Scenes + merge */}
-      {reel && (
-        <>
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-px bg-border/40" />
-            <span className="text-xs text-muted-foreground font-semibold uppercase tracking-widest">3 Scenes · edit → generate → merge</span>
-            <div className="flex-1 h-px bg-border/40" />
+      {/* Raw script display */}
+      {rawScript && (
+        <Card className="p-5 bg-background/40 border-primary/10 space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold text-sky-400 uppercase tracking-widest flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5" /> Generated Script (Raw Text)
+            </label>
+            <CopyBtn text={rawScript} />
           </div>
+          <textarea value={rawScript} onChange={e => setRawScript(e.target.value)}
+            className="w-full min-h-[300px] p-4 rounded-xl bg-muted/40 border border-primary/10 focus:border-sky-400/40 outline-none resize-y text-sm font-mono text-foreground leading-relaxed" />
+        </Card>
+      )}
 
-          {/* Continuity mode toggle */}
-          <div className="flex items-center justify-between px-1">
-            <div className="text-xs text-muted-foreground flex items-center gap-2">
-              <span className="text-violet-400 font-semibold">{reel.voice}</span>
-              <span className="text-muted-foreground/40">·</span>
-              <span>{reel.content_type}</span>
-              <span className="text-muted-foreground/40">·</span>
-              <span>{doneCount}/3 clips ready</span>
+      {/* Dynamic Scenes + merge */}
+      <div className="flex items-center gap-3 mt-8 mb-4">
+        <div className="flex-1 h-px bg-border/40" />
+        <span className="text-xs text-muted-foreground font-semibold uppercase tracking-widest">Clip Generation Slots</span>
+        <div className="flex-1 h-px bg-border/40" />
+      </div>
+
+      {/* Continuity mode toggle */}
+      <div className="flex items-center justify-between px-1 mb-4">
+        <div className="text-xs text-muted-foreground flex items-center gap-2">
+          <span>{scenes.length} clips configured</span>
+          <span className="text-muted-foreground/40">·</span>
+          <span>{doneCount}/{scenes.length} clips ready</span>
+        </div>
+        <button onClick={() => setContinuity(p => !p)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${continuity
+              ? 'bg-violet-600/20 border-violet-500/40 text-violet-300'
+              : 'bg-muted/30 border-primary/10 text-muted-foreground'
+            }`}
+          title="When ON: last frame of Clip N is fed into Clip N+1 as starting image. Keeps lighting consistent across clips.">
+          <Zap className={`w-3 h-3 ${continuity ? 'fill-violet-400' : ''}`} />
+          Continuity {continuity ? 'ON' : 'OFF'}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {scenes.map((scene, i) => (
+          <SceneCard key={i} n={i + 1} scene={scene} clip={clips[i]}
+            refImage={refImages[i]} refBusy={refBusy[i]}
+            onUpdate={s => updateScene(i, s)}
+            onGenerate={() => handleGenerateClip(i)}
+            onGenerateRef={() => generateRefImage(i)}
+            onDelete={() => removeScene(i)}
+            prevLastFrame={i > 0 ? lastFrames[i - 1] : null}
+            continuity={continuity} />
+        ))}
+        
+        {/* Add Clip Button */}
+        <button onClick={addScene} className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-primary/10 rounded-xl bg-background/30 hover:bg-muted/20 hover:border-primary/30 transition-all text-muted-foreground hover:text-foreground h-[220px]">
+          <span className="text-2xl mb-2">+</span>
+          <span className="text-sm font-semibold">Add Clip</span>
+        </button>
+      </div>
+
+      {/* Merge */}
+      {scenes.length > 0 && (
+        <Card className={`p-5 border transition-all mt-6 ${mergedUrl ? 'border-violet-500/40 bg-background/60' : 'border-primary/10 bg-background/40'}`}>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                <Merge className="w-4 h-4 text-violet-400" /> Merge &amp; Preview Final Reel
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {doneCount === 0 ? 'Generate at least 1 clip to enable merge'
+                  : doneCount < scenes.length ? `${doneCount}/${scenes.length} clips ready`
+                    : `All ${scenes.length} clips ready`}
+              </p>
             </div>
-            <button onClick={() => setContinuity(p => !p)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${continuity
-                  ? 'bg-violet-600/20 border-violet-500/40 text-violet-300'
-                  : 'bg-muted/30 border-primary/10 text-muted-foreground'
-                }`}
-              title="When ON: last frame of Scene 1 is fed into Scene 2 as starting image, and Scene 2 last frame into Scene 3. Keeps lighting, room and desk consistent across all 3 clips.">
-              <Zap className={`w-3 h-3 ${continuity ? 'fill-violet-400' : ''}`} />
-              Continuity {continuity ? 'ON' : 'OFF'}
-              {continuity && lastFrames[0] && <span className="text-violet-400">· S1→S2</span>}
-              {continuity && lastFrames[1] && <span className="text-violet-400"> S2→S3</span>}
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {([1, 2, 3] as const).map(n => (
-              <SceneCard key={n} n={n} scene={reel[`scene_${n}`]} clip={clips[n - 1]}
-                refImage={refImages[n-1]} refBusy={refBusy[n-1]}
-                onUpdate={s => updateScene(n, s)}
-                onGenerate={() => handleGenerateClip(n - 1)}
-                onGenerateRef={() => generateRefImage(n - 1)}
-                prevLastFrame={n > 1 ? lastFrames[n - 2] : null}
-                continuity={continuity}
-                isBlocked={false} />
-            ))}
-          </div>
-
-          {/* Merge */}
-          <Card className={`p-5 border transition-all ${mergedUrl ? 'border-violet-500/40 bg-background/60' : 'border-primary/10 bg-background/40'}`}>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
-                  <Merge className="w-4 h-4 text-violet-400" /> Merge &amp; Preview Final Reel
-                </h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {doneCount === 0 ? 'Generate at least 1 clip to enable merge'
-                    : doneCount < 3 ? `${doneCount}/3 clips ready`
-                      : 'All 3 clips ready'}
-                </p>
-              </div>
-              {mergedUrl && (
-                <a href={mergedUrl} download="vibetrader-reel.mp4"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition-colors">
-                  <Download className="w-3.5 h-3.5" /> Download
-                </a>
-              )}
-            </div>
-             <Button onClick={handleMerge} disabled={doneCount === 0 || anyBusy || merging}
-              className="w-full h-11 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold disabled:opacity-40">
-              {merging ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {mergeStatus || 'Merging...'}
-                </>
-              ) : mergedUrl ? (
-                <><RefreshCw className="w-4 h-4 mr-2" />Re-merge &amp; Burn Captions</>
-              ) : (
-                <><Merge className="w-4 h-4 mr-2" />Merge &amp; Burn Captions ({doneCount} Clip{doneCount !== 1 ? 's' : ''})</>
-              )}
-            </Button>
-            {mergeErr && <p className="text-xs text-destructive mt-3">❌ {mergeErr}</p>}
             {mergedUrl && (
-              <div className="mt-4 flex flex-col items-center gap-3">
-                <div className="relative rounded-2xl overflow-hidden bg-black border border-violet-500/30"
-                  style={{ aspectRatio: '9/16', maxHeight: '420px', width: '100%', maxWidth: '240px' }}>
-                  <video src={mergedUrl} controls autoPlay loop playsInline className="w-full h-full object-contain" />
-                </div>
-              </div>
+              <a href={mergedUrl} download="vibetrader-reel.mp4"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition-colors">
+                <Download className="w-3.5 h-3.5" /> Download
+              </a>
             )}
-          </Card>
-
-          {/* Caption */}
-          <Card className="p-5 bg-background/40 border-primary/10 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-sky-400 uppercase tracking-widest">Instagram Caption</label>
-              <CopyBtn text={reel.instagram_caption} />
+          </div>
+            <Button onClick={handleMerge} disabled={doneCount === 0 || anyBusy || merging}
+            className="w-full h-11 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold disabled:opacity-40">
+            {merging ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                {mergeStatus || 'Merging...'}
+              </>
+            ) : mergedUrl ? (
+              <><RefreshCw className="w-4 h-4 mr-2" />Re-merge &amp; Burn Captions</>
+            ) : (
+              <><Merge className="w-4 h-4 mr-2" />Merge &amp; Burn Captions ({doneCount} Clip{doneCount !== 1 ? 's' : ''})</>
+            )}
+          </Button>
+          {mergeErr && <p className="text-xs text-destructive mt-3">❌ {mergeErr}</p>}
+          {mergedUrl && (
+            <div className="mt-4 flex flex-col items-center gap-3">
+              <div className="relative rounded-2xl overflow-hidden bg-black border border-violet-500/30"
+                style={{ aspectRatio: '9/16', maxHeight: '420px', width: '100%', maxWidth: '240px' }}>
+                <video src={mergedUrl} controls autoPlay loop playsInline className="w-full h-full object-contain" />
+              </div>
             </div>
-            <textarea value={reel.instagram_caption} onChange={e => setReel({ ...reel, instagram_caption: e.target.value })}
-              className="w-full min-h-[140px] p-3 rounded-xl bg-muted/40 border border-primary/10 focus:border-sky-400/40 outline-none resize-y text-sm text-foreground leading-relaxed" />
-          </Card>
-
-          {/* Script.txt */}
-          <Card className="p-5 bg-background/40 border-primary/10 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-emerald-400 uppercase tracking-widest flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5" /> Script.txt (for CapCut)
-              </label>
-              <CopyBtn text={buildScriptTxt()} />
-            </div>
-            <pre className="text-xs font-mono text-muted-foreground bg-muted/30 rounded-xl p-4 overflow-auto max-h-[200px] whitespace-pre-wrap leading-relaxed">
-              {buildScriptTxt()}
-            </pre>
-          </Card>
-        </>
+          )}
+        </Card>
       )}
     </div>
   );
