@@ -432,7 +432,7 @@ export default function VideoReelStudio() {
   async function handleGenerateScript() {
     setGenBusy(true); setGenErr(null); setRawScript('');
     try {
-      const body = editedPrompt
+      const body = editedPrompt !== null
         ? { systemPrompt: sysP, userPrompt: editedPrompt, temperature: 0.85 }
         : { systemPrompt: sysP, userPrompt: buildFullUserPrompt(), temperature: 0.85 };
 
