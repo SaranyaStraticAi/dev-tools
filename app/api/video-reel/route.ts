@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     if (!systemPrompt) {
       return NextResponse.json({ error: 'systemPrompt is required' }, { status: 400 });
     }
-    if (!userPrompt) {
+    if (userPrompt === undefined) {
       return NextResponse.json({ error: 'userPrompt is required' }, { status: 400 });
     }
 
