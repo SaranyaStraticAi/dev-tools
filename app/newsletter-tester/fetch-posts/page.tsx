@@ -36,11 +36,19 @@ export default function FetchPostsTesterPage() {
     const [filterText, setFilterText] = useState('');
     const [activeTab, setActiveTab] = useState<'table' | 'json'>('table');
     const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+    const [isUsingPicked, setIsUsingPicked] = useState(false);
 
     useEffect(() => {
         setMounted(true);
         const saved = localStorage.getItem('employee_session');
         if (saved) setEmployeeAccount(saved);
+
+        // Load picked subreddits from Tool 2 if available
+        const picked = localStorage.getItem('reddit_picked_subreddits');
+        if (picked) {
+            setSubredditsInput(picked);
+            setIsUsingPicked(true);
+        }
     }, []);
 
     const userEmail = accounts[0]?.username;
@@ -94,6 +102,9 @@ export default function FetchPostsTesterPage() {
             }
 
             setPosts(data.posts || []);
+            if (data.posts) {
+                localStorage.setItem('reddit_fetched_posts', JSON.stringify(data.posts));
+            }
             setFetchedFrom(data.fetchedFrom || []);
             setFailedFrom(data.failedFrom || []);
         } catch (err: any) {
@@ -135,7 +146,25 @@ export default function FetchPostsTesterPage() {
                 {/* ── Controls Row ────────────────────────────────────────── */}
                 <div className="grid grid-cols-1 md:grid-cols-3 items-end gap-4">
                     <div className="md:col-span-2 flex flex-col gap-1.5">
-                        <label className="text-xs font-bold text-foreground">Subreddits (Comma Separated)</label>
+                        <div className="flex items-center justify-between">
+                            <label className="text-xs font-bold text-foreground">Subreddits (Comma Separated)</label>
+                            {isUsingPicked && (
+                                <span className="flex items-center gap-2 text-[10px] text-green-600 dark:text-green-400 font-semibold">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                                    Loaded from Tool 2
+                                    <button
+                                        onClick={() => {
+                                            setSubredditsInput('Forex, Daytrading, PropFirmTrading');
+                                            setIsUsingPicked(false);
+                                            localStorage.removeItem('reddit_picked_subreddits');
+                                        }}
+                                        className="underline hover:text-green-700 font-bold ml-1 cursor-pointer"
+                                    >
+                                        Reset
+                                    </button>
+                                </span>
+                            )}
+                        </div>
                         <input
                             type="text"
                             value={subredditsInput}
@@ -220,7 +249,7 @@ export default function FetchPostsTesterPage() {
                         </div>
 
                         {/* ── Tab Switcher ────────────────────────────────────── */}
-                        <div className="flex border-b border-border">
+                        <div className="flex items-center border-b border-border w-full">
                             <button
                                 onClick={() => setActiveTab('table')}
                                 className={`px-4 py-2 text-xs font-bold border-b-2 transition-all ${
@@ -241,6 +270,12 @@ export default function FetchPostsTesterPage() {
                             >
                                 JSON View
                             </button>
+                            <a
+                                href="/newsletter-tester/deep-analysis"
+                                className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors shadow-sm cursor-pointer"
+                            >
+                                Send to Deep Analysis (Tool 4) →
+                            </a>
                         </div>
 
                         {activeTab === 'table' ? (

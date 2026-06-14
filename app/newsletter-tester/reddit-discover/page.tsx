@@ -129,7 +129,13 @@ Respond ONLY with a valid JSON array of search query strings. No markdown, no ex
                         if (payload.step === 'prompts') { setSystemPrompt(payload.system || ''); setUserPrompt(payload.user || ''); }
                         else if (payload.step === 'queries') { setCurrentStep('queries'); if (payload.queries) setQueries(payload.queries); }
                         else if (payload.step === 'searching') { setCurrentStep('searching'); setSearchProgress({ currentQuery: payload.query || '', index: payload.index || 0, total: payload.total || 0, foundCount: payload.foundCount || 0 }); }
-                        else if (payload.step === 'complete') { setCurrentStep('complete'); setCommunities(payload.communities || []); }
+                        else if (payload.step === 'complete') {
+                            setCurrentStep('complete');
+                            setCommunities(payload.communities || []);
+                            if (payload.communities) {
+                                localStorage.setItem('reddit_discovered_communities', JSON.stringify(payload.communities));
+                            }
+                        }
                         else if (payload.step === 'error') { setCurrentStep('error'); setError(payload.message || 'Failed'); }
                     } catch {}
                 }
@@ -333,7 +339,7 @@ Respond ONLY with a valid JSON array of search query strings. No markdown, no ex
                             </div>
                         </div>
 
-                        <div className="flex border-b border-border">
+                        <div className="flex items-center border-b border-border w-full">
                             <button
                                 onClick={() => setActiveTab('table')}
                                 className={`px-4 py-2 text-xs font-bold border-b-2 transition-all ${
@@ -354,6 +360,12 @@ Respond ONLY with a valid JSON array of search query strings. No markdown, no ex
                             >
                                 JSON View
                             </button>
+                            <a
+                                href="/newsletter-tester/pick-subreddits"
+                                className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors shadow-sm cursor-pointer"
+                            >
+                                Send to Pick Subreddits (Tool 2) →
+                            </a>
                         </div>
 
                         {activeTab === 'table' ? (

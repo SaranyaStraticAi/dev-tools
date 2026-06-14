@@ -46,6 +46,7 @@ export default function NewsletterWriterTesterPage() {
 
     const [inputJson, setInputJson] = useState(JSON.stringify(DEFAULT_MOCK_INPUT, null, 2));
     const [running, setRunning] = useState(false);
+    const [isUsingCombined, setIsUsingCombined] = useState(false);
 
     // Results
     const [rawText, setRawText] = useState('');
@@ -85,6 +86,30 @@ export default function NewsletterWriterTesterPage() {
                 setUserTemplate(WEEKLY_USER_TEMPLATE);
             }
         })();
+
+        // Load cached outputs from Deep Analysis (Tool 4) and Market News (Tool 5)
+        const analysisRaw = localStorage.getItem('reddit_analysis_result');
+        const newsRaw = localStorage.getItem('reddit_news_context');
+        if (analysisRaw || newsRaw) {
+            let combined = { ...DEFAULT_MOCK_INPUT };
+            let hasCache = false;
+            if (analysisRaw) {
+                try {
+                    combined.analysis = JSON.parse(analysisRaw);
+                    hasCache = true;
+                } catch {}
+            }
+            if (newsRaw) {
+                try {
+                    combined.news = JSON.parse(newsRaw);
+                    hasCache = true;
+                } catch {}
+            }
+            if (hasCache) {
+                setInputJson(JSON.stringify(combined, null, 2));
+                setIsUsingCombined(true);
+            }
+        }
     }, []);
 
     const userEmail = accounts[0]?.username;
@@ -137,6 +162,9 @@ export default function NewsletterWriterTesterPage() {
             }
 
             setRawText(data.result.rawText || '');
+            if (data.result.rawText) {
+                localStorage.setItem('reddit_writer_draft', data.result.rawText);
+            }
             setAttempt(data.result.attempt || 1);
             if (data.prompts) {
                 setSystemPrompt(data.prompts.system || '');
@@ -327,6 +355,26 @@ export default function NewsletterWriterTesterPage() {
                         </p>
                     </div>
 
+                    {isUsingCombined && (
+                        <div className="flex items-center justify-between p-2.5 bg-green-500/10 border border-green-500/30 rounded-xl text-green-600 dark:text-green-400 text-xs">
+                            <span className="flex items-center gap-1.5 font-medium">
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                                Loaded live analysis & news from Tools 4 & 5
+                            </span>
+                            <button
+                                onClick={() => {
+                                    setInputJson(JSON.stringify(DEFAULT_MOCK_INPUT, null, 2));
+                                    setIsUsingCombined(false);
+                                    localStorage.removeItem('reddit_analysis_result');
+                                    localStorage.removeItem('reddit_news_context');
+                                }}
+                                className="text-[10px] font-bold underline hover:text-green-700 transition-colors cursor-pointer"
+                            >
+                                Reset to Mock Data
+                            </button>
+                        </div>
+                    )}
+
                     <textarea
                         value={inputJson}
                         onChange={(e) => setInputJson(e.target.value)}
@@ -414,22 +462,30 @@ export default function NewsletterWriterTesterPage() {
                                     </button>
                                 </div>
 
-                                <button
-                                    onClick={handleCopyText}
-                                    className="flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded bg-muted hover:bg-muted/80 text-foreground font-semibold border border-border"
-                                >
-                                    {copied ? (
-                                        <>
-                                            <Check size={12} className="text-green-500" />
-                                            Copied
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Copy size={12} />
-                                            Copy Raw Text
-                                        </>
-                                    )}
-                                </button>
+                                <div className="flex gap-2 items-center">
+                                    <button
+                                        onClick={handleCopyText}
+                                        className="flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded bg-muted hover:bg-muted/80 text-foreground font-semibold border border-border"
+                                    >
+                                        {copied ? (
+                                            <>
+                                                <Check size={12} className="text-green-500" />
+                                                Copied
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Copy size={12} />
+                                                Copy Raw Text
+                                            </>
+                                        )}
+                                    </button>
+                                    <a
+                                        href="/newsletter-tester/compliance-review"
+                                        className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded bg-purple-600 hover:bg-purple-700 text-white font-bold transition-colors shadow-sm cursor-pointer animate-pulse"
+                                    >
+                                        Send to Tool 7 (Compliance) →
+                                    </a>
+                                </div>
                             </div>
 
                             {activeTab === 'preview' ? (

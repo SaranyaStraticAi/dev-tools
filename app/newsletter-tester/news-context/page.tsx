@@ -27,11 +27,24 @@ export default function NewsContextTesterPage() {
     const [newsData, setNewsData] = useState<NewsContext | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'cards' | 'json'>('cards');
+    const [isUsingAnalysis, setIsUsingAnalysis] = useState(false);
 
     useEffect(() => {
         setMounted(true);
         const saved = localStorage.getItem('employee_session');
         if (saved) setEmployeeAccount(saved);
+
+        // Load query from Tool 4 analysis results if available
+        const analysisRaw = localStorage.getItem('reddit_analysis_result');
+        if (analysisRaw) {
+            try {
+                const analysis = JSON.parse(analysisRaw);
+                if (analysis && analysis.currencyOrEvent) {
+                    setQueryInput(analysis.currencyOrEvent);
+                    setIsUsingAnalysis(true);
+                }
+            } catch {}
+        }
     }, []);
 
     const userEmail = accounts[0]?.username;
@@ -71,6 +84,9 @@ export default function NewsContextTesterPage() {
             }
 
             setNewsData(data.news);
+            if (data.news) {
+                localStorage.setItem('reddit_news_context', JSON.stringify(data.news));
+            }
         } catch (err: any) {
             setError(err.message || 'An unexpected error occurred.');
         } finally {
@@ -104,7 +120,25 @@ export default function NewsContextTesterPage() {
                 {/* ── Input Controls ───────────────────────────────────────── */}
                 <div className="flex flex-col sm:flex-row items-end gap-4">
                     <div className="flex-1 flex flex-col gap-1.5">
-                        <label className="text-xs font-bold text-foreground">Asset or Macro Event Query</label>
+                        <div className="flex items-center justify-between">
+                            <label className="text-xs font-bold text-foreground">Asset or Macro Event Query</label>
+                            {isUsingAnalysis && (
+                                <span className="flex items-center gap-2 text-[10px] text-green-600 dark:text-green-400 font-semibold">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                                    Loaded from Tool 4
+                                    <button
+                                        onClick={() => {
+                                            setQueryInput('NFP');
+                                            setIsUsingAnalysis(false);
+                                            localStorage.removeItem('reddit_analysis_result');
+                                        }}
+                                        className="underline hover:text-green-700 font-bold ml-1 cursor-pointer"
+                                    >
+                                        Reset
+                                    </button>
+                                </span>
+                            )}
+                        </div>
                         <input
                             type="text"
                             value={queryInput}
@@ -169,7 +203,7 @@ export default function NewsContextTesterPage() {
                         </div>
 
                         {/* Tab Switcher */}
-                        <div className="flex border-b border-border">
+                        <div className="flex items-center border-b border-border w-full">
                             <button
                                 onClick={() => setActiveTab('cards')}
                                 className={`px-4 py-2 text-xs font-bold border-b-2 transition-all ${
@@ -190,6 +224,12 @@ export default function NewsContextTesterPage() {
                             >
                                 JSON View
                             </button>
+                            <a
+                                href="/newsletter-tester/newsletter-writer"
+                                className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors shadow-sm cursor-pointer"
+                            >
+                                Send to Tool 6 (Writer) →
+                            </a>
                         </div>
 
                         {activeTab === 'cards' ? (

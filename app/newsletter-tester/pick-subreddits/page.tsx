@@ -65,6 +65,7 @@ export default function LlmPickSubredditsTesterPage() {
     const [running, setRunning] = useState(false);
     const [pickedSubreddits, setPickedSubreddits] = useState<string[]>([]);
     const [lastProcessedCandidates, setLastProcessedCandidates] = useState<Community[]>([]);
+    const [isUsingDiscovered, setIsUsingDiscovered] = useState(false);
     
     // Prompts
     const [systemPrompt, setSystemPrompt] = useState(`You are a content strategist for Vibe Trader Weekly — a newsletter specifically for FOREX and active RETAIL TRADERS who trade currency pairs, indices, and commodities with real money.
@@ -132,6 +133,13 @@ Return a JSON array of subreddit names only — no r/ prefix.`);
                 console.warn('Failed to load prompts from Azure Blob:', e);
             }
         })();
+
+        // Load discovered communities from Tool 1 if available
+        const discovered = localStorage.getItem('reddit_discovered_communities');
+        if (discovered) {
+            setInputJson(discovered);
+            setIsUsingDiscovered(true);
+        }
     }, []);
 
     const handleSavePrompts = async () => {
@@ -208,6 +216,9 @@ Return a JSON array of subreddit names only — no r/ prefix.`);
             }
 
             setPickedSubreddits(data.picked || []);
+            if (data.picked) {
+                localStorage.setItem('reddit_picked_subreddits', data.picked.join(', '));
+            }
             if (data.system) setSystemPrompt(data.system);
             if (data.userTemplate) setUserTemplate(data.userTemplate);
         } catch (err: any) {
@@ -317,6 +328,25 @@ Return a JSON array of subreddit names only — no r/ prefix.`);
                         </p>
                     </div>
 
+                    {isUsingDiscovered && (
+                        <div className="flex items-center justify-between p-2.5 bg-green-500/10 border border-green-500/30 rounded-xl text-green-600 dark:text-green-400 text-xs">
+                            <span className="flex items-center gap-1.5 font-medium">
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                                Loaded live subreddits from Tool 1
+                            </span>
+                            <button
+                                onClick={() => {
+                                    setInputJson(JSON.stringify(DEFAULT_MOCK_COMMUNITIES, null, 2));
+                                    setIsUsingDiscovered(false);
+                                    localStorage.removeItem('reddit_discovered_communities');
+                                }}
+                                className="text-[10px] font-bold underline hover:text-green-700 transition-colors cursor-pointer"
+                            >
+                                Reset to Mock Data
+                            </button>
+                        </div>
+                    )}
+
                     <textarea
                         value={inputJson}
                         onChange={(e) => setInputJson(e.target.value)}
@@ -381,10 +411,20 @@ Return a JSON array of subreddit names only — no r/ prefix.`);
                         <div className="flex flex-col gap-4 flex-1 overflow-y-auto max-h-[500px]">
                             {/* Approved Section */}
                             <div className="flex flex-col gap-2">
-                                <span className="text-xs font-bold text-green-600 uppercase tracking-wider flex items-center gap-1.5">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                                    Approved ({pickedSubreddits.length})
-                                </span>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-green-600 uppercase tracking-wider flex items-center gap-1.5">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                                        Approved ({pickedSubreddits.length})
+                                    </span>
+                                    {pickedSubreddits.length > 0 && (
+                                        <a
+                                            href="/newsletter-tester/fetch-posts"
+                                            className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors shadow-sm cursor-pointer"
+                                        >
+                                            Send to Tool 3 (Fetch) →
+                                        </a>
+                                    )}
+                                </div>
                                 
                                 <div className="flex flex-col gap-2">
                                     {lastProcessedCandidates.filter(c => pickedSubreddits.includes(c.name)).map(c => (

@@ -11,6 +11,7 @@ export default function ComplianceReviewTesterPage() {
 
     const [draftText, setDraftText] = useState('');
     const [running, setRunning] = useState(false);
+    const [isUsingDraft, setIsUsingDraft] = useState(false);
 
     // Prompts
     const [systemPrompt, setSystemPrompt] = useState(`You are the Chief Compliance and Quality Officer for Vibe Trader Weekly.
@@ -78,6 +79,13 @@ If the draft perfectly meets all criteria, set "passed": true, leave "flags" emp
                 console.warn('Failed to load prompts from Azure Blob:', e);
             }
         })();
+
+        // Load draft text from Tool 6 if available
+        const draft = localStorage.getItem('reddit_writer_draft');
+        if (draft) {
+            setDraftText(draft);
+            setIsUsingDraft(true);
+        }
     }, []);
 
     const handleSavePrompts = async () => {
@@ -264,6 +272,25 @@ If the draft perfectly meets all criteria, set "passed": true, leave "flags" emp
                             Paste the output from Tool 6 (Newsletter Writer) here.
                         </p>
                     </div>
+
+                    {isUsingDraft && (
+                        <div className="flex items-center justify-between p-2.5 bg-green-500/10 border border-green-500/30 rounded-xl text-green-600 dark:text-green-400 text-xs">
+                            <span className="flex items-center gap-1.5 font-medium">
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                                Loaded live draft from Tool 6
+                            </span>
+                            <button
+                                onClick={() => {
+                                    setDraftText('');
+                                    setIsUsingDraft(false);
+                                    localStorage.removeItem('reddit_writer_draft');
+                                }}
+                                className="text-[10px] font-bold underline hover:text-green-700 transition-colors cursor-pointer"
+                            >
+                                Reset
+                            </button>
+                        </div>
+                    )}
 
                     <textarea
                         value={draftText}
