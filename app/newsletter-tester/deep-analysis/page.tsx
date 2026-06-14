@@ -57,6 +57,7 @@ export default function DeepAnalysisTesterPage() {
 
     const [inputJson, setInputJson] = useState(JSON.stringify(DEFAULT_MOCK_POSTS, null, 2));
     const [running, setRunning] = useState(false);
+    const [isUsingFetched, setIsUsingFetched] = useState(false);
     
     // Results
     const [analysisResult, setAnalysisResult] = useState<any>(null);
@@ -118,6 +119,13 @@ No markdown, no backticks — raw JSON only.`);
                 console.warn('Failed to load prompts from Azure Blob:', e);
             }
         })();
+
+        // Load fetched posts from Tool 3 if available
+        const fetched = localStorage.getItem('reddit_fetched_posts');
+        if (fetched) {
+            setInputJson(fetched);
+            setIsUsingFetched(true);
+        }
     }, []);
 
     const handleSavePrompts = async () => {
@@ -193,6 +201,9 @@ No markdown, no backticks — raw JSON only.`);
             }
 
             setAnalysisResult(data.analysis);
+            if (data.analysis) {
+                localStorage.setItem('reddit_analysis_result', JSON.stringify(data.analysis));
+            }
             if (data.analysis?.prompts) {
                 setSystemPrompt(data.analysis.prompts.system || systemPrompt);
                 setUserPrompt(data.analysis.prompts.userTemplate || userPrompt);
@@ -304,6 +315,25 @@ No markdown, no backticks — raw JSON only.`);
                         </p>
                     </div>
 
+                    {isUsingFetched && (
+                        <div className="flex items-center justify-between p-2.5 bg-green-500/10 border border-green-500/30 rounded-xl text-green-600 dark:text-green-400 text-xs">
+                            <span className="flex items-center gap-1.5 font-medium">
+                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                                Loaded live posts from Tool 3
+                            </span>
+                            <button
+                                onClick={() => {
+                                    setInputJson(JSON.stringify(DEFAULT_MOCK_POSTS, null, 2));
+                                    setIsUsingFetched(false);
+                                    localStorage.removeItem('reddit_fetched_posts');
+                                }}
+                                className="text-[10px] font-bold underline hover:text-green-700 transition-colors cursor-pointer"
+                            >
+                                Reset to Mock Data
+                            </button>
+                        </div>
+                    )}
+
                     <textarea
                         value={inputJson}
                         onChange={(e) => setInputJson(e.target.value)}
@@ -367,7 +397,7 @@ No markdown, no backticks — raw JSON only.`);
                     {!running && !error && analysisResult && (
                         <div className="flex flex-col gap-6 flex-1">
                             {/* Tab Switcher */}
-                            <div className="flex border-b border-border">
+                            <div className="flex items-center border-b border-border w-full">
                                 <button
                                     onClick={() => setActiveTab('report')}
                                     className={`px-4 py-2 text-xs font-bold border-b-2 transition-all ${
@@ -388,6 +418,12 @@ No markdown, no backticks — raw JSON only.`);
                                 >
                                     Raw JSON Output
                                 </button>
+                                <a
+                                    href="/newsletter-tester/news-context"
+                                    className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors shadow-sm cursor-pointer"
+                                >
+                                    Send to Tool 5 (News) →
+                                </a>
                             </div>
 
                             {activeTab === 'report' ? (
