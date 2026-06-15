@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import {
-    NewsletterType, RedditPost, SAMPLE_REDDIT_POSTS,
+    NewsletterType, WeekType, RedditPost, SAMPLE_REDDIT_POSTS,
     WEEKLY_SYSTEM_PROMPT, WEEKLY_USER_TEMPLATE,
     PUZZLE_SYSTEM_PROMPT, PUZZLE_USER_TEMPLATE,
 } from '../constants';
@@ -20,6 +20,7 @@ export type SendStatus = 'idle' | 'sending' | 'sent' | 'error';
 
 export function useNewsletterPage() {
     const [type, setType] = useState<NewsletterType>('weekly');
+    const [weekType, setWeekType] = useState<WeekType>(1);
 
     // ── AI prompt state ───────────────────────────────────────────────────────
     const [weeklySystem, setWeeklySystem] = useState(WEEKLY_SYSTEM_PROMPT);
@@ -302,13 +303,14 @@ export function useNewsletterPage() {
     // This replaces handleGenerate for the weekly newsletter.
     // Calls /api/newsletter-pipeline, reads the SSE stream, updates step
     // messages in real time, and populates all the same state as before.
-    const handleGeneratePipeline = async (rediscover = false, pipelineType: NewsletterType = 'weekly') => {
+    const handleGeneratePipeline = async (rediscover = false, pipelineType: NewsletterType = 'weekly', weekNum: WeekType = weekType) => {
         const tmplToUse = pipelineType === 'weekly' ? weeklyTemplate : puzzleTemplate;
         if (!tmplToUse || tmplToUse.startsWith('<!--')) {
             setError('Template not loaded from Azure yet. Wait for blob to load or publish first.');
             return;
         }
         setType(pipelineType);
+        if (pipelineType === 'weekly') setWeekType(weekNum);
         setLoading(true);
         setError('');
         setRawText('');
@@ -328,7 +330,7 @@ export function useNewsletterPage() {
             const res = await fetch('/api/newsletter-pipeline', {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ rediscover, type: pipelineType }),
+                body:    JSON.stringify({ rediscover, type: pipelineType, weekType: weekNum }),
             });
 
             if (!res.ok || !res.body) {
@@ -663,6 +665,7 @@ ${newsData.referenceLinks?.map((l: any) => `- ${l.title}: ${l.url}`).join('\n') 
     return {
         // Types
         type, setType, templateType, setTemplateType,
+        weekType, setWeekType,
         // Prompts
         weeklySystem, setWeeklySystem,
         weeklyUser,   setWeeklyUser,
