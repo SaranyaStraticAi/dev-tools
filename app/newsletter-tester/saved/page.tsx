@@ -31,7 +31,7 @@ export default function SavedNewslettersPage() {
     }, []);
 
     const userEmail = accounts[0]?.username;
-    const isAllowed = userEmail === 'masood@aity.dev' || employeeAccount === 'ketki@vibetrader.com' || userEmail === 'ketki@vibetrader.com';
+    const isAllowed = userEmail === 'masood@aity.dev' || employeeAccount === 'ketki@vibetrader.com' || userEmail === 'ketki@vibetrader.com' || userEmail === 'saranya@vibetrader.com' || employeeAccount === 'saranya@vibetrader.com';
 
     // State
     const [savedDrafts, setSavedDrafts] = useState<SavedNewsletter[]>([]);

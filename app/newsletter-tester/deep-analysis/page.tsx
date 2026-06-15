@@ -154,7 +154,7 @@ No markdown, no backticks — raw JSON only.`);
     };
 
     const userEmail = accounts[0]?.username;
-    const isAllowed = userEmail === 'masood@aity.dev' || employeeAccount === 'ketki@vibetrader.com' || userEmail === 'ketki@vibetrader.com';
+    const isAllowed = userEmail === 'masood@aity.dev' || employeeAccount === 'ketki@vibetrader.com' || userEmail === 'ketki@vibetrader.com' || userEmail === 'saranya@vibetrader.com' || employeeAccount === 'saranya@vibetrader.com';
 
     if (!mounted) return null;
 
