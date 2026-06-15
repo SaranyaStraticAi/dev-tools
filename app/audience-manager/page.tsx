@@ -36,7 +36,7 @@ export default function AudienceManagerPage() {
     }, []);
 
     const userEmail = accounts[0]?.username;
-    const isAllowed = userEmail === 'masood@aity.dev' || employeeAccount === 'ketki@vibetrader.com' || userEmail === 'ketki@vibetrader.com';
+    const isAllowed = userEmail === 'masood@aity.dev' || employeeAccount === 'ketki@vibetrader.com' || userEmail === 'ketki@vibetrader.com' || userEmail === 'saranya@vibetrader.com' || employeeAccount === 'saranya@vibetrader.com';
 
     const [contacts,    setContacts]    = useState<Contact[]>([]);
     const [segments,    setSegments]    = useState<Segment[]>([]);

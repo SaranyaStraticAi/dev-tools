@@ -90,7 +90,7 @@ Respond ONLY with a valid JSON array of search query strings. No markdown, no ex
     };
 
     const userEmail  = accounts[0]?.username;
-    const isAllowed  = userEmail === 'masood@aity.dev' || employeeAccount === 'ketki@vibetrader.com' || userEmail === 'ketki@vibetrader.com';
+    const isAllowed  = userEmail === 'masood@aity.dev' || employeeAccount === 'ketki@vibetrader.com' || userEmail === 'ketki@vibetrader.com' || userEmail === 'saranya@vibetrader.com' || employeeAccount === 'saranya@vibetrader.com';
 
     if (!mounted) return null;
     if (!isAllowed) {
