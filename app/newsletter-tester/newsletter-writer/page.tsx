@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useMsal } from '@azure/msal-react';
-import { Sparkles, Edit, RefreshCw, AlertCircle, Cpu, ChevronDown, ChevronUp, Layers, CheckCircle, FileText, Check, Copy } from 'lucide-react';
+import { Sparkles, Edit, RefreshCw, AlertCircle, Cpu, ChevronDown, ChevronUp, Layers, CheckCircle, FileText, Check, Copy, Save, Download } from 'lucide-react';
 import { WEEKLY_SYSTEM_PROMPT, WEEKLY_USER_TEMPLATE, PUZZLE_SYSTEM_PROMPT, PUZZLE_USER_TEMPLATE, WeekType, WEEK_LABELS, WEEK_OVERRIDES } from '../constants';
+import { parseNewsletter, renderTemplate } from '../components/emailUtils';
 
 const DEFAULT_MOCK_INPUT = {
     analysis: {
@@ -59,7 +60,7 @@ export default function NewsletterWriterTesterPage() {
     const [systemPrompt, setSystemPrompt] = useState('');
     const [userTemplate, setUserTemplate] = useState('');
     const [showPromptsPanel, setShowPromptsPanel] = useState(true);
-    const [activeTab, setActiveTab] = useState<'preview' | 'json'>('preview');
+    const [activeTab, setActiveTab] = useState<'preview' | 'raw'>('preview');
     const [copied, setCopied] = useState(false);
 
     const [error, setError] = useState<string | null>(null);
@@ -67,6 +68,12 @@ export default function NewsletterWriterTesterPage() {
     // Save states
     const [savingPrompts, setSavingPrompts] = useState(false);
     const [saveStatusMsg, setSaveStatusMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+    const [weeklyTemplate, setWeeklyTemplate] = useState('');
+    const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
+    const [savingNewsletter, setSavingNewsletter] = useState(false);
+    const [newsletterSaveStatus, setNewsletterSaveStatus] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+    const [bannerUrl, setBannerUrl] = useState('');
 
     useEffect(() => {
         setMounted(true);
@@ -84,15 +91,18 @@ export default function NewsletterWriterTesterPage() {
                     const loadedTemplate = data.prompts.weeklyUser || WEEKLY_USER_TEMPLATE;
                     baseUserTemplateRef.current = loadedTemplate;
                     setUserTemplate(loadedTemplate); // Week 1 = no override, show clean template
+                    setWeeklyTemplate(data.prompts.weeklyTemplate || '');
                 } else {
                     setSystemPrompt(WEEKLY_SYSTEM_PROMPT);
                     baseUserTemplateRef.current = WEEKLY_USER_TEMPLATE;
                     setUserTemplate(WEEKLY_USER_TEMPLATE);
+                    setWeeklyTemplate('');
                 }
             } catch (e) {
                 setSystemPrompt(WEEKLY_SYSTEM_PROMPT);
                 baseUserTemplateRef.current = WEEKLY_USER_TEMPLATE;
                 setUserTemplate(WEEKLY_USER_TEMPLATE);
+                setWeeklyTemplate('');
             }
         })();
 
@@ -183,9 +193,27 @@ export default function NewsletterWriterTesterPage() {
                 throw new Error(data.error || 'Failed to generate newsletter content.');
             }
 
-            setRawText(data.result.rawText || '');
-            if (data.result.rawText) {
-                localStorage.setItem('reddit_writer_draft', data.result.rawText);
+            const textOutput = data.result.rawText || '';
+            setRawText(textOutput);
+            if (textOutput) {
+                localStorage.setItem('reddit_writer_draft', textOutput);
+                try {
+                    const parsed = parseNewsletter(textOutput);
+                    if (parsed.subject) {
+                        const bannerTitle = parsed.newsletter_title?.trim() || parsed.subject;
+                        const bannerRes = await fetch('/api/generate-banner', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ subject: bannerTitle })
+                        });
+                        if (bannerRes.ok) {
+                            const bannerData = await bannerRes.json();
+                            setBannerUrl(bannerData.url || '');
+                        }
+                    }
+                } catch (e) {
+                    console.error('Failed to auto-generate banner for Writer:', e);
+                }
             }
             setAttempt(data.result.attempt || 1);
             // Restore the prompts that were displayed before generation
@@ -243,6 +271,56 @@ export default function NewsletterWriterTesterPage() {
         } finally {
             setSavingPrompts(false);
         }
+    };
+
+    const handleSaveNewsletter = async () => {
+        if (!rawText) return;
+        
+        const parsed = parseNewsletter(rawText);
+        const subject = parsed.subject || `Thursday Weekly W${weekType} newsletter`;
+        const renderedHtml = (parsed && weeklyTemplate) ? renderTemplate(weeklyTemplate, parsed, 'weekly', bannerUrl) : '';
+
+        if (!renderedHtml) {
+            setNewsletterSaveStatus({ text: 'No HTML template loaded yet.', type: 'error' });
+            return;
+        }
+
+        setSavingNewsletter(true);
+        setNewsletterSaveStatus(null);
+        try {
+            const res = await fetch('/api/saved-newsletters', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    subject,
+                    body: renderedHtml,
+                    rawText,
+                    type: 'weekly',
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed to save newsletter');
+            setNewsletterSaveStatus({ text: 'Newsletter draft saved successfully!', type: 'success' });
+            setTimeout(() => setNewsletterSaveStatus(null), 4000);
+        } catch (e: any) {
+            setNewsletterSaveStatus({ text: `Save failed: ${e.message}`, type: 'error' });
+        } finally {
+            setSavingNewsletter(false);
+        }
+    };
+
+    const handleDownloadHtml = () => {
+        const parsed = parseNewsletter(rawText);
+        const renderedHtml = (parsed && weeklyTemplate) ? renderTemplate(weeklyTemplate, parsed, 'weekly', bannerUrl) : '';
+        if (!renderedHtml) return;
+
+        const blob = new Blob([renderedHtml], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${new Date().toISOString().slice(0, 10)}_thursday_week${weekType}.html`;
+        a.click();
+        URL.revokeObjectURL(url);
     };
 
     // Helper to parse labeled output text
@@ -523,91 +601,178 @@ export default function NewsletterWriterTesterPage() {
                     )}
 
                     {!running && !error && rawText && (
-                        <div className="flex flex-col gap-6 flex-1">
-                            {/* Tab Switcher */}
-                            <div className="flex border-b border-border justify-between items-center">
-                                <div className="flex">
-                                    <button
-                                        onClick={() => setActiveTab('preview')}
-                                        className={`px-4 py-2 text-xs font-bold border-b-2 transition-all ${
-                                            activeTab === 'preview'
-                                                ? 'border-purple-600 text-purple-600'
-                                                : 'border-transparent text-muted-foreground hover:text-foreground'
-                                        }`}
-                                    >
-                                        Newsletter Preview
-                                    </button>
-                                    <button
-                                        onClick={() => setActiveTab('json')}
-                                        className={`px-4 py-2 text-xs font-bold border-b-2 transition-all ${
-                                            activeTab === 'json'
-                                                ? 'border-purple-600 text-purple-600'
-                                                : 'border-transparent text-muted-foreground hover:text-foreground'
-                                        }`}
-                                    >
-                                        Raw Text Output
-                                    </button>
-                                </div>
+                        (() => {
+                            const parsedNewsletterData = parseNewsletter(rawText);
+                            const emailHtml = (parsedNewsletterData && weeklyTemplate) ? renderTemplate(weeklyTemplate, parsedNewsletterData, 'weekly', bannerUrl) : '';
 
-                                <div className="flex gap-2 items-center">
-                                    <button
-                                        onClick={handleCopyText}
-                                        className="flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded bg-muted hover:bg-muted/80 text-foreground font-semibold border border-border"
-                                    >
-                                        {copied ? (
-                                            <>
-                                                <Check size={12} className="text-green-500" />
-                                                Copied
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Copy size={12} />
-                                                Copy Raw Text
-                                            </>
-                                        )}
-                                    </button>
-                                    <a
-                                        href="/newsletter-tester/compliance-review"
-                                        className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded bg-purple-600 hover:bg-purple-700 text-white font-bold transition-colors shadow-sm cursor-pointer animate-pulse"
-                                    >
-                                        Send to Tool 7 (Compliance) →
-                                    </a>
-                                </div>
-                            </div>
-
-                            {activeTab === 'preview' ? (
-                                <div className="flex flex-col gap-4 overflow-y-auto max-h-[520px] pr-1">
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <div className="flex items-center gap-2 px-3 py-1 bg-green-50 text-green-700 text-[10px] font-bold rounded-lg border border-green-200 uppercase">
-                                            <CheckCircle size={12} />
-                                            Generated in {attempt} {attempt === 1 ? 'attempt' : 'attempts'}
+                            return (
+                                <div className="flex flex-col gap-6 flex-1">
+                                    {/* Tab Switcher */}
+                                    <div className="flex border-b border-border justify-between items-center flex-wrap gap-2">
+                                        <div className="flex">
+                                            <button
+                                                onClick={() => setActiveTab('preview')}
+                                                className={`px-4 py-2 text-xs font-bold border-b-2 transition-all ${
+                                                    activeTab === 'preview'
+                                                        ? 'border-purple-600 text-purple-600'
+                                                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                                                }`}
+                                            >
+                                                HTML &amp; Labeled Sections
+                                            </button>
+                                            <button
+                                                onClick={() => setActiveTab('raw')}
+                                                className={`px-4 py-2 text-xs font-bold border-b-2 transition-all ${
+                                                    activeTab === 'raw'
+                                                        ? 'border-purple-600 text-purple-600'
+                                                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                                                }`}
+                                            >
+                                                Raw AI Output
+                                            </button>
                                         </div>
-                                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full text-white ${
-                                            weekType === 1 ? 'bg-emerald-600' :
-                                            weekType === 2 ? 'bg-teal-600'    :
-                                            weekType === 3 ? 'bg-amber-600'   : 'bg-pink-600'
-                                        }`}>
-                                            {WEEK_LABELS[weekType].full}
-                                        </span>
+
+                                        <div className="flex gap-2 items-center flex-wrap">
+                                            {newsletterSaveStatus && (
+                                                <span className={`text-[10px] font-semibold ${newsletterSaveStatus.type === 'error' ? 'text-red-500' : 'text-green-500'}`}>
+                                                    {newsletterSaveStatus.text}
+                                                </span>
+                                            )}
+                                            <button
+                                                onClick={handleSaveNewsletter}
+                                                disabled={savingNewsletter}
+                                                className={`flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded font-bold transition-all shadow-sm border ${
+                                                    newsletterSaveStatus?.type === 'success'
+                                                        ? 'bg-green-600 border-green-600 text-white'
+                                                        : newsletterSaveStatus?.type === 'error'
+                                                        ? 'bg-red-600 border-red-600 text-white'
+                                                        : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-600 disabled:opacity-50 cursor-pointer'
+                                                }`}
+                                            >
+                                                <Save size={12} />
+                                                {savingNewsletter ? 'Saving...' : newsletterSaveStatus?.type === 'success' ? 'Saved!' : 'Save Draft'}
+                                            </button>
+                                            <button
+                                                onClick={handleDownloadHtml}
+                                                className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded bg-green-600 hover:bg-green-700 text-white font-bold border border-green-600 transition-colors shadow-sm cursor-pointer"
+                                            >
+                                                <Download size={12} />
+                                                Download HTML
+                                            </button>
+                                            <button
+                                                onClick={handleCopyText}
+                                                className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded bg-muted hover:bg-muted/80 text-foreground font-semibold border border-border cursor-pointer"
+                                            >
+                                                {copied ? (
+                                                    <>
+                                                        <Check size={12} className="text-green-500" />
+                                                        Copied
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Copy size={12} />
+                                                        Copy Raw Text
+                                                    </>
+                                                )}
+                                            </button>
+                                            <a
+                                                href="/newsletter-tester/compliance-review"
+                                                className="flex items-center gap-1.5 text-[10px] px-2.5 py-1.5 rounded bg-purple-600 hover:bg-purple-700 text-white font-bold transition-colors shadow-sm cursor-pointer animate-pulse"
+                                            >
+                                                Send to Tool 7 (Compliance) →
+                                            </a>
+                                        </div>
                                     </div>
-                                    
-                                    <div className="flex flex-col gap-4">
-                                        {parsedSections.map((sec, idx) => (
-                                            <div key={idx} className="p-4 bg-muted/20 border border-border rounded-xl flex flex-col gap-1.5 shadow-sm">
-                                                <span className="text-[10px] font-extrabold text-purple-600 uppercase tracking-widest">{sec.label}</span>
-                                                <div className="text-xs text-foreground leading-relaxed whitespace-pre-wrap font-medium">
-                                                    {sec.content}
+
+                                    {activeTab === 'preview' ? (
+                                        <div className="flex flex-col gap-6 overflow-y-auto max-h-[700px] pr-1">
+                                            {/* Gen Info Header */}
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <div className="flex items-center gap-2 px-3 py-1 bg-green-50 text-green-700 text-[10px] font-bold rounded-lg border border-green-200 uppercase">
+                                                    <CheckCircle size={12} />
+                                                    Generated in {attempt} {attempt === 1 ? 'attempt' : 'attempts'}
+                                                </div>
+                                                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full text-white ${
+                                                    weekType === 1 ? 'bg-emerald-600' :
+                                                    weekType === 2 ? 'bg-teal-600'    :
+                                                    weekType === 3 ? 'bg-amber-600'   : 'bg-pink-600'
+                                                }`}>
+                                                    {WEEK_LABELS[weekType].full}
+                                                </span>
+                                            </div>
+
+                                            {/* 1. HTML Render Preview */}
+                                            <div className="flex flex-col gap-3">
+                                                <div className="flex items-center justify-between bg-muted/40 p-2 rounded-xl border border-border">
+                                                    <div className="flex bg-muted p-0.5 rounded-lg border border-border">
+                                                        <button 
+                                                            onClick={() => setDevice('desktop')}
+                                                            className={`px-3 py-1 text-[10px] font-bold transition-all rounded-md ${device === 'desktop' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                                                        >
+                                                            💻 Desktop
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => setDevice('mobile')}
+                                                            className={`px-3 py-1 text-[10px] font-bold transition-all rounded-md ${device === 'mobile' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                                                        >
+                                                            📱 Mobile
+                                                        </button>
+                                                    </div>
+                                                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider pr-1">HTML Render Preview</span>
+                                                </div>
+
+                                                <div className={`relative transition-all duration-300 ease-in-out bg-white overflow-hidden shadow-sm border border-border rounded-xl mx-auto ${device === 'mobile' ? 'w-[375px] h-[550px]' : 'w-full h-[450px]'}`}>
+                                                    {emailHtml ? (
+                                                        <iframe 
+                                                            srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><style>body { margin: 0; padding: 0; background-color: #fafafa; }</style></head><body>${emailHtml}</body></html>`}
+                                                            className="w-full h-full border-0 outline-none" 
+                                                            title="Newsletter HTML preview"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground bg-muted/20">
+                                                            Loading HTML template preview...
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
-                                        ))}
-                                    </div>
+                                            
+                                            {/* 2. AI Labeled Output Sections */}
+                                            <div className="flex flex-col gap-4 border-t border-border/60 pt-4">
+                                                <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                                                    <h3 className="text-xs font-bold uppercase tracking-wider text-purple-600">AI Labeled Output</h3>
+                                                    <span className="text-[10px] text-muted-foreground">Original generated sections</span>
+                                                </div>
+                                                <div className="flex flex-col gap-4">
+                                                    {parsedSections.map((sec, idx) => (
+                                                        <div key={idx} className="p-4 bg-muted/20 border border-border rounded-xl flex flex-col gap-1.5 shadow-sm">
+                                                            <span className="text-[10px] font-extrabold text-purple-600 uppercase tracking-widest">{sec.label}</span>
+                                                            <div className="text-xs text-foreground leading-relaxed whitespace-pre-wrap font-medium">
+                                                                {sec.content}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {/* 3. Input JSON */}
+                                            <div className="flex flex-col gap-2 border-t border-border/60 pt-4">
+                                                <div className="flex items-center justify-between border-b border-border/40 pb-2">
+                                                    <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-600">Input JSON Context</h3>
+                                                    <span className="text-[10px] text-muted-foreground">Inputs used for generation</span>
+                                                </div>
+                                                <pre className="text-[10px] font-mono bg-muted/30 border border-border rounded-xl p-4 text-muted-foreground overflow-x-auto whitespace-pre leading-normal max-h-60">
+                                                    {inputJson}
+                                                </pre>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <pre className="text-xs font-mono bg-muted/30 border border-border rounded-xl p-4 text-foreground max-h-[700px] overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                                            {rawText}
+                                        </pre>
+                                    )}
                                 </div>
-                            ) : (
-                                <pre className="text-xs font-mono bg-muted/30 border border-border rounded-xl p-4 text-foreground max-h-[520px] overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                                    {rawText}
-                                </pre>
-                            )}
-                        </div>
+                            );
+                        })()
                     )}
                 </div>
             </div>

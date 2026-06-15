@@ -59,7 +59,7 @@ export function renderTemplate(
     type: 'weekly' | 'puzzle' = 'weekly',
     bannerUrl: string = ''
 ): string {
-    const bannerSrc = bannerUrl || 'https://via.placeholder.com/1200x500.png?text=Vibe+Trader';
+    const bannerSrc = bannerUrl || 'https://placehold.co/1200x500/png?text=Vibe+Trader';
     const bannerTag = `<img src="${bannerSrc}" alt="${(parsed.subject || '').replace(/"/g, "'")}" style="display:block;width:100%;max-width:600px;height:auto;"/>`;
     const nl = (s: string) => s.replace(/\\n\\n/g, '<br><br>').replace(/\n\n/g, '<br><br>');
 
