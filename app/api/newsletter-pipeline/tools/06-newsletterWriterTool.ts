@@ -16,10 +16,79 @@ export interface NewsletterWriterResult {
     rawText: string; usedPosts: RedditPost[]; attempt: number;
 }
 
+export type WeekType = 1 | 2 | 3 | 4;
+
 export interface WriterPrompts {
     systemPrompt: string;
     userTemplate: string;
+    weekType?: WeekType;
 }
+
+// ── Week-type override blocks injected at the top of the user prompt ──────────
+// Each block overrides ONLY what changes for that week. Week 1 = default (empty).
+const WEEK_OVERRIDES: Record<WeekType, string> = {
+    1: '', // default behaviour — no override needed
+
+    2: `═══════════════════════════════════════════════════
+CONTENT TYPE: WEEK 2 — PAIN → MARKET INSIGHT
+═══════════════════════════════════════════════════
+This week is NOT a product-feature email. Strict overrides apply:
+
+SECTION4 MUST be a market insight or educational framework — NOT a product feature description.
+- Write 1–2 paragraphs of original, actionable insight that intellectually addresses the trader's dominant pain.
+- Something the reader can apply to their thinking TODAY without needing any product or tool.
+- End SECTION4_BODY with ONE soft sentence referencing Vibe Trader — nothing more.
+- SECTION4_TITLE examples: "The Pattern Most Miss", "Why This Keeps Happening", "The Framework Behind It", "What the Data Actually Shows", "The Real Reason This Repeats"
+- DO NOT use the PAIN-TO-FEATURE PRIORITY MAP. Do not name or describe any Vibe Trader feature in SECTION4.
+
+CTA: Educational-oriented. Use one of: "Get the framework", "Learn the process", "Start here".
+All other sections (OPENING, SECTION1, SECTION2, SECTION3) follow standard playbook rules.
+═══════════════════════════════════════════════════
+
+`,
+
+    3: `═══════════════════════════════════════════════════
+CONTENT TYPE: WEEK 3 — PRODUCT / FEATURE LAUNCH
+═══════════════════════════════════════════════════
+This week's newsletter spotlights a specific Vibe Trader feature as a launch or major announcement.
+
+STRUCTURE OVERRIDE:
+- OPENING: Trader's pain as the entry point — standard. No product mention yet.
+- SECTION1: Why this pain is so persistent and what makes it hard to solve alone.
+- SECTION2: Build anticipation — "this is exactly the problem [feature name] was built to solve." Create a bridge to the reveal.
+- SECTION3: The future state — what changes for the trader when this pain is eliminated. Forward-looking.
+- SECTION4: THE MAIN EVENT. Use the PAIN-TO-FEATURE PRIORITY MAP from DOCUMENT 4.
+  Name the exact feature. Describe it in full: what it is, what it calculates or produces, how it works step by step.
+  Make it feel like a meaningful announcement — not a footnote.
+  SECTION4_TITLE: "Now Inside Vibe Trader" / "The Fix We Built" / "What We Just Shipped" / "Built for This Exact Problem"
+
+CTA: Feature-specific action verb. Examples: "Try the Risk Engine", "See the Strategy Builder", "Access your backtest", "Use the AI analyst".
+Tone: Slightly more energised than usual — this is a launch moment. Still no exclamation marks.
+═══════════════════════════════════════════════════
+
+`,
+
+    4: `═══════════════════════════════════════════════════
+CONTENT TYPE: WEEK 4 — COMMUNITY / DATA STORY
+═══════════════════════════════════════════════════
+This week leads with a community insight and data story — NOT a product pitch.
+
+STRUCTURE OVERRIDE:
+- OPENING: Trader's own voice, the shared pain — keep it human and relatable. Standard.
+- SECTION1: Zoom out and frame this as a collective community pattern.
+  Use phrases like "traders we hear from every week", "a pattern we keep seeing", "the data tells a clear story".
+  Describe the trend authentically — do not invent specific numbers, but you may write "the majority of traders", "most of the positions we see", etc.
+- SECTION2: Community response — how other traders are navigating this. What the ones who improved did differently. Human stories, not statistics.
+- SECTION3: The lesson or shift — what the community is collectively moving toward. A mindset or approach change.
+- SECTION4: A soft, brief Vibe Trader mention — 2 sentences maximum. Frame it as being part of the community, not a product pitch. Do NOT describe any feature in detail.
+  SECTION4_TITLE: "What We're Seeing" / "The Community Verdict" / "What Traders Are Telling Us" / "The Shared Pattern"
+
+CTA: Warm and low-pressure — "Join the conversation", "See how traders use it", "Start with us".
+Tone for the whole email: Warmer and more human than usual. You are sharing insights with a peer, not selling anything.
+═══════════════════════════════════════════════════
+
+`,
+};
 
 function formatPosts(posts: RedditPost[]): string {
     return posts.map(p => {
@@ -82,14 +151,22 @@ export async function newsletterWriterTool(
     ].join('\n');
 
     // Build user prompt from blob template
-    const userPrompt = prompts.userTemplate
+    const baseUserPrompt = prompts.userTemplate
         .replace('{date}', today)
         .replace('{analysis}', analysisContext)
         .replace('{anchor_post}', formatPosts([allPosts[0]]))
         .replace('{external_sources}', externalSources);
 
+    // ── Inject week-type override at the TOP of the user prompt ───────────────
+    // Week 1 override is empty (default behaviour). Weeks 2–4 prepend a block
+    // that changes what SECTION4 should contain without touching the system prompt.
+    const weekNum   = prompts.weekType ?? 1;
+    const override  = WEEK_OVERRIDES[weekNum];
+    const userPrompt = override ? `${override}${baseUserPrompt}` : baseUserPrompt;
+    console.log(`[newsletterWriterTool] Week type: ${weekNum}${override ? ' (override injected)' : ' (default)'}`);
+
     // Attempt 1
-    console.log('[newsletterWriterTool] Writing newsletter (attempt 1) using blob prompts...');
+    console.log('[newsletterWriterTool] Writing newsletter (attempt 1)...');
     let raw = await callAI(prompts.systemPrompt, userPrompt, 0.7);
     if (!raw.includes('ERROR: VALIDATION_FAILED')) {
         return { rawText: raw, usedPosts: allPosts, attempt: 1 };

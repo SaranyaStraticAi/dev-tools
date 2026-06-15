@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useMsal } from '@azure/msal-react';
 import { Sparkles, Edit, RefreshCw, AlertCircle, Cpu, ChevronDown, ChevronUp, Layers, CheckCircle, FileText, Check, Copy } from 'lucide-react';
-import { WEEKLY_SYSTEM_PROMPT, WEEKLY_USER_TEMPLATE, PUZZLE_SYSTEM_PROMPT, PUZZLE_USER_TEMPLATE } from '../constants';
+import { WEEKLY_SYSTEM_PROMPT, WEEKLY_USER_TEMPLATE, PUZZLE_SYSTEM_PROMPT, PUZZLE_USER_TEMPLATE, WeekType, WEEK_LABELS, WEEK_OVERRIDES } from '../constants';
 
 const DEFAULT_MOCK_INPUT = {
     analysis: {
@@ -47,6 +47,11 @@ export default function NewsletterWriterTesterPage() {
     const [inputJson, setInputJson] = useState(JSON.stringify(DEFAULT_MOCK_INPUT, null, 2));
     const [running, setRunning] = useState(false);
     const [isUsingCombined, setIsUsingCombined] = useState(false);
+    const [weekType, setWeekType] = useState<WeekType>(1);
+    // baseUserTemplate holds the CLEAN template (no week override).
+    // When weekType changes, we prepend the override and update userTemplate.
+    // This ref is updated whenever Azure Blob loads a fresh template.
+    const baseUserTemplateRef = useRef<string>(WEEKLY_USER_TEMPLATE);
 
     // Results
     const [rawText, setRawText] = useState('');
@@ -76,13 +81,17 @@ export default function NewsletterWriterTesterPage() {
                 const data = await res.json();
                 if (data.exists && data.prompts) {
                     setSystemPrompt(data.prompts.weeklySystem || WEEKLY_SYSTEM_PROMPT);
-                    setUserTemplate(data.prompts.weeklyUser || WEEKLY_USER_TEMPLATE);
+                    const loadedTemplate = data.prompts.weeklyUser || WEEKLY_USER_TEMPLATE;
+                    baseUserTemplateRef.current = loadedTemplate;
+                    setUserTemplate(loadedTemplate); // Week 1 = no override, show clean template
                 } else {
                     setSystemPrompt(WEEKLY_SYSTEM_PROMPT);
+                    baseUserTemplateRef.current = WEEKLY_USER_TEMPLATE;
                     setUserTemplate(WEEKLY_USER_TEMPLATE);
                 }
             } catch (e) {
                 setSystemPrompt(WEEKLY_SYSTEM_PROMPT);
+                baseUserTemplateRef.current = WEEKLY_USER_TEMPLATE;
                 setUserTemplate(WEEKLY_USER_TEMPLATE);
             }
         })();
@@ -112,6 +121,17 @@ export default function NewsletterWriterTesterPage() {
         }
     }, []);
 
+    // ── When weekType changes: prepend the override to the user template ────────
+    // This is what actually makes the prompt editors update when you click W1–W4.
+    // Week 1 = no override (shows the clean base template).
+    // Weeks 2–4 = override block prepended, so you see EXACTLY what the AI receives.
+    useEffect(() => {
+        const base     = baseUserTemplateRef.current;
+        if (!base) return;
+        const override = WEEK_OVERRIDES[weekType];
+        setUserTemplate(override ? `${override}${base}` : base);
+    }, [weekType]);
+
     const userEmail = accounts[0]?.username;
     const isAllowed = userEmail === 'masood@aity.dev' || employeeAccount === 'ketki@vibetrader.com' || userEmail === 'ketki@vibetrader.com';
 
@@ -130,8 +150,9 @@ export default function NewsletterWriterTesterPage() {
         setRunning(true);
         setError(null);
         setRawText('');
-        setSystemPrompt('');
-        setUserTemplate('');
+        // Snapshot current prompts BEFORE clearing state so we can restore after
+        const snapshotSystem   = systemPrompt;
+        const snapshotTemplate = userTemplate;
 
         let parsedInput: any = {};
         try {
@@ -151,8 +172,9 @@ export default function NewsletterWriterTesterPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...parsedInput,
-                    systemPrompt,
-                    userTemplate
+                    systemPrompt: snapshotSystem,
+                    userTemplate: snapshotTemplate,
+                    // weekType: 1 — override already in snapshotTemplate; backend does not inject
                 }),
             });
             const data = await res.json();
@@ -166,10 +188,9 @@ export default function NewsletterWriterTesterPage() {
                 localStorage.setItem('reddit_writer_draft', data.result.rawText);
             }
             setAttempt(data.result.attempt || 1);
-            if (data.prompts) {
-                setSystemPrompt(data.prompts.system || '');
-                setUserTemplate(data.prompts.userTemplate || '');
-            }
+            // Restore the prompts that were displayed before generation
+            setSystemPrompt(snapshotSystem);
+            setUserTemplate(snapshotTemplate);
         } catch (err: any) {
             setError(err.message || 'An unexpected error occurred.');
         } finally {
@@ -187,12 +208,12 @@ export default function NewsletterWriterTesterPage() {
         setSavingPrompts(true);
         setSaveStatusMsg(null);
         try {
-            // 1. Fetch current active prompts from Azure to get the other fields
             const getRes = await fetch('/api/newsletter-prompts');
             const getData = await getRes.json();
             
             const weeklySystem = systemPrompt;
-            const weeklyUser = userTemplate;
+            // Always save the CLEAN base template (no week override prepended)
+            const weeklyUser = baseUserTemplateRef.current || userTemplate;
             const puzzleSystem = getData?.prompts?.puzzleSystem || PUZZLE_SYSTEM_PROMPT;
             const puzzleUser = getData?.prompts?.puzzleUser || PUZZLE_USER_TEMPLATE;
             const weeklyTemplate = getData?.prompts?.weeklyTemplate || '';
@@ -302,12 +323,26 @@ export default function NewsletterWriterTesterPage() {
                                 />
                             </div>
                             <div className="flex flex-col gap-2">
-                                <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">User Template</span>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">User Template</span>
+                                    {weekType !== 1 && (
+                                        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full text-white ${
+                                            weekType === 2 ? 'bg-teal-600' :
+                                            weekType === 3 ? 'bg-amber-600' : 'bg-pink-600'
+                                        }`}>
+                                            {WEEK_LABELS[weekType].short} override prepended ↑
+                                        </span>
+                                    )}
+                                </div>
                                 <textarea
                                     value={userTemplate}
                                     onChange={(e) => setUserTemplate(e.target.value)}
                                     rows={12}
-                                    className="w-full text-[11px] font-mono bg-background border border-border rounded-xl p-4 text-foreground outline-none focus:ring-1 focus:ring-purple-500 resize-y leading-relaxed"
+                                    className={`w-full text-[11px] font-mono bg-background border rounded-xl p-4 text-foreground outline-none focus:ring-1 resize-y leading-relaxed ${
+                                        weekType !== 1
+                                            ? 'border-teal-400 focus:ring-teal-500'
+                                            : 'border-border focus:ring-purple-500'
+                                    }`}
                                 />
                             </div>
                         </div>
@@ -382,6 +417,58 @@ export default function NewsletterWriterTesterPage() {
                         className="w-full text-xs font-mono p-4 bg-muted/40 border border-border rounded-xl outline-none focus:ring-1 focus:ring-purple-500 text-foreground resize-none leading-relaxed"
                     />
 
+                    {/* ── Week Type Selector ─────────────────────────────── */}
+                    <div className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                                Content Type
+                            </span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full text-white ${
+                                weekType === 1 ? 'bg-emerald-600' :
+                                weekType === 2 ? 'bg-teal-600'    :
+                                weekType === 3 ? 'bg-amber-600'   : 'bg-pink-600'
+                            }`}>
+                                {WEEK_LABELS[weekType].full}
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                            {([1, 2, 3, 4] as WeekType[]).map(week => {
+                                const meta     = WEEK_LABELS[week];
+                                const isActive = weekType === week;
+                                return (
+                                    <button
+                                        key={week}
+                                        onClick={() => setWeekType(week)}
+                                        disabled={running}
+                                        title={meta.full}
+                                        className={[
+                                            'px-3 py-2 rounded-xl font-bold text-xs transition-all',
+                                            'flex items-center gap-1.5 text-white shadow-sm',
+                                            meta.color,
+                                            isActive
+                                                ? `ring-2 ${meta.ring} ring-offset-1 ring-offset-background scale-[1.02]`
+                                                : 'opacity-60 hover:opacity-90',
+                                            running ? 'cursor-not-allowed' : 'cursor-pointer active:scale-95',
+                                        ].join(' ')}
+                                    >
+                                        <span className="text-white/50 font-normal text-[10px]">W{week}</span>
+                                        <span className="leading-tight">{meta.short}</span>
+                                        {isActive && (
+                                            <span className="ml-auto text-white/70 text-[10px]">✓</span>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        {weekType !== 1 && (
+                            <p className="text-[10px] text-muted-foreground leading-snug px-1 border-l-2 border-muted pl-2">
+                                {weekType === 2 && 'SECTION4 will be a market insight — no product feature.'}
+                                {weekType === 3 && 'Full feature launch announcement — SECTION4 is the main event.'}
+                                {weekType === 4 && 'Community & data story — soft product mention only.'}
+                            </p>
+                        )}
+                    </div>
+
                     <button
                         onClick={runWriter}
                         disabled={running}
@@ -399,7 +486,7 @@ export default function NewsletterWriterTesterPage() {
                         ) : (
                             <>
                                 <Edit size={16} />
-                                Generate Newsletter (Tool 6)
+                                Generate — {WEEK_LABELS[weekType].short}
                             </>
                         )}
                     </button>
@@ -490,9 +577,18 @@ export default function NewsletterWriterTesterPage() {
 
                             {activeTab === 'preview' ? (
                                 <div className="flex flex-col gap-4 overflow-y-auto max-h-[520px] pr-1">
-                                    <div className="flex items-center gap-2 px-3 py-1 bg-green-50 text-green-700 text-[10px] font-bold rounded-lg border border-green-200 self-start uppercase">
-                                        <CheckCircle size={12} />
-                                        Generated in {attempt} {attempt === 1 ? 'attempt' : 'attempts'}
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <div className="flex items-center gap-2 px-3 py-1 bg-green-50 text-green-700 text-[10px] font-bold rounded-lg border border-green-200 uppercase">
+                                            <CheckCircle size={12} />
+                                            Generated in {attempt} {attempt === 1 ? 'attempt' : 'attempts'}
+                                        </div>
+                                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full text-white ${
+                                            weekType === 1 ? 'bg-emerald-600' :
+                                            weekType === 2 ? 'bg-teal-600'    :
+                                            weekType === 3 ? 'bg-amber-600'   : 'bg-pink-600'
+                                        }`}>
+                                            {WEEK_LABELS[weekType].full}
+                                        </span>
                                     </div>
                                     
                                     <div className="flex flex-col gap-4">

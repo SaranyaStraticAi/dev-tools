@@ -48,10 +48,11 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        console.log('[newsletter-writer-api] Running newsletterWriterTool...');
+        console.log('[newsletter-writer-api] Running newsletterWriterTool (prompts from textarea — weekType handled by frontend)...');
         const result = await newsletterWriterTool(analysis, news, {
             systemPrompt: activeSystem,
-            userTemplate: activeUserTemplate
+            userTemplate: activeUserTemplate,
+            weekType: 1, // override already injected in userTemplate by the frontend
         });
 
         return NextResponse.json({ 

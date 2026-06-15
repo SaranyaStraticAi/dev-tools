@@ -81,9 +81,10 @@ function extractNewsletterTitle(rawText: string): string {
 
 export async function POST(req: NextRequest) {
     try {
-        const body = await req.json().catch(() => ({ rediscover: false, type: 'weekly' }));
+        const body = await req.json().catch(() => ({ rediscover: false, type: 'weekly', weekType: 1 }));
         const rediscover = body.rediscover;
         const type = body.type || 'weekly';
+        const weekType = (body.weekType as 1|2|3|4) || 1;
         const encoder = new TextEncoder();
 
         const stream = new ReadableStream({
@@ -178,6 +179,7 @@ export async function POST(req: NextRequest) {
                     const writeResult = await newsletterWriterTool(analysis, news, {
                         systemPrompt: weeklySystem,
                         userTemplate: weeklyUser,
+                        weekType,
                     });
                     sendEvent('write', 'done');
 
@@ -214,6 +216,7 @@ export async function POST(req: NextRequest) {
                             subredditsUsed: picked,
                             bannerUrl,
                             weeklyTemplate,
+                            weekType,
                         },
                     });
                     controller.close();

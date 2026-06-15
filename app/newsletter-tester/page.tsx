@@ -40,6 +40,7 @@ export default function NewsletterTesterPage() {
     const {
         // types
         type, setType, templateType, setTemplateType,
+        weekType, setWeekType,
         // prompts
         weeklySystem, setWeeklySystem,
         weeklyUser,   setWeeklyUser,
@@ -135,13 +136,14 @@ export default function NewsletterTesterPage() {
             {/* ── 4 action buttons ─────────────────────────────────────────── */}
             <ActionBar
                 activeType={type}
+                activeWeekType={weekType}
                 loading={loading}
                 showPrompts={showPrompts}
                 publishing={publishing}
                 publishStatus={publishStatus}
                 sendStatus={sendStatus}
                 hasHtml={!!emailHtml}
-                onGeneratePipeline={() => handleGeneratePipeline(false, 'weekly')}
+                onGenerateWeek={(week) => handleGeneratePipeline(false, 'weekly', week)}
                 onGeneratePuzzle={() => handleGeneratePipeline(false, 'puzzle')}
                 onTypeSwitch={setType}
                 onTogglePrompts={() => setShowPrompts(v => !v)}
@@ -161,6 +163,13 @@ export default function NewsletterTesterPage() {
                 <div className="flex items-center gap-3 px-5 py-3 rounded-2xl border bg-card shadow-sm">
                     <span className="w-3.5 h-3.5 border-2 border-muted border-t-foreground animate-spin rounded-full"/>
                     <span className="text-sm text-muted-foreground animate-pulse">{step}</span>
+                    {type === 'weekly' && (
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full text-white ${
+                            weekType === 1 ? 'bg-emerald-600' :
+                            weekType === 2 ? 'bg-teal-600'    :
+                            weekType === 3 ? 'bg-amber-600'   : 'bg-pink-600'
+                        }`}>W{weekType}</span>
+                    )}
                 </div>
             )}
 
