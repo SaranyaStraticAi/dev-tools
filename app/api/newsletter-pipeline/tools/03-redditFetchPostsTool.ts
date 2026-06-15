@@ -75,20 +75,7 @@ function parsePostsRss(xml: string, subreddit: string): RedditPostRaw[] {
 async function fetchOneSub(subreddit: string, timeframe: string): Promise<RedditPostRaw[]> {
     const rssUrl = `https://www.reddit.com/r/${subreddit}/top.rss?t=${timeframe}&limit=50`;
 
-    // ── Primary: Direct RSS ──────────────────────────────────────────────────
-    try {
-        const res = await fetchWithTimeout(rssUrl, 10000, {
-            headers: { 'User-Agent': USER_AGENT },
-            cache:   'no-store',
-        });
-        if (res.ok) {
-            const xml   = await res.text();
-            const posts = parsePostsRss(xml, subreddit);
-            if (posts.length > 0) return posts;
-        }
-    } catch { /* fall through to RSS proxies */ }
-
-    // ── Secondary: CORS proxies for RSS ──────────────────────────────────────
+    // ── Primary: CORS proxies for RSS ──────────────────────────────────────
     const rssProxies = [
         `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(rssUrl)}`,
         `https://api.allorigins.win/raw?url=${encodeURIComponent(rssUrl)}`,
@@ -108,6 +95,19 @@ async function fetchOneSub(subreddit: string, timeframe: string): Promise<Reddit
             if (posts.length > 0) return posts;
         } catch { /* try next proxy */ }
     }
+
+    // ── Secondary: Direct RSS (as fallback, since direct requests get 403 on Vercel) ──
+    try {
+        const res = await fetchWithTimeout(rssUrl, 10000, {
+            headers: { 'User-Agent': USER_AGENT },
+            cache:   'no-store',
+        });
+        if (res.ok) {
+            const xml   = await res.text();
+            const posts = parsePostsRss(xml, subreddit);
+            if (posts.length > 0) return posts;
+        }
+    } catch { /* fall through to JSON proxies */ }
 
     // ── Fallback: CORS proxies for JSON API ───────────────────────────────────
     const targetUrl = `https://www.reddit.com/r/${subreddit}/top.json?t=${timeframe}&limit=50`;
@@ -160,9 +160,22 @@ export async function redditFetchPostsTool(
 ): Promise<{ posts: RedditPostRaw[]; fetchedFrom: string[]; failedFrom: string[] }> {
     if (subreddits.length === 0) return { posts: [], fetchedFrom: [], failedFrom: [] };
 
-    // Fetch all subreddits completely in parallel.
-    // Each subreddit fetch internally runs a parallel proxy race.
-    const results = await Promise.allSettled(subreddits.map(sub => fetchOneSub(sub, timeframe)));
+    // Fetch subreddits in small batches with a delay between them to prevent rate limiting.
+    const results: Array<PromiseSettledResult<RedditPostRaw[]>> = [];
+    const batchSize = 3;
+    const delayMs = 500;
+
+    for (let i = 0; i < subreddits.length; i += batchSize) {
+        const batch = subreddits.slice(i, i + batchSize);
+        const batchResults = await Promise.allSettled(
+            batch.map(sub => fetchOneSub(sub, timeframe))
+        );
+        results.push(...batchResults);
+
+        if (i + batchSize < subreddits.length) {
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+    }
 
     const allPosts: RedditPostRaw[] = [];
     const fetchedFrom: string[]     = [];

@@ -91,10 +91,46 @@ function parseSubredditRss(xml: string): Community[] {
     return communities;
 }
 
-// ── Search one query via RSS ──────────────────────────────────────────────────
+function parseSubredditJson(parsed: any): Community[] {
+    if (!parsed?.data?.children?.length) return [];
+    return parsed.data.children.map((item: any) => {
+        const p = item.data;
+        return {
+            name: p.display_name,
+            subscribers: p.subscribers || 0,
+            description: (p.public_description || '').slice(0, 200),
+            url: `https://reddit.com/r/${p.display_name}`
+        };
+    });
+}
 
 async function searchSubredditsRss(query: string): Promise<Community[]> {
-    // ── Primary: Direct RSS search ──────────────────────────────────────────
+    // ── Primary: Direct JSON via OAuth API ───────────────────────────────────
+    const token = await getRedditOAuthToken();
+    if (token) {
+        try {
+            const oauthUrl = `https://oauth.reddit.com/subreddits/search?q=${encodeURIComponent(query)}&limit=25&sort=relevance`;
+            const res = await fetchWithTimeout(oauthUrl, 10000, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'User-Agent': USER_AGENT
+                },
+                cache: 'no-store'
+            });
+            if (res.ok) {
+                const text = await res.text();
+                const parsed = JSON.parse(text);
+                const communities = parseSubredditJson(parsed);
+                if (communities.length > 0) return communities;
+            } else {
+                console.warn(`[redditDiscoverTool] OAuth fetch failed for "${query}": ${res.status}`);
+            }
+        } catch (e) {
+            console.warn(`[redditDiscoverTool] OAuth fetch error for "${query}":`, e);
+        }
+    }
+
+    // ── Secondary: Direct RSS search ──────────────────────────────────────────
     const rssUrl = `https://www.reddit.com/subreddits/search.rss?q=${encodeURIComponent(query)}&limit=25&sort=relevance`;
     try {
         const res = await fetchWithTimeout(rssUrl, 10000, {
