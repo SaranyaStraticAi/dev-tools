@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, Plus, Trash2, CheckCircle, AlertTriangle, Bell, Mail, Zap } from 'lucide-react';
+import { RefreshCw, Plus, Trash2, CheckCircle, AlertTriangle, Bell, Mail, Zap, Users, LineChart } from 'lucide-react';
+import PnlReport from './PnlReport';
 
 interface Subscriber {
   userId: string;
@@ -39,6 +40,7 @@ export default function EconomicAlertSubscribersPage() {
   const [email, setEmail] = useState('');
   const [adding, setAdding] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  const [view, setView] = useState<'subscribers' | 'pnl'>('subscribers');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -172,6 +174,34 @@ export default function EconomicAlertSubscribersPage() {
         <b>{ENV}</b> data.
       </p>
 
+      {/* tabs */}
+      <div className="flex items-center gap-1 mb-5 border-b border-gray-200 dark:border-gray-800">
+        <button
+          onClick={() => setView('subscribers')}
+          className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium -mb-px border-b-2 ${
+            view === 'subscribers'
+              ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+              : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+          }`}
+        >
+          <Users className="w-4 h-4" /> Subscribers
+        </button>
+        <button
+          onClick={() => setView('pnl')}
+          className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium -mb-px border-b-2 ${
+            view === 'pnl'
+              ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+              : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+          }`}
+        >
+          <LineChart className="w-4 h-4" /> P&amp;L Report
+        </button>
+      </div>
+
+      {view === 'pnl' && <PnlReport env={ENV} />}
+
+      {view === 'subscribers' && (
+      <>
       {/* add form + refresh */}
       <div className="flex items-center gap-2 mb-4">
         <div className="relative flex-1">
@@ -309,6 +339,8 @@ export default function EconomicAlertSubscribersPage() {
         allowlist. The admin reviewer (TELEGRAM_ADMIN_CHAT_ID) always receives alerts in addition to
         this list.
       </p>
+      </>
+      )}
     </div>
   );
 }
