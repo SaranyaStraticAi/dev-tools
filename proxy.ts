@@ -7,8 +7,8 @@ import type { NextRequest } from 'next/server';
 export function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
-  const isExplicitProxy  = pathname.startsWith('/grafana-proxy');
-  const isGrafanaAsset   = pathname.startsWith('/public') || pathname.startsWith('/avatar');
+  const isExplicitProxy = pathname.startsWith('/grafana-proxy');
+  const isGrafanaAsset = pathname.startsWith('/public') || pathname.startsWith('/avatar');
   const isGrafanaDashboard = pathname.startsWith('/d/');
 
   const isLocalApi =
@@ -26,6 +26,7 @@ export function proxy(request: NextRequest) {
     pathname.startsWith('/api/user-reports') ||
     pathname.startsWith('/api/generate-image') ||
     pathname.startsWith('/api/generate-banner') ||
+    pathname.startsWith('/api/generate-audio') ||
     pathname.startsWith('/api/generate-video') ||
     pathname.startsWith('/api/prompt') ||
     pathname.startsWith('/api/prompt-config') ||
@@ -40,7 +41,6 @@ export function proxy(request: NextRequest) {
     pathname.startsWith('/api/marketing-links') ||
     pathname.startsWith('/api/link-tracker') ||
     pathname.startsWith('/api/news-source') ||
-    pathname.startsWith('/api/economic-alert-subscribers') ||
     pathname.startsWith('/api/commissions') ||
     pathname.startsWith('/api/email-campaigns') ||
     pathname.startsWith('/api/auth') ||
@@ -48,14 +48,24 @@ export function proxy(request: NextRequest) {
     pathname.startsWith('/api/saved-newsletters') ||
     pathname.startsWith('/api/sync-clerk-to-resend') ||
     pathname.startsWith('/api/edu-content') ||
-    pathname.startsWith('/api/video-reel');
-    // /api/merge-clips removed — merge is now client-side via ffmpeg.wasm
+    pathname.startsWith('/api/video-reel') ||
+    pathname.startsWith('/api/newsletters/market-recap') ||
+    pathname.startsWith('/api/newsletters/event-preview') ||
+    pathname.startsWith('/api/newsletters/market-recap/stream') ||
+    pathname.startsWith('/api/newsletters/event-preview/stream') ||
+    pathname.startsWith('/api/newsletters/market-recap/complete') ||
+    pathname.startsWith('/api/newsletters/event-preview/complete') ||
+    pathname.startsWith('/api/newsletters/pair-deep-dive') ||
+    pathname.startsWith('/api/newsletters/pair-deep-dive/stream') ||
+    pathname.startsWith('/api/newsletters/pair-deep-dive/complete') ||
+    pathname.startsWith('/api/newsletters/vibetrader-tip')
+  // /api/merge-clips removed — merge is now client-side via ffmpeg.wasm
 
   const isGrafanaApi = pathname.startsWith('/api/') && !isLocalApi;
 
   if (isExplicitProxy || isGrafanaAsset || isGrafanaApi || isGrafanaDashboard) {
     const grafanaUrl = process.env.NEXT_PUBLIC_GRAFANA_URL;
-    const apiToken   = process.env.GRAFANA_API_TOKEN;
+    const apiToken = process.env.GRAFANA_API_TOKEN;
 
     if (!grafanaUrl || !apiToken) {
       console.error('Grafana configuration missing');
