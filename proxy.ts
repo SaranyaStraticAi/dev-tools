@@ -58,7 +58,10 @@ export function proxy(request: NextRequest) {
     pathname.startsWith('/api/newsletters/pair-deep-dive') ||
     pathname.startsWith('/api/newsletters/pair-deep-dive/stream') ||
     pathname.startsWith('/api/newsletters/pair-deep-dive/complete') ||
-    pathname.startsWith('/api/newsletters/vibetrader-tip')
+    pathname.startsWith('/api/newsletters/vibetrader-tip') ||
+    pathname.startsWith('/api/twitter-polls') ||
+    pathname.startsWith('/api/twitter-polls/queue')
+
   // /api/merge-clips removed — merge is now client-side via ffmpeg.wasm
 
   const isGrafanaApi = pathname.startsWith('/api/') && !isLocalApi;
