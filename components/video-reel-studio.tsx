@@ -11,7 +11,7 @@ import { Card } from '@/components/ui/card';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Scene = { duration_seconds: number; script_lines: string[]; sora_prompt: string };
+type Scene = { duration_seconds: number; script_lines: string[]; sora_prompt: string; voiceover_text: string };
 type ClipSt = { status: 'idle' | 'submitting' | 'polling' | 'downloading' | 'done' | 'error'; elapsed: number; url: string | null; err: string | null };
 type DayKey = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday';
 type SavedConfig = {
@@ -93,7 +93,10 @@ Line 1: Hook — 1 line, max 10 words.
 Body — 2 lines max.
 Engagement CTA. Follow CTA with concrete reason.
 #forextrading #tradingpsychology #aitrading #forexeducation #vibetrader
-Disclaimer: VibeTrader, Inc. is a technology company providing behavioral analytics and educational software tools.`;
+Disclaimer: VibeTrader, Inc. is a technology company providing behavioral analytics and educational software tools.
+
+## VOICEOVER
+Include a "Voiceover" line for each scene. The voiceover should match the visual pacing and what the on-screen text implies. Make it sound natural for Text-to-Speech to read.`;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -168,6 +171,14 @@ function SceneCard({ n, scene, onUpdate, onGenerate, onDelete, clip, refImage, r
         </label>
         <textarea value={scene.sora_prompt} disabled={busy} onChange={e => onUpdate({ ...scene, sora_prompt: e.target.value })}
           className="w-full min-h-[80px] px-2.5 py-2 rounded-lg bg-muted/40 border border-primary/10 focus:border-fuchsia-400/40 outline-none resize-y text-[11px] font-mono text-muted-foreground leading-relaxed" />
+      </div>
+
+      <div className="space-y-1">
+        <label className="text-[10px] font-semibold text-sky-400 uppercase tracking-widest">Voiceover Text (TTS)</label>
+        <textarea value={scene.voiceover_text || ''} disabled={busy}
+          onChange={e => onUpdate({ ...scene, voiceover_text: e.target.value })}
+          placeholder="Text to be spoken by AI voice for this clip..."
+          className="w-full px-2.5 py-1.5 min-h-[50px] rounded-lg bg-muted/40 border border-primary/10 focus:border-sky-400/50 outline-none text-xs text-foreground font-mono" />
       </div>
 
       {/* Reference image / Continuity frame */}
@@ -321,7 +332,7 @@ export default function VideoReelStudio() {
   }
 
   function addScene() {
-    setScenes([...scenes, { duration_seconds: 12, script_lines: [], sora_prompt: '' }]);
+    setScenes([...scenes, { duration_seconds: 12, script_lines: [], sora_prompt: '', voiceover_text: '' }]);
     setClips([...clips, initClip()]);
     setLastFrames([...lastFrames, null]);
     setRefImages([...refImages, null]);
@@ -618,11 +629,67 @@ export default function VideoReelStudio() {
       if (!entries.length) throw new Error('No clips to merge');
 
       // Concat list
-      setMergeStatus('Merging scenes into final video...');
+      setMergeStatus('Merging scenes into video...');
       await ffmpeg.writeFile('list.txt', new TextEncoder().encode(entries.join('\n')));
 
       // Run concat — stream copy, no re-encode, fast
-      await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', 'list.txt', '-c', 'copy', 'out.mp4']);
+      await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', 'list.txt', '-c', 'copy', 'merged_video_silent.mp4']);
+
+      setMergeStatus('Generating TTS Audio...');
+      const audioFiles: string[] = [];
+      const amixFilters: string[] = [];
+      let audioTime = 0;
+      let hasAudio = false;
+
+      for (let i = 0; i < clips.length; i++) {
+        if (clips[i].status === 'done' && clips[i].url) {
+          const scene = scenes[i];
+          if (scene.voiceover_text && scene.voiceover_text.trim()) {
+             setMergeStatus(`Generating TTS for Clip ${i + 1}...`);
+             const r = await fetch('/api/generate-audio', {
+               method: 'POST', headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({ text: scene.voiceover_text.trim(), voice: 'alloy' })
+             });
+             if (r.ok) {
+               const audioBlob = await r.blob();
+               const audioName = `audio_${i}.mp3`;
+               await ffmpeg.writeFile(audioName, await fetchFile(URL.createObjectURL(audioBlob)));
+               audioFiles.push(audioName);
+               const delayMs = audioTime * 1000;
+               const audioIdx = audioFiles.length; // 1-based index (0 is video)
+               amixFilters.push(`[${audioIdx}:a]adelay=${delayMs}|${delayMs}[a${audioIdx}]`);
+               hasAudio = true;
+             } else {
+               const errText = await r.text();
+               console.error(`[TTS] Clip ${i + 1} failed: ${r.status} - ${errText}`);
+               setMergeStatus(`⚠️ TTS failed for Clip ${i + 1} (${r.status}) — check console`);
+               await new Promise(res => setTimeout(res, 2000));
+             }
+          }
+          audioTime += (scene.duration_seconds || 8);
+        }
+      }
+
+      if (hasAudio) {
+         setMergeStatus('Overlaying audio onto video...');
+         const inputArgs = ['-i', 'merged_video_silent.mp4'];
+         audioFiles.forEach(af => { inputArgs.push('-i'); inputArgs.push(af); });
+         
+         // amix=inputs=1 is invalid in ffmpeg — handle single vs multi audio separately
+         const filterComplex = audioFiles.length === 1
+           ? amixFilters[0].replace(/\[a\d+\]$/, '[aout]')
+           : amixFilters.join('; ') + '; ' + audioFiles.map((_, idx) => `[a${idx + 1}]`).join('') + `amix=inputs=${audioFiles.length}:normalize=0[aout]`;
+         
+         await ffmpeg.exec([
+           ...inputArgs,
+           '-filter_complex', filterComplex,
+           '-map', '0:v', '-map', '[aout]',
+           '-c:v', 'copy', '-c:a', 'aac',
+           'out.mp4'
+         ]);
+      } else {
+         await ffmpeg.exec(['-i', 'merged_video_silent.mp4', '-c', 'copy', 'out.mp4']);
+      }
 
       // Read result and create blob URL
       const data = await ffmpeg.readFile('out.mp4');
