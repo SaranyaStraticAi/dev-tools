@@ -41,6 +41,7 @@ export function proxy(request: NextRequest) {
     pathname.startsWith('/api/marketing-links') ||
     pathname.startsWith('/api/link-tracker') ||
     pathname.startsWith('/api/news-source') ||
+    pathname.startsWith('/api/economic-alert-subscribers') ||
     pathname.startsWith('/api/commissions') ||
     pathname.startsWith('/api/email-campaigns') ||
     pathname.startsWith('/api/auth') ||
