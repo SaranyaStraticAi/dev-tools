@@ -52,3 +52,252 @@ model users {
   referral_id            String?         @db.VarChar(255)
   activity_logs          activity_logs[]
 }
+
+model best_strategies {
+  id                    Int       @id @default(autoincrement())
+  name                  String    @unique(map: "best_strategies_name_unique")
+  description           String
+  category              String
+  subcategory           String?
+  code                  String
+  explanation           String?
+  key_points            Json?     @default("[]") @db.Json
+  agents                Json?     @default("[\"strategy-builder\"]") @db.Json
+  complexity            String?   @default("medium")
+  indicators            Json?     @default("[]") @db.Json
+  talib_functions       Json?     @default("[]") @db.Json
+  patterns              Json?     @default("[]") @db.Json
+  timeframes            Json?     @default("[]") @db.Json
+  tags                  Json?     @default("[]") @db.Json
+  keywords              Json?     @default("[]") @db.Json
+  embedding             Json?     @db.Json
+  embedding_model       String?   @default("text-embedding-3-small")
+  usage_count           Int?      @default(0)
+  success_count         Int?      @default(0)
+  failure_count         Int?      @default(0)
+  success_rate          Float?    @db.Real
+  last_used             DateTime? @db.Timestamp(6)
+  avg_review_iterations Float?    @db.Real
+  avg_token_savings     Float?    @db.Real
+  source                String?
+  author                String?
+  version               Int?      @default(1)
+  nodes                 Json?     @default("[]") @db.Json
+  edges                 Json?     @default("[]") @db.Json
+  raw_input_description String?
+  backtest_metrics      Json?     @db.Json
+  sample_trades         Json?     @default("[]") @db.Json
+  generation_metadata   Json?     @db.Json
+  config                Json?
+  created_at            DateTime? @default(now()) @db.Timestamp(6)
+  updated_at            DateTime? @default(now()) @db.Timestamp(6)
+  account_currency      String?
+  card_data             Json?
+
+  @@index([category])
+  @@index([complexity])
+  @@index([created_at])
+  @@index([success_rate])
+  @@index([usage_count])
+}
+
+model example_performance {
+  id                     Int               @id @default(autoincrement())
+  example_id             Int
+  feedback_id            String            @db.Uuid
+  contribution_score     Float?            @db.Real
+  relevance_score        Float?            @db.Real
+  similarity_score       Float?            @db.Real
+  caused_error           Int?              @default(0)
+  error_type             String?
+  led_to_success         Int?              @default(0)
+  improvement_suggestion String?
+  created_at             DateTime?         @default(now()) @db.Timestamp(6)
+  strategy_examples      strategy_examples @relation(fields: [example_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "example_performance_example_id_strategy_examples_id_fk")
+  strategy_feedback      strategy_feedback @relation(fields: [feedback_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "example_performance_feedback_id_strategy_feedback_id_fk")
+
+  @@index([caused_error])
+  @@index([example_id])
+  @@index([feedback_id])
+}
+
+model library_strategy_meta {
+  strategy_uid          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  best_strategy_id      Int       @unique(map: "library_strategy_meta_best_strategy_id_unique")
+  created_by_user_id    String?
+  published_at          DateTime  @default(now()) @db.Timestamp(6)
+  name                  String
+  description           String
+  category              String
+  subcategory           String?
+  code                  String
+  explanation           String?
+  complexity            String?   @default("medium")
+  key_points            Json?     @default("[]") @db.Json
+  indicators            Json?     @default("[]") @db.Json
+  timeframes            Json?     @default("[]") @db.Json
+  patterns              Json?     @default("[]") @db.Json
+  tags                  Json?     @default("[]") @db.Json
+  nodes                 Json?     @default("[]") @db.Json
+  edges                 Json?     @default("[]") @db.Json
+  raw_input_description String?
+  backtest_metrics      Json?     @db.Json
+  sample_trades         Json?     @default("[]") @db.Json
+  config                Json?
+  account_currency      String?
+  updated_at            DateTime? @default(now()) @db.Timestamp(6)
+
+  @@index([category], map: "library_meta_category_idx")
+  @@index([complexity], map: "library_meta_complexity_idx")
+  @@index([published_at], map: "library_meta_published_idx")
+}
+
+model strategy_deployments {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  strategy_uid      String
+  user_id           String
+  azure_strategy_id String
+  status            String    @default("active")
+  deployed_at       DateTime  @default(now()) @db.Timestamp(6)
+  stopped_at        DateTime? @db.Timestamp(6)
+  pnl               Float?    @db.Real
+  trades            Int?      @default(0)
+  wins              Int?      @default(0)
+  losses            Int?      @default(0)
+
+  @@index([status])
+  @@index([strategy_uid], map: "strategy_deployments_uid_idx")
+  @@index([user_id])
+}
+
+model strategy_examples {
+  id                    Int                   @id @default(autoincrement())
+  name                  String
+  description           String
+  category              String
+  subcategory           String?
+  code                  String
+  explanation           String?
+  key_points            Json?                 @default("[]") @db.Json
+  nodes                 Json?                 @default("[]") @db.Json
+  edges                 Json?                 @default("[]") @db.Json
+  raw_input_description String?
+  backtest_metrics      Json?                 @db.Json
+  sample_trades         Json?                 @default("[]") @db.Json
+  generation_metadata   Json?                 @db.Json
+  agents                Json?                 @default("[\"strategy-builder\"]") @db.Json
+  complexity            String?               @default("medium")
+  indicators            Json?                 @default("[]") @db.Json
+  talib_functions       Json?                 @default("[]") @db.Json
+  patterns              Json?                 @default("[]") @db.Json
+  timeframes            Json?                 @default("[]") @db.Json
+  tags                  Json?                 @default("[]") @db.Json
+  keywords              Json?                 @default("[]") @db.Json
+  embedding             Json?                 @db.Json
+  embedding_model       String?               @default("text-embedding-3-small")
+  usage_count           Int?                  @default(0)
+  success_count         Int?                  @default(0)
+  failure_count         Int?                  @default(0)
+  success_rate          Float?                @db.Real
+  last_used             DateTime?             @db.Timestamp(6)
+  avg_review_iterations Float?                @db.Real
+  avg_token_savings     Float?                @db.Real
+  source                String?
+  author                String?
+  version               Int?                  @default(1)
+  created_at            DateTime?             @default(now()) @db.Timestamp(6)
+  updated_at            DateTime?             @default(now()) @db.Timestamp(6)
+  example_performance   example_performance[]
+
+  @@index([category])
+  @@index([complexity])
+  @@index([success_rate])
+  @@index([usage_count])
+}
+
+model strategy_feedback {
+  id                          String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  session_id                  String
+  generation_id               String
+  user_query                  String
+  generated_code              String
+  nodes_context               Json?                 @db.Json
+  edges_context               Json?                 @db.Json
+  example_ids                 Json                  @default("[]") @db.Json
+  example_scores              Json?                 @db.Json
+  feedback_type               String
+  success                     Int                   @default(0)
+  error_message               String?
+  fix_iterations              Int?                  @default(0)
+  technical_review_iterations Int?
+  senior_review_iterations    Int?
+  validation_iterations       Int?
+  total_iterations            Int?
+  backtest_metrics            Json?                 @db.Json
+  prompt_tokens               Int?
+  completion_tokens           Int?
+  total_tokens                Int?
+  token_savings               Int?
+  user_rating                 Int?
+  user_comments               String?
+  generation_time_ms          Int?
+  total_time_ms               Int?
+  created_at                  DateTime?             @default(now()) @db.Timestamp(6)
+  updated_at                  DateTime?             @default(now()) @db.Timestamp(6)
+  example_performance         example_performance[]
+
+  @@index([created_at])
+  @@index([session_id], map: "strategy_feedback_session_idx")
+  @@index([success])
+  @@index([feedback_type], map: "strategy_feedback_type_idx")
+}
+
+model marketing_links {
+  id            String                    @id @default(cuid())
+  slug          String                    @unique
+  target_url    String
+  campaign_name String?
+  description   String?
+  click_count   Int                       @default(0)
+  unique_clicks Int                       @default(0)
+  created_at    DateTime                  @default(now()) @db.Timestamp(6)
+  updated_at    DateTime                  @default(now()) @db.Timestamp(6)
+  visitors      marketing_link_visitors[]
+}
+
+model marketing_link_visitors {
+  link_id    String
+  visitor_id String
+  link       marketing_links @relation(fields: [link_id], references: [id], onDelete: Cascade)
+
+  @@id([link_id, visitor_id])
+}
+
+model email_campaigns {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subject       String
+  body          String?   // HTML content of the email
+  type          String    // e.g. "weekly", "puzzle"
+  sent_at       DateTime  @default(now()) @db.Timestamp(6)
+  broadcast_ids String[]  // Resend broadcast IDs
+  segment_ids   String[]  // Resend segment IDs
+  delivered     Int       @default(0)
+  opened        Int       @default(0)
+  clicked       Int       @default(0)
+  bounced       Int       @default(0)
+  complained    Int       @default(0)
+  unsubscribed  Int       @default(0)
+  status        String    @default("sent")  // "sent" | "scheduled" | "cancelled"
+  scheduled_at  DateTime? @db.Timestamp(6)  // when the broadcast is scheduled to send
+}
+
+model saved_newsletters {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subject    String
+  body       String?  // HTML content of the newsletter
+  raw_text   String?  // Raw AI output text
+  type       String   // "weekly" or "puzzle"
+  created_at DateTime @default(now()) @db.Timestamp(6)
+}
+
+

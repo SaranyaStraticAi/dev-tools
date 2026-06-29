@@ -2,180 +2,217 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
 
-export default function Sidebar() {
-  const pathname = usePathname();
-  const [isOpen, setIsOpen] = useState(false);
+import { LogOut, LogIn, Database, Search, Users, Code, BarChart3, Layers, FileBarChart, TrendingUp, Lock, MessageSquare, LineChart, Image, Link2, Network, LayoutGrid, ChevronDown, Mail, Video, GraduationCap, Download, Brain, Newspaper, Edit, ShieldCheck, Inbox } from 'lucide-react';
+import { useMsal, AuthenticatedTemplate, UnauthenticatedTemplate } from "@azure/msal-react";
+import { useState, useEffect } from 'react';
 
-  const navItems = [
-    {
-      name: 'PostgreSQL Viewer',
-      href: '/',
-      icon: (
-        <svg
-          className="w-5 h-5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"
-          />
-        </svg>
-      ),
-    },
-    {
-      name: 'Clerk User Search',
-      href: '/clerk-search',
-      icon: (
-        <svg
-          className="w-5 h-5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-          />
-        </svg>
-      ),
-    },
-    {
-      name: 'Users',
-      href: '/users',
-      icon: (
-        <svg
-          className="w-5 h-5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
-          />
-        </svg>
-      ),
-    },
-    {
-      name: 'JSON Converter',
-      href: '/json-converter',
-      icon: (
-        <svg
-          className="w-5 h-5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
-          />
-        </svg>
-      ),
-    },
-  ];
+import { loginRequest } from "@/lib/authConfig";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
+} from "@/components/ui/sidebar";
+
+const navGroups = [
+  {
+    label: 'Users & Identity',
+    items: [
+      { name: 'User Directory',     href: '/user-directory',  icon: LayoutGrid },
+      { name: 'Users',              href: '/users',           icon: Users },
+      { name: 'User Reports',       href: '/user-reports',    icon: FileBarChart },
+      { name: 'Clerk User Search',  href: '/clerk-search',    icon: Search },
+    ],
+  },
+  {
+    label: 'Trading & Brokers',
+    items: [
+      { name: 'MetaAPI Lookup',       href: '/metaapi-lookup',      icon: Layers },
+      { name: 'MetaAPI Connections',  href: '/metaapi-connections', icon: Network },
+      { name: 'Strategy Dashboard',   href: '/strategy-dashboard',  icon: LineChart },
+      { name: 'Journal Dashboard',    href: '/journal-dashboard',   icon: TrendingUp },
+    ],
+  },
+  {
+    label: 'Analytics & Monitoring',
+    items: [
+      { name: 'Monitoring',     href: '/monitoring',     icon: BarChart3 },
+      { name: 'Chat Analytics', href: '/chat-analytics', icon: MessageSquare },
+    ],
+  },
+  {
+    label: 'Data & Storage',
+    items: [
+      { name: 'PostgreSQL Viewer', href: '/',       icon: Database },
+      { name: 'Envecl',            href: '/envecl', icon: Lock },
+    ],
+  },
+  {
+    label: 'Marketing',
+    items: [
+      { name: 'Newsletter Tester',   href: '/newsletter-tester',   icon: Mail },
+      { name: 'Saved Newsletters',   href: '/newsletter-tester/saved', icon: Inbox },
+      { name: 'Edu Content Tester',  href: '/edu-content',         icon: GraduationCap },
+      { name: 'Image Generator',     href: '/image-generator',     icon: Image },
+      { name: 'Video Generator',     href: '/video-generator',     icon: Video },
+      { name: 'Link Tracker',        href: '/link-tracker',        icon: Link2 },
+      { name: 'Prompt Tester',       href: '/prompt',              icon: Code },
+    ],
+  },
+  {
+    label: 'Newsletter Pipeline',
+    items: [
+      { name: '01: Reddit Discoverer',   href: '/newsletter-tester/reddit-discover', icon: Search },
+      { name: '02: Subreddit Selector',  href: '/newsletter-tester/pick-subreddits',  icon: Layers },
+      { name: '03: Reddit Post Fetcher', href: '/newsletter-tester/fetch-posts',      icon: Download },
+      { name: '04: AI Deep Analysis',    href: '/newsletter-tester/deep-analysis',    icon: Brain },
+      { name: '05: Market News Fetcher', href: '/newsletter-tester/news-context',     icon: Newspaper },
+      { name: '06: Newsletter Writer',   href: '/newsletter-tester/newsletter-writer', icon: Edit },
+      { name: '07: Compliance Reviewer', href: '/newsletter-tester/compliance-review', icon: ShieldCheck },
+      { name: '08: Newsletter Banner',   href: '/newsletter-tester/generate-banner',   icon: Image },
+    ],
+  },
+  {
+    label: 'Tools & Utilities',
+    items: [
+      { name: 'JSON Converter',   href: '/json-converter',   icon: Code },
+    ],
+  },
+];
+
+
+function CollapsibleNavGroup({
+  label,
+  defaultOpen,
+  children,
+}: {
+  label: string;
+  defaultOpen: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  useEffect(() => { if (defaultOpen) setOpen(true); }, [defaultOpen]);
 
   return (
-    <>
-      {/* Mobile menu button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="fixed top-4 left-4 z-50 p-2 rounded-lg bg-white dark:bg-gray-800 shadow-lg md:hidden"
-        aria-label="Toggle menu"
-      >
-        <svg
-          className="w-6 h-6 text-gray-900 dark:text-white"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
+    <SidebarGroup>
+      <SidebarGroupLabel asChild>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="flex w-full items-center justify-between gap-2 rounded-md text-left hover:bg-sidebar-accent/40 transition-colors cursor-pointer"
         >
-          {isOpen ? (
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M6 18L18 6M6 6l12 12"
-            />
-          ) : (
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 6h16M4 12h16M4 18h16"
-            />
-          )}
-        </svg>
-      </button>
-
-      {/* Sidebar */}
-      <aside
-        className={`fixed top-0 left-0 z-40 h-screen w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-transform duration-300 ease-in-out ${
-          isOpen ? 'translate-x-0' : '-translate-x-full'
-        } md:translate-x-0`}
+          <span>{label}</span>
+          <ChevronDown
+            size={14}
+            className={`transition-transform duration-200 ${open ? 'rotate-0' : '-rotate-90'}`}
+          />
+        </button>
+      </SidebarGroupLabel>
+      <SidebarGroupContent
+        className={`grid transition-all duration-200 ease-in-out ${
+          open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+        }`}
       >
-        <div className="flex flex-col h-full">
-          {/* Logo/Header */}
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-              Dev Tools
-            </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Database & Auth Tools
-            </p>
-          </div>
-
-          {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-2">
-            {navItems.map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setIsOpen(false)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200 ${
-                    isActive
-                      ? 'bg-blue-600 text-white shadow-md'
-                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  {item.icon}
-                  <span className="font-medium">{item.name}</span>
-                </Link>
-              );
-            })}
-          </nav>
-
-          {/* Footer */}
-          <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-            <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-              © 2024 Dev Tools
-            </p>
-          </div>
-        </div>
-      </aside>
-
-      {/* Overlay for mobile */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden"
-          onClick={() => setIsOpen(false)}
-        />
-      )}
-    </>
+        <div className="overflow-hidden min-h-0">{children}</div>
+      </SidebarGroupContent>
+    </SidebarGroup>
   );
 }
 
+export default function AppSidebar() {
+  const pathname = usePathname();
+  const { instance, accounts } = useMsal();
+  const [employeeAccount, setEmployeeAccount] = useState<string | null>(null);
 
+  useEffect(() => {
+    const saved = localStorage.getItem('employee_session');
+    if (saved) setEmployeeAccount(saved);
+  }, []);
+
+  const handleLogin = () => {
+    instance.loginPopup(loginRequest).catch(e => { console.error(e); });
+  };
+
+  const handleLogout = () => {
+    if (employeeAccount) {
+      localStorage.removeItem('employee_session');
+      window.location.reload();
+    } else {
+      instance.logoutPopup();
+    }
+  };
+
+  const currentAccount = accounts[0]?.username || employeeAccount;
+
+  return (
+    <Sidebar>
+      <SidebarHeader className="border-b border-sidebar-border">
+        <div className="flex flex-col gap-1 px-2 py-2">
+          <h2 className="text-lg font-bold">Dev Tools</h2>
+          <p className="text-xs text-muted-foreground">Database & Auth Tools</p>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent>
+        {navGroups.map((group) => {
+          const groupHasActive = group.items.some((i) => i.href === pathname);
+          return (
+            <CollapsibleNavGroup key={group.label} label={group.label} defaultOpen={groupHasActive}>
+              <SidebarMenu>
+                {group.items.map((item) => {
+                  const isActive = pathname === item.href;
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton asChild isActive={isActive} tooltip={item.name}>
+                        <Link href={item.href}>
+                          <item.icon />
+                          <span>{item.name}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </CollapsibleNavGroup>
+          );
+        })}
+      </SidebarContent>
+
+      <SidebarFooter className="border-t border-sidebar-border">
+        {currentAccount ? (
+          <div className="flex flex-col gap-2 px-2 py-2">
+            <div className="text-sm text-muted-foreground truncate font-medium">{currentAccount}</div>
+            <button
+              onClick={handleLogout}
+              className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors group"
+            >
+              <LogOut size={16} className="group-hover:-translate-x-0.5 transition-transform" />
+              Logout
+            </button>
+          </div>
+        ) : (
+          <div className="px-2 py-2">
+            <button
+              onClick={handleLogin}
+              className="flex items-center justify-center gap-2 w-full px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+            >
+              <LogIn size={16} />
+              Login
+            </button>
+          </div>
+        )}
+      </SidebarFooter>
+
+      <SidebarRail />
+    </Sidebar>
+  );
+}

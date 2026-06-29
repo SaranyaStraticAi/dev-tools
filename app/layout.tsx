@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Sidebar from "./components/Sidebar";
+import AppShell from "./components/AppShell";
+import { AuthProvider } from "./components/AuthProvider";
+import { ToastProvider } from "./components/ToastContext";
+import { ThemeProvider } from "./components/ThemeProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,20 +21,27 @@ export const metadata: Metadata = {
   description: "PostgreSQL Database Viewer and Clerk User Search Tools",
 };
 
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head />
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <Sidebar />
-        <main className="md:ml-64 min-h-screen">
-          {children}
-        </main>
+        <ThemeProvider>
+          <AuthProvider>
+            <ToastProvider>
+              <AppShell>
+                {children}
+              </AppShell>
+            </ToastProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

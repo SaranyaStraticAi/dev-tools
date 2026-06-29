@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClerkClient } from '@clerk/backend';
+import { TableClient } from '@azure/data-tables';
 
 interface ClerkInstance {
   publishableKey: string;
@@ -9,7 +10,7 @@ interface ClerkInstance {
 
 export async function POST(request: NextRequest) {
   try {
-    const { instances, userId } = await request.json();
+    const { instances, userId: identifier } = await request.json();
 
     if (!instances || !Array.isArray(instances) || instances.length === 0) {
       return NextResponse.json(
@@ -18,26 +19,58 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+    if (!identifier || typeof identifier !== 'string' || identifier.trim() === '') {
       return NextResponse.json(
-        { error: 'User ID is required' },
+        { error: 'User ID or Email is required' },
         { status: 400 }
       );
     }
 
+    const isEmail = identifier.includes('@');
+
     // Search across all instances
     for (const instance of instances as ClerkInstance[]) {
-      if (!instance.publishableKey || !instance.secretKey) {
+      let secretKey = instance.secretKey;
+
+      // Handle default instances by looking up secrets from env variables
+      // to keep them secure and avoid sending them back and forth from the client
+      if ((instance as any).id === 'default-1') {
+        secretKey = process.env.CLERK_SECRET_KEY || '';
+      } else if ((instance as any).id === 'default-2') {
+        secretKey = process.env.CLERK_LIVE_SECRET_KEY || '';
+      }
+
+      if (!secretKey) {
         continue; // Skip invalid instances
       }
 
       try {
         const clerkClient = createClerkClient({
-          secretKey: instance.secretKey,
+          secretKey: secretKey,
         });
 
-        // Try to get the user
-        const user = await clerkClient.users.getUser(userId);
+        let user: any = null;
+
+        if (isEmail) {
+          // Search by email
+          const userList = await clerkClient.users.getUserList({
+            emailAddress: [identifier.trim()],
+            limit: 1,
+          });
+          if (userList.data.length > 0) {
+            user = userList.data[0];
+          }
+        } else {
+          // Try to get the user by ID
+          try {
+            user = await clerkClient.users.getUser(identifier.trim());
+          } catch (e: any) {
+            // If it's a 404, we'll just keep user as null
+            if (e.status !== 404 && e.statusCode !== 404) {
+              throw e;
+            }
+          }
+        }
 
         if (user) {
           // User found! Return all available details
@@ -92,6 +125,43 @@ export async function POST(request: NextRequest) {
               deleteSelfEnabled: user.deleteSelfEnabled,
               createOrganizationEnabled: user.createOrganizationEnabled,
               lastActiveAt: user.lastActiveAt,
+              metaApiConnection: await (async () => {
+                const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
+                if (!connectionString) return null;
+
+                try {
+                  const tableClient = TableClient.fromConnectionString(connectionString, 'UserBrokerConnections');
+                  const entity: any = await tableClient.getEntity(user.id, 'metaapi');
+
+                  if (entity) {
+                    let parsedMetadata = {};
+                    if (entity.metadata) {
+                      try {
+                        parsedMetadata = typeof entity.metadata === 'string'
+                          ? JSON.parse(entity.metadata)
+                          : entity.metadata;
+                      } catch { }
+                    }
+
+                    return {
+                      accountId: entity.accountId,
+                      connected: entity.connected,
+                      lastUpdated: entity.lastUpdated,
+                      brokerName: (parsedMetadata as any).brokerName || null,
+                      server: (parsedMetadata as any).server || null,
+                      platform: (parsedMetadata as any).platform || null,
+                      region: (parsedMetadata as any).region || null,
+                      metadata: parsedMetadata,
+                    };
+                  }
+                } catch (e: any) {
+                  // If 404, user just doesn't have a MetaAPI connection
+                  if (e.statusCode !== 404) {
+                    console.error('Error fetching MetaAPI connection for user:', e.message);
+                  }
+                }
+                return null;
+              })(),
             },
             foundInInstance: instance.name || instance.publishableKey,
             instanceIndex: instances.indexOf(instance),
@@ -111,7 +181,7 @@ export async function POST(request: NextRequest) {
     // User not found in any instance
     return NextResponse.json({
       success: false,
-      message: 'No user ID found in any Clerk instance',
+      message: `No user with ${isEmail ? 'email' : 'ID'} "${identifier}" found in any Clerk instance`,
       searchedInstances: instances.length,
     });
   } catch (error: any) {

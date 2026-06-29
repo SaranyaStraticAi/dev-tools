@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>VibeTrader — Chat Analytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+<style>
+:root {
+  --bg:     #080c10; --bg1: #0d1117; --bg2: #111820; --bg3: #161d26;
+  --border: #1e2a38; --border2: #243040;
+  --text:   #e2eaf3; --muted: #5a7090; --muted2: #3d5570;
+  --blue:   #3b8ef3; --green: #2ea84a; --yellow: #d4a017;
+  --red:    #e8433a; --purple: #8b5cf6; --teal: #0891b2; --orange: #f97316;
+  --accent: #3b8ef3;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: 'Inter', sans-serif; min-height: 100vh;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(139,92,246,0.06), transparent),
+    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(59,142,243,0.04), transparent);
+}
+.mono { font-family: 'JetBrains Mono', monospace; }
+header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 20px 32px; border-bottom: 1px solid var(--border);
+  background: rgba(8,12,16,0.85); backdrop-filter: blur(12px);
+  position: sticky; top: 0; z-index: 100;
+}
+.brand { display: flex; align-items: center; gap: 14px; }
+.pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--purple); box-shadow: 0 0 0 0 rgba(139,92,246,0.6); animation: pulse 2s infinite; }
+.pulse.loading { background: var(--yellow); }
+@keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(139,92,246,0.6)} 70%{box-shadow:0 0 0 8px rgba(139,92,246,0)} 100%{box-shadow:0 0 0 0 rgba(139,92,246,0)} }
+.brand-name { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+.brand-tag  { font-size: 11px; color: var(--muted); margin-top: 1px; letter-spacing: 0.3px; }
+.header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.status-pill { background: var(--bg2); border: 1px solid var(--border2); border-radius: 20px; padding: 5px 14px; font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+.status-pill b { color: var(--purple); }
+.refresh-btn { background: var(--bg2); border: 1px solid var(--border2); border-radius: 8px; padding: 6px 14px; font-size: 12px; color: var(--muted); cursor: pointer; transition: all .2s; font-family: 'Inter', sans-serif; }
+.refresh-btn:hover { background: var(--bg3); color: var(--text); border-color: var(--accent); }
+.range-bar { display: flex; align-items: center; gap: 6px; padding: 14px 32px 0; }
+.range-label { font-size: 10px; color: var(--muted2); text-transform: uppercase; letter-spacing: 1px; margin-right: 4px; }
+.range-btn { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; font-size: 11px; color: var(--muted); cursor: pointer; transition: all .18s; font-family: 'JetBrains Mono', monospace; }
+.range-btn:hover { background: var(--bg3); color: var(--text); }
+.range-btn.active { background: rgba(139,92,246,0.12); border-color: rgba(139,92,246,0.4); color: var(--purple); }
+main { padding: 20px 32px 40px; max-width: 1600px; margin: 0 auto; }
+.gap { display: flex; flex-direction: column; gap: 16px; }
+/* KPI grid */
+.kpi-grid { display: grid; grid-template-columns: repeat(6,1fr); gap: 12px; }
+@media(max-width:1200px){ .kpi-grid{grid-template-columns:repeat(3,1fr)} }
+@media(max-width:700px)  { .kpi-grid{grid-template-columns:repeat(2,1fr)} }
+.kpi { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; position: relative; overflow: hidden; transition: border-color .2s; }
+.kpi:hover { border-color: var(--border2); }
+.kpi::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background: var(--kpi-color, var(--purple)); opacity:.8; }
+.kpi-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.9px; margin-bottom: 8px; }
+.kpi-value { font-size: 28px; font-weight: 700; line-height:1; font-family:'JetBrains Mono',monospace; letter-spacing:-1px; color:#f0f6fc; }
+.kpi-sub { font-size: 11px; color: var(--muted); margin-top: 6px; }
+/* Cards */
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 22px 24px; transition: border-color .2s; }
+.card:hover { border-color: var(--border2); }
+.card-title { font-size: 13px; font-weight: 600; color: #c9d1d9; margin-bottom: 3px; }
+.card-desc  { font-size: 11px; color: var(--muted2); margin-bottom: 16px; line-height: 1.5; }
+/* Layouts */
+.g2  { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+.g11 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.g3  { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+@media(max-width:1000px){ .g2,.g11,.g3{ grid-template-columns:1fr; } }
+/* Table */
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { text-align:left; padding:10px 14px; color:var(--muted); font-weight:500; font-size:10px; text-transform:uppercase; letter-spacing:0.7px; border-bottom:1px solid var(--border); cursor:pointer; user-select:none; }
+th:hover { color:var(--text); }
+td { padding:11px 14px; border-bottom:1px solid rgba(30,42,56,0.5); color:#c9d1d9; }
+tr:last-child td { border-bottom:none; }
+tr:hover td { background:rgba(22,29,38,0.6); }
+.pill { display:inline-block; padding:2px 9px; border-radius:10px; font-size:11px; font-weight:600; }
+.pg { background:rgba(46,168,74,0.15); color:var(--green); }
+.pp { background:rgba(139,92,246,0.15); color:var(--purple); }
+.pb { background:rgba(59,142,243,0.15); color:var(--blue); }
+.py { background:rgba(212,160,23,0.15); color:var(--yellow); }
+.pr { background:rgba(232,67,58,0.15); color:var(--red); }
+.po { background:rgba(249,115,22,0.15); color:var(--orange); }
+#errBanner { display:none; background:rgba(232,67,58,0.1); border:1px solid rgba(232,67,58,0.3); border-radius:8px; padding:12px 18px; margin-bottom:16px; font-size:12px; color:var(--red); }
+.data-note { font-size:11px; color:var(--muted2); padding:12px 0 0; border-top:1px solid var(--border); margin-top:16px; }
+
+/* ── USER SLIDE PANEL ────────────────────────────────────── */
+.usr-wrap{display:flex;gap:8px;align-items:center;margin-bottom:16px}
+.usr-inp{flex:1;background:var(--bg1);border:1px solid var(--border2);border-radius:8px;padding:9px 14px;font-size:13px;color:var(--text);font-family:'Inter',sans-serif;outline:none;transition:border-color .2s}
+.usr-inp:focus{border-color:var(--purple)}
+.usr-inp::placeholder{color:var(--muted2)}
+.usr-btn{background:linear-gradient(135deg,#8b5cf6,#6d28d9);border:none;border-radius:8px;padding:9px 22px;font-size:12px;font-weight:600;color:#fff;cursor:pointer;box-shadow:0 2px 10px rgba(139,92,246,.4);transition:opacity .2s;white-space:nowrap}
+.usr-btn:hover{opacity:.88}
+.usr-btn:disabled{opacity:.4;cursor:not-allowed}
+#userSlide{position:fixed;top:0;right:-720px;width:700px;height:100vh;background:var(--bg1);border-left:1px solid var(--border);z-index:999;overflow-y:auto;transition:right .32s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column}
+#userSlide.open{right:0}
+.sl-hdr{display:flex;justify-content:space-between;align-items:flex-start;padding:20px 24px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg1);z-index:2}
+.sl-close{background:none;border:1px solid var(--border2);border-radius:6px;padding:6px 12px;color:var(--muted);cursor:pointer;font-size:14px;transition:all .18s}
+.sl-close:hover{background:var(--bg2);color:var(--text)}
+.sl-body{padding:20px 24px;flex:1;display:flex;flex-direction:column;gap:16px}
+.sl-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.sl-kpi{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.sl-kpi-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.9px;color:var(--muted2);margin-bottom:6px}
+.sl-kpi-val{font-size:20px;font-weight:700;font-family:'JetBrains Mono',monospace;letter-spacing:-.5px}
+.sl-sec{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+#slideOverlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:998;display:none;backdrop-filter:blur(3px)}
+#slideOverlay.open{display:block}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="pulse" id="statusDot"></div>
+    <div>
+      <div class="brand-name">VibeTrader Chat Analytics</div>
+      <div class="brand-tag">AI Assistant Usage — OpenAI-style Platform Insights</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="status-pill" id="statusBadge"><b>⏳ Loading…</b></div>
+    <button class="refresh-btn" onclick="loadData()">↻ Refresh</button>
+  </div>
+</header>
+
+<div class="range-bar">
+  <span class="range-label">Range</span>
+  <button class="range-btn" data-range="7d"  onclick="setRange('7d')">7D</button>
+  <button class="range-btn" data-range="30d" onclick="setRange('30d')">30D</button>
+  <button class="range-btn" data-range="90d" onclick="setRange('90d')">90D</button>
+  <button class="range-btn active" data-range="all" onclick="setRange('all')">All</button>
+</div>
+
+<main>
+<div class="gap">
+  <div id="errBanner"></div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid">
+    <div class="kpi" style="--kpi-color:var(--purple)">
+      <div class="kpi-label">Total Conversations</div>
+      <div class="kpi-value mono" id="kThreads">—</div>
+      <div class="kpi-sub">all threads created</div>
+    </div>
+    <div class="kpi" style="--kpi-color:var(--blue)">
+      <div class="kpi-label">User Messages Sent</div>
+      <div class="kpi-value mono" id="kUserMsgs">—</div>
+      <div class="kpi-sub" id="kUserMsgsSub">questions asked</div>
+    </div>
+    <div class="kpi" style="--kpi-color:var(--green)">
+      <div class="kpi-label">Active Days</div>
+      <div class="kpi-value mono" id="kActiveDays">—</div>
+      <div class="kpi-sub">days with chat activity</div>
+    </div>
+    <div class="kpi" style="--kpi-color:var(--teal)">
+      <div class="kpi-label">P90 Daily Active Users</div>
+      <div class="kpi-value mono" id="kP90DAU">—</div>
+      <div class="kpi-sub">90th pct DAU</div>
+    </div>
+    <div class="kpi" style="--kpi-color:var(--yellow)">
+      <div class="kpi-label">P90 Msgs / User</div>
+      <div class="kpi-value mono" id="kP90MpU">—</div>
+      <div class="kpi-sub">depth of engagement</div>
+    </div>
+    <div class="kpi" style="--kpi-color:var(--orange)">
+      <div class="kpi-label">P90 Msgs / Thread</div>
+      <div class="kpi-value mono" id="kP90MpT">—</div>
+      <div class="kpi-sub">conversation depth</div>
+    </div>
+  </div>
+
+  <!-- Row 1: Daily volume + Agent breakdown -->
+  <div class="g2">
+    <div class="card">
+      <div class="card-title">Daily Chat Volume</div>
+      <div class="card-desc">Conversations started per day (bars) + cumulative total (line). Shows growth and usage trends.</div>
+      <div id="chartDaily" style="height:260px"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">AI Agent Usage</div>
+      <div class="card-desc">Which AI agents users engage with most. Size = message volume.</div>
+      <div id="chartAgents" style="height:260px"></div>
+    </div>
+  </div>
+
+  <!-- Row 2: Top Topics + DOW heatmap -->
+  <div class="g11">
+    <div class="card">
+      <div class="card-title">Top Topics & Pairs Asked About</div>
+      <div class="card-desc">Most mentioned symbols, pairs, and strategies across all conversations. Width = mentions, color = unique users.</div>
+      <div id="chartTopics" style="height:320px"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Activity by Day of Week</div>
+      <div class="card-desc">When users are most active. Avg active users and total messages per weekday.</div>
+      <div id="chartDOW" style="height:320px"></div>
+    </div>
+  </div>
+
+  <!-- Row 3: Topic trend over months -->
+  <div class="card">
+    <div class="card-title">Top Topic Trend — Monthly</div>
+    <div class="card-desc">How interest in top pairs and strategies has changed month over month.</div>
+    <div id="chartTrend" style="height:240px"></div>
+  </div>
+
+  <!-- Row 4: User engagement scatter + retention -->
+  <div class="g11">
+    <div class="card">
+      <div class="card-title">User Engagement Distribution</div>
+      <div class="card-desc">P90 messages vs threads per user-week. Power users top-right. Casual users bottom-left.</div>
+      <div id="chartScatter" style="height:280px"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Agent Mix — Share of Conversations</div>
+      <div class="card-desc">What percentage of threads each agent handled. Reflects feature adoption.</div>
+      <div id="chartAgentPie" style="height:280px"></div>
+    </div>
+  </div>
+
+  <!-- Per-user individual analysis -->
+  <div class="card">
+    <div class="card-title">Individual User Chat Analysis</div>
+    <div class="card-desc">Search by email to see a user's full conversation history, agent usage, top symbols, and weekly engagement pattern.</div>
+    <div class="usr-wrap">
+      <input class="usr-inp" id="userEmailInput" type="email" placeholder="Search by email address…" onkeydown="if(event.key==='Enter')doUserSearch()"/>
+      <button class="usr-btn" id="userAnalyseBtn" onclick="doUserSearch()">🔍 Analyse User</button>
+    </div>
+  </div>
+
+  <!-- Row 5: Per-user table -->
+  <div class="card">
+    <div class="card-title">Per-User Breakdown — Chat Engagement</div>
+    <div class="card-desc">Sortable. Top users by message count, thread count, active weeks, most used agent and topic. Click any row or search by email to see full profile.</div>
+    <div id="userTableContainer"></div>
+    <div class="data-note" id="dataNote"></div>
+  </div>
+
+</div>
+</main>
+
+<script>
+// ── CONFIG ────────────────────────────────────────────────────────────────────
+const BASE_URL = '/api/chat-proxy';
+const CODE     = '';
+let currentRange = 'all';
+let lastData = null;
+let sortKey = 'userMsgs', sortDir = -1;
+
+const DARK = 'transparent', BD = '#1e2a38';
+const BL = '#3b8ef3', GR = '#2ea84a', YL = '#d4a017', RD = '#e8433a';
+const PU = '#8b5cf6', TE = '#0891b2', OR = '#f97316';
+const TX = '#c9d1d9', MT = '#5a7090';
+const TIP = { backgroundColor:'#111820', borderColor:'#243040', textStyle:{color:TX} };
+
+const AGENT_COLORS = {
+  'default':            PU,
+  'strategy-builder':   BL,
+  'technical':          GR,
+  'smc':                YL,
+  'fundamental':        TE,
+  'strategy':           OR,
+  'risk':               RD,
+  'economic':           '#06b6d4',
+  'portfolio':          '#a78bfa',
+  'research':           '#34d399',
+  'strategy-optimizer': '#fb923c',
+};
+
+function agentColor(key) { return AGENT_COLORS[key] || MT; }
+function agentLabel(key) {
+  const map = {
+    'default':'General','strategy-builder':'Strategy Builder',
+    'technical':'Technical','smc':'SMC','fundamental':'Fundamental',
+    'strategy':'Strategy','risk':'Risk','economic':'Economic',
+    'portfolio':'Portfolio','research':'Research','strategy-optimizer':'Optimizer'
+  };
+  return map[key] || key;
+}
+
+// ── Charts ────────────────────────────────────────────────────────────────────
+const charts = {};
+const IDS = ['chartDaily','chartAgents','chartTopics','chartDOW','chartTrend','chartScatter','chartAgentPie'];
+function initCharts() {
+  IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el && !charts[id]) charts[id] = echarts.init(el, null, { renderer:'svg' });
+  });
+}
+
+function setRange(r) {
+  currentRange = r;
+  document.querySelectorAll('.range-btn').forEach(b => b.classList.toggle('active', b.dataset.range === r));
+  loadData();
+}
+
+// ── Render KPIs ───────────────────────────────────────────────────────────────
+function renderKPIs(d) {
+  const k = d.kpis;
+  const fmt = n => n >= 1000 ? (n/1000).toFixed(1)+'k' : String(n);
+  document.getElementById('kThreads').textContent    = fmt(k.totalThreads);
+  document.getElementById('kUserMsgs').textContent   = fmt(k.totalUserMsgs);
+  document.getElementById('kUserMsgsSub').textContent= `${fmt(k.totalMessages)} total incl. AI`;
+  document.getElementById('kActiveDays').textContent = k.activeDays;
+  document.getElementById('kP90DAU').textContent     = k.p90DAU;
+  document.getElementById('kP90MpU').textContent     = k.p90MsgsPerUser;
+  document.getElementById('kP90MpT').textContent     = k.p90MsgsPerThread;
+}
+
+// ── Daily volume chart ────────────────────────────────────────────────────────
+function renderDaily(d) {
+  const rows = d.dailyVolume || [];
+  let cum = 0;
+  const cumData = rows.map(r => { cum += r.threads; return cum; });
+  charts.chartDaily.setOption({
+    backgroundColor: DARK,
+    tooltip: { trigger:'axis', ...TIP,
+      formatter: p => `${p[0].axisValue}<br/>Threads: <b>${p[0].value}</b><br/>User Msgs: <b>${p[1]?.value||0}</b><br/>Cumulative: <b>${p[2]?.value||0}</b>` },
+    legend: { data:['Threads','User Msgs','Cumulative'], bottom:0, textStyle:{color:MT}, itemWidth:12 },
+    grid: { top:10, left:52, right:16, bottom:36 },
+    xAxis: { type:'category', data:rows.map(r=>r.date.slice(5)),
+      axisLabel:{color:MT,fontSize:9}, axisLine:{lineStyle:{color:BD}} },
+    yAxis: { type:'value', axisLabel:{color:MT,fontSize:9}, splitLine:{lineStyle:{color:BD,type:'dashed'}} },
+    series: [
+      { name:'Threads', type:'bar', data:rows.map(r=>r.threads),
+        itemStyle:{color:'rgba(139,92,246,0.7)',borderRadius:[2,2,0,0]} },
+      { name:'User Msgs', type:'bar', data:rows.map(r=>r.userMessages),
+        itemStyle:{color:'rgba(59,142,243,0.6)',borderRadius:[2,2,0,0]} },
+      { name:'Cumulative', type:'line', data:cumData, symbol:'none', smooth:true,
+        lineStyle:{color:GR,width:2.5},
+        areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(46,168,74,0.18)'},{offset:1,color:'rgba(46,168,74,0)'}]}} }
+    ]
+  });
+}
+
+// ── Agent horizontal bar ──────────────────────────────────────────────────────
+function renderAgents(d) {
+  const agents = (d.agentStats || []).slice(0,8);
+  charts.chartAgents.setOption({
+    backgroundColor: DARK,
+    tooltip: { trigger:'axis', ...TIP,
+      formatter: p => `<b>${agentLabel(p[0].name)}</b><br/>Messages: ${p[0].value}<br/>Users: ${agents[p[0].dataIndex]?.users||0}<br/>Threads: ${agents[p[0].dataIndex]?.threads||0}` },
+    grid: { top:10, left:110, right:20, bottom:10 },
+    xAxis: { type:'value', axisLabel:{color:MT,fontSize:9}, splitLine:{lineStyle:{color:BD,type:'dashed'}} },
+    yAxis: { type:'category', data:agents.map(a=>agentLabel(a.agent)).reverse(),
+      axisLabel:{color:TX,fontSize:11}, axisLine:{lineStyle:{color:BD}} },
+    series: [{ type:'bar', data:agents.map(a=>a.messages).reverse(),
+      itemStyle:{color:p=>agentColor(agents.slice().reverse()[p.dataIndex]?.agent), borderRadius:[0,3,3,0]},
+      label:{show:true,position:'right',color:MT,fontSize:11,formatter:p=>p.value} }]
+  });
+}
+
+// ── Topics horizontal bar ─────────────────────────────────────────────────────
+function renderTopics(d) {
+  const topics = (d.topTopics || []).slice(0,12);
+  const maxUsers = Math.max(...topics.map(t=>t.users),1);
+  charts.chartTopics.setOption({
+    backgroundColor: DARK,
+    tooltip: { trigger:'axis', ...TIP,
+      formatter: p => `<b>${p[0].name}</b><br/>Mentions: ${p[0].value}<br/>Unique users: ${topics[topics.length-1-p[0].dataIndex]?.users||0}` },
+    grid: { top:10, left:90, right:20, bottom:10 },
+    xAxis: { type:'value', axisLabel:{color:MT,fontSize:9}, splitLine:{lineStyle:{color:BD,type:'dashed'}} },
+    yAxis: { type:'category', data:topics.map(t=>t.symbol).reverse(),
+      axisLabel:{color:TX,fontSize:12,fontFamily:'JetBrains Mono'}, axisLine:{lineStyle:{color:BD}} },
+    series: [{ type:'bar', data:topics.map(t=>t.mentions).reverse(),
+      itemStyle:{
+        color: p => {
+          const t = topics.slice().reverse()[p.dataIndex];
+          const ratio = t.users / maxUsers;
+          return ratio > 0.7 ? GR : ratio > 0.4 ? BL : PU;
+        },
+        borderRadius:[0,3,3,0]
+      },
+      label:{show:true,position:'right',color:MT,fontSize:11} }]
+  });
+}
+
+// ── Day of week activity ──────────────────────────────────────────────────────
+function renderDOW(d) {
+  const DOW_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const rows = d.dowActivity || [];
+  const labels = rows.map(r => DOW_LABELS[r.dow]);
+  charts.chartDOW.setOption({
+    backgroundColor: DARK,
+    tooltip: { trigger:'axis', ...TIP,
+      formatter: p => `<b>${p[0].axisValue}</b><br/>P90 Users: ${p[0].value}<br/>Total Msgs: ${p[1]?.value||0}` },
+    legend: { data:['P90 Active Users','Total Msgs'], bottom:0, textStyle:{color:MT}, itemWidth:12 },
+    grid: { top:10, left:44, right:16, bottom:36 },
+    xAxis: { type:'category', data:labels, axisLabel:{color:TX,fontSize:12}, axisLine:{lineStyle:{color:BD}} },
+    yAxis: [
+      { type:'value', name:'Users', nameTextStyle:{color:MT,fontSize:9},
+        axisLabel:{color:MT,fontSize:9}, splitLine:{lineStyle:{color:BD,type:'dashed'}} },
+      { type:'value', name:'Msgs', nameTextStyle:{color:MT,fontSize:9},
+        axisLabel:{color:MT,fontSize:9}, splitLine:{show:false} }
+    ],
+    series: [
+      { name:'P90 Active Users', type:'bar', data:rows.map(r=>r.p90Users),
+        itemStyle:{color:p=>{
+          const v = rows[p.dataIndex]?.p90Users||0;
+          const mx = Math.max(...rows.map(r=>r.p90Users),1);
+          return v===mx ? PU : 'rgba(139,92,246,0.45)';
+        }, borderRadius:[3,3,0,0]} },
+      { name:'Total Msgs', type:'line', yAxisIndex:1, data:rows.map(r=>r.avgMsgs),
+        symbol:'circle', symbolSize:6, lineStyle:{color:BL,width:2.5},
+        itemStyle:{color:BL} }
+    ]
+  });
+}
+
+// ── Topic trend line ──────────────────────────────────────────────────────────
+function renderTrend(d) {
+  const trend = d.topicTrend || [];
+  const months  = [...new Set(trend.map(r=>r.month))].sort();
+  const symbols = [...new Set(trend.map(r=>r.symbol))];
+  const COLORS  = [BL, GR, YL, PU, OR, TE, RD];
+
+  const series = symbols.map((sym,i) => ({
+    name: sym,
+    type: 'line', symbol:'circle', symbolSize:5, smooth:true,
+    lineStyle:{color:COLORS[i%COLORS.length],width:2.5},
+    itemStyle:{color:COLORS[i%COLORS.length]},
+    data: months.map(m => {
+      const row = trend.find(r=>r.month===m && r.symbol===sym);
+      return row ? row.mentions : 0;
+    })
+  }));
+
+  charts.chartTrend.setOption({
+    backgroundColor: DARK,
+    tooltip: { trigger:'axis', ...TIP },
+    legend: { data:symbols, bottom:0, textStyle:{color:MT}, itemWidth:12 },
+    grid: { top:10, left:44, right:16, bottom:36 },
+    xAxis: { type:'category', data:months, axisLabel:{color:MT,fontSize:9}, axisLine:{lineStyle:{color:BD}} },
+    yAxis: { type:'value', axisLabel:{color:MT,fontSize:9}, splitLine:{lineStyle:{color:BD,type:'dashed'}} },
+    series
+  });
+}
+
+// ── Scatter: threads vs msgs per user-week ────────────────────────────────────
+function renderScatter(d) {
+  const users = d.userBreakdown || [];
+  const data  = users.map(u => [u.threads, u.userMsgs, u.userId.slice(0,10), u.activeWeeks]);
+  const maxW  = Math.max(...users.map(u=>u.activeWeeks),1);
+  charts.chartScatter.setOption({
+    backgroundColor: DARK,
+    tooltip: { ...TIP, formatter: p => `User: ${p.data[2]}…<br/>Threads: ${p.data[0]}<br/>User Msgs: ${p.data[1]}<br/>Active Weeks: ${p.data[3]}` },
+    grid: { top:20, left:52, right:20, bottom:36 },
+    xAxis: { type:'value', name:'Threads', nameTextStyle:{color:MT,fontSize:9},
+      axisLabel:{color:MT,fontSize:9}, splitLine:{lineStyle:{color:BD,type:'dashed'}} },
+    yAxis: { type:'value', name:'User Msgs', nameTextStyle:{color:MT,fontSize:9},
+      axisLabel:{color:MT,fontSize:9}, splitLine:{lineStyle:{color:BD,type:'dashed'}} },
+    series: [{ type:'scatter', data,
+      symbolSize: p => Math.max(6, Math.min(28, (p[3]/maxW)*24+4)),
+      itemStyle: { color: p => {
+        const w = p.data[3];
+        return w >= 8 ? GR : w >= 4 ? BL : w >= 2 ? PU : MT;
+      }, opacity:0.8 }
+    }]
+  });
+}
+
+// ── Agent pie ─────────────────────────────────────────────────────────────────
+function renderAgentPie(d) {
+  const agents = d.agentStats || [];
+  const total  = agents.reduce((s,a)=>s+a.threads,0)||1;
+  charts.chartAgentPie.setOption({
+    backgroundColor: DARK,
+    tooltip: { ...TIP, formatter: p => `<b>${agentLabel(p.name)}</b><br/>Threads: ${p.value}<br/>Share: ${(p.value/total*100).toFixed(1)}%` },
+    legend: { orient:'vertical', right:10, top:'center', textStyle:{color:MT,fontSize:11} },
+    series: [{ type:'pie', radius:['42%','68%'], center:['38%','50%'],
+      data: agents.map(a=>({ name:a.agent, value:a.threads, itemStyle:{color:agentColor(a.agent)} })),
+      label:{color:TX,fontSize:11,formatter:p=>`${(p.percent).toFixed(1)}%`},
+      labelLine:{lineStyle:{color:MT}} }]
+  });
+}
+
+// ── User table ────────────────────────────────────────────────────────────────
+function renderUserTable(d) {
+  const users = [...(d.userBreakdown||[])].sort((a,b)=>sortDir*(b[sortKey]-a[sortKey]));
+  const th = (k,l) => `<th onclick="doSort('${k}')">${l}${sortKey===k?(sortDir>0?' ↑':' ↓'):''}</th>`;
+  let html = `<table><thead><tr>
+    <th>#</th>
+    ${th('threads','Threads')}
+    ${th('userMsgs','User Msgs')}
+    ${th('totalMsgs','Total Msgs')}
+    ${th('activeWeeks','Active Wks')}
+    <th>Top Symbol</th><th>Top Agent</th><th>Last Seen</th>
+  </tr></thead><tbody>`;
+  users.forEach((u,i) => {
+    const wkCls = u.activeWeeks>=8?'pg':u.activeWeeks>=4?'pb':u.activeWeeks>=2?'pp':'py';
+    const agCls = u.topAgent==='default'?'pb':u.topAgent==='strategy-builder'?'pp':'po';
+    html += `<tr style="cursor:pointer" onclick="openSlide(null,'${u.userId}')" title="Click to analyse">
+      <td style="color:var(--muted);font-size:11px">${i+1}</td>
+      <td><code style="font-size:11px;color:#58a6ff">${u.userId.slice(0,20)}…</code></td>
+      <td style="text-align:right">${u.threads}</td>
+      <td style="text-align:right"><b>${u.userMsgs}</b></td>
+      <td style="text-align:right">${u.totalMsgs}</td>
+      <td style="text-align:right"><span class="pill ${wkCls}">${u.activeWeeks}w</span></td>
+      <td style="text-align:center"><span class="pill pb">${u.topSymbol}</span></td>
+      <td style="text-align:center"><span class="pill ${agCls}">${agentLabel(u.topAgent)}</span></td>
+      <td style="text-align:right;font-size:11px;color:var(--muted)">${u.lastSeen}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('userTableContainer').innerHTML = html;
+}
+function doSort(k) {
+  if (sortKey===k) sortDir*=-1; else { sortKey=k; sortDir=-1; }
+  renderUserTable(lastData);
+}
+
+// ── Load data ─────────────────────────────────────────────────────────────────
+async function loadData() {
+  const dot   = document.getElementById('statusDot');
+  const badge = document.getElementById('statusBadge');
+  dot.className = 'pulse loading';
+  badge.innerHTML = '<b>⏳ Loading…</b>';
+
+  const url = `${BASE_URL}?code=${CODE}&range=${currentRange}`;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(25000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    lastData = data;
+
+    initCharts();
+    renderKPIs(data);
+    renderDaily(data);
+    renderAgents(data);
+    renderTopics(data);
+    renderDOW(data);
+    renderTrend(data);
+    renderScatter(data);
+    renderAgentPie(data);
+    renderUserTable(data);
+
+    const ts = new Date(data.generatedAt).toLocaleTimeString();
+    dot.className = 'pulse';
+    badge.innerHTML = `<b>● Live</b> · ${ts} · ${data.timeRange?.label||'all time'}`;
+    document.getElementById('errBanner').style.display = 'none';
+    document.getElementById('dataNote').textContent =
+      `Data: ${data.kpis.activeDays} active days · ${data.kpis.totalThreads} threads · ${data.kpis.totalUserMsgs} user messages · generated ${new Date(data.generatedAt).toLocaleString()}`;
+  } catch(e) {
+    dot.className = 'pulse'; dot.style.background = 'var(--red)';
+    badge.innerHTML = '<b>● Error</b>';
+    const err = document.getElementById('errBanner');
+    err.style.display = 'block';
+    err.textContent = 'Failed to load: ' + e.message;
+  }
+}
+
+loadData();
+setInterval(loadData, 5*60*1000);
+window.addEventListener('resize', () => Object.values(charts).forEach(c => c?.resize()));
+
+// ── USER SLIDE PANEL ──────────────────────────────────────────────────────────
+const U_URL  = '/api/chat-user-proxy';
+const U_CODE = '';
+
+async function doUserSearch() {
+  const email = document.getElementById('userEmailInput').value.trim();
+  if (!email) return;
+  await openSlide(email, null);
+}
+
+async function openSlide(email, userId) {
+  const slide = document.getElementById('userSlide');
+  const body  = document.getElementById('slBody');
+  document.getElementById('slName').textContent  = email || userId || '…';
+  document.getElementById('slEmail').textContent = email || 'Loading…';
+  document.getElementById('slId').textContent    = userId || '';
+  body.innerHTML = '<div style="padding:60px;text-align:center;color:var(--muted)">⏳ Fetching chat history…</div>';
+  slide.classList.add('open');
+  document.getElementById('slideOverlay').classList.add('open');
+  const btn = document.getElementById('userAnalyseBtn');
+  if (btn) btn.disabled = true;
+
+  try {
+    const param = email ? 'email=' + encodeURIComponent(email) : 'userId=' + encodeURIComponent(userId);
+
+    // Load stats first — need resolved userId for AI call
+    const statsRes = await fetch(U_URL + '?code=' + U_CODE + '&' + param, { signal: AbortSignal.timeout(30000) });
+    if (!statsRes.ok) { const e = await statsRes.json().catch(()=>({})); throw new Error(e.error || 'HTTP ' + statsRes.status); }
+    const statsData = await statsRes.json();
+
+    // Use resolved userId from stats for AI analysis
+    const resolvedId = statsData?.summary?.userId || userId;
+    let aiData = null;
+    if (resolvedId) {
+      try {
+        const aiRes = await fetch('/api/user-reports/chat-analysis', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: resolvedId }),
+          signal: AbortSignal.timeout(40000)
+        });
+        if (aiRes.ok) aiData = await aiRes.json().catch(() => null);
+      } catch(_) { /* AI analysis is optional — don't block the slide */ }
+    }
+
+    renderSlide(statsData, aiData);
+  } catch(e) {
+    body.innerHTML = `<div style="padding:24px;color:var(--red);font-size:13px">⚠ ${e.message}</div>`;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function closeSlide() {
+  document.getElementById('userSlide').classList.remove('open');
+  document.getElementById('slideOverlay').classList.remove('open');
+}
+
+function renderSlide(d, ai) {
+  const s = d.summary;
+  document.getElementById('slName').textContent  = s.name || s.email || s.userId;
+  document.getElementById('slEmail').textContent = s.email || '—';
+  document.getElementById('slId').textContent    = s.userId;
+
+  let h = `<div class="sl-kpis">
+    <div class="sl-kpi"><div class="sl-kpi-lbl">Total Threads</div><div class="sl-kpi-val">${s.totalThreads}</div></div>
+    <div class="sl-kpi"><div class="sl-kpi-lbl">User Messages</div><div class="sl-kpi-val" style="color:var(--purple)">${s.totalUserMsgs}</div></div>
+    <div class="sl-kpi"><div class="sl-kpi-lbl">Active Weeks</div><div class="sl-kpi-val" style="color:var(--green)">${s.activeWeeks}</div></div>
+    <div class="sl-kpi"><div class="sl-kpi-lbl">Avg Msgs/Thread</div><div class="sl-kpi-val">${s.avgMsgsPerThread}</div></div>
+    <div class="sl-kpi"><div class="sl-kpi-lbl">Total Messages</div><div class="sl-kpi-val">${s.totalMsgs}</div></div>
+    <div class="sl-kpi"><div class="sl-kpi-lbl">Last Active</div><div class="sl-kpi-val" style="font-size:14px">${s.lastSeen||'—'}</div></div>
+  </div>`;
+
+  // ── AI ANALYSIS SECTION ───────────────────────────────────────────────────
+  if (ai && !ai.error) {
+    const sentColor = {positive:'#3fb950',neutral:'#8b949e',frustrated:'#f85149',confused:'#d29922'}[ai.sentimentSignal]||'#8b949e';
+    const churnColor = {low:'#3fb950',medium:'#d29922',high:'#f85149'}[ai.churnRisk]||'#8b949e';
+    const brokerColor = {'not-started':'#8b949e',exploring:'#58a6ff',ready:'#d29922',connected:'#3fb950'}[ai.brokerReadiness]||'#8b949e';
+
+    h += `<div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-top:4px">
+      <div class="sl-sec" style="margin-top:0">🤖 AI Analysis</div>
+      <p style="font-size:13px;color:#c9d1d9;line-height:1.6;margin:0 0 14px">${ai.summary}</p>
+
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+        <div style="text-align:center">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Sentiment</div>
+          <span style="background:${sentColor}22;color:${sentColor};border:1px solid ${sentColor}44;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;text-transform:capitalize">${ai.sentimentSignal||'—'}</span>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Churn Risk</div>
+          <span style="background:${churnColor}22;color:${churnColor};border:1px solid ${churnColor}44;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;text-transform:capitalize">${ai.churnRisk||'—'}</span>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Broker Readiness</div>
+          <span style="background:${brokerColor}22;color:${brokerColor};border:1px solid ${brokerColor}44;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;text-transform:capitalize">${(ai.brokerReadiness||'—').replace('-',' ')}</span>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Sophistication</div>
+          <span style="background:#8b5cf622;color:#8b5cf6;border:1px solid #8b5cf644;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;text-transform:capitalize">${ai.sophisticationLevel||'—'}</span>
+        </div>
+      </div>`;
+
+    // Topic breakdown bars
+    if (ai.topicCategories) {
+      const cats = Object.entries(ai.topicCategories).filter(([,v])=>v>0).sort(([,a],[,b])=>b-a);
+      if (cats.length) {
+        h += `<div style="margin-bottom:14px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Topic Breakdown</div>`;
+        cats.forEach(([key, val]) => {
+          const label = key.replace(/([A-Z])/g,' $1').trim();
+          h += `<div style="margin-bottom:6px">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:#8b949e;margin-bottom:3px">
+              <span style="text-transform:capitalize">${label}</span><span>${val}%</span>
+            </div>
+            <div style="background:#21262d;border-radius:3px;height:5px">
+              <div style="background:#58a6ff;border-radius:3px;height:5px;width:${val}%"></div>
+            </div>
+          </div>`;
+        });
+        h += '</div>';
+      }
+    }
+
+    // Agents used
+    if (ai.agentsUsed && ai.agentsUsed.length) {
+      const agColors = {news:'#58a6ff',fundamental:'#8b5cf6',chart:'#3fb950',strategy:'#f0883e'};
+      h += `<div style="margin-bottom:14px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Agents Used</div><div style="display:flex;flex-wrap:wrap;gap:6px">`;
+      ai.agentsUsed.forEach(ag => {
+        const c = agColors[ag] || '#8b949e';
+        h += `<span style="background:${c}22;color:${c};border:1px solid ${c}44;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600">${ag}</span>`;
+      });
+      h += '</div></div>';
+    }
+
+    // Top topics pills
+    if (ai.topTopics && ai.topTopics.length) {
+      h += `<div style="margin-bottom:14px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Top Topics</div><div style="display:flex;flex-wrap:wrap;gap:6px">`;
+      ai.topTopics.forEach(t => { h += `<span class="pill pb" style="font-size:11px">${t}</span>`; });
+      h += '</div></div>';
+    }
+
+    // Pain points
+    if (ai.painPoints && ai.painPoints.length) {
+      h += `<div style="margin-bottom:14px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">⚠ Pain Points</div><div style="display:flex;flex-wrap:wrap;gap:6px">`;
+      ai.painPoints.forEach(p => { h += `<span style="background:#f8514922;color:#f85149;border:1px solid #f8514944;border-radius:20px;padding:3px 10px;font-size:11px">${p}</span>`; });
+      h += '</div></div>';
+    }
+
+    // Feature requests
+    if (ai.featureRequests && ai.featureRequests.length) {
+      h += `<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">💡 Feature Requests</div><div style="display:flex;flex-wrap:wrap;gap:6px">`;
+      ai.featureRequests.forEach(f => { h += `<span style="background:#8b5cf622;color:#8b5cf6;border:1px solid #8b5cf644;border-radius:20px;padding:3px 10px;font-size:11px">${f}</span>`; });
+      h += '</div></div>';
+    }
+
+    h += '</div>'; // close AI section
+  }
+
+  // Agent breakdown
+  const agents = d.agentBreakdown || [];
+  if (agents.length) {
+    h += `<div><div class="sl-sec">Agent Usage</div><table><thead><tr>
+      <th>Agent</th><th style="text-align:right">Messages</th><th style="text-align:right">Threads</th>
+    </tr></thead><tbody>`;
+    agents.forEach(a => {
+      const lbl = agentLabel(a.agent);
+      const col = agentColor(a.agent);
+      h += `<tr>
+        <td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${col};margin-right:8px"></span><b>${lbl}</b></td>
+        <td style="text-align:right">${a.messages}</td>
+        <td style="text-align:right">${a.threads}</td>
+      </tr>`;
+    });
+    h += '</tbody></table></div>';
+  }
+
+  // Top symbols
+  const syms = d.topSymbols || [];
+  if (syms.length) {
+    h += `<div><div class="sl-sec">Top Symbols & Topics</div><div style="display:flex;flex-wrap:wrap;gap:8px;padding-top:4px">`;
+    syms.forEach(s => {
+      h += `<span class="pill pb" style="font-size:12px;padding:4px 12px">${s.symbol} <span style="opacity:.6;font-size:10px">${s.count}x</span></span>`;
+    });
+    h += '</div></div>';
+  }
+
+  // Recent threads
+  const threads = d.recentThreads || [];
+  if (threads.length) {
+    h += `<div><div class="sl-sec">Recent Conversations (last ${threads.length})</div><table><thead><tr>
+      <th>Date</th><th>Title</th><th style="text-align:right">Msgs</th>
+    </tr></thead><tbody>`;
+    threads.forEach(t => {
+      h += `<tr>
+        <td style="font-size:11px;color:var(--muted);white-space:nowrap">${t.createdAt}</td>
+        <td style="font-size:12px;color:#c9d1d9;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${t.title}">${t.title}</td>
+        <td style="text-align:right;font-size:11px">${t.msgCount}</td>
+      </tr>`;
+    });
+    h += '</tbody></table></div>';
+  }
+
+  // Weekly activity mini table
+  const weekly = d.weeklyActivity || [];
+  if (weekly.length) {
+    h += `<div><div class="sl-sec">Weekly Activity</div><table><thead><tr>
+      <th>Week</th><th style="text-align:right">Threads</th><th style="text-align:right">Msgs</th><th>Top Symbol</th><th>Agent</th>
+    </tr></thead><tbody>`;
+    [...weekly].reverse().slice(0, 10).forEach(w => {
+      h += `<tr>
+        <td style="font-size:11px;color:var(--muted)">${w.weekStart}</td>
+        <td style="text-align:right">${w.threads}</td>
+        <td style="text-align:right"><b>${w.userMsgs}</b></td>
+        <td style="text-align:center"><span class="pill pb" style="font-size:10px">${w.topSymbol}</span></td>
+        <td style="text-align:center"><span class="pill pp" style="font-size:10px">${agentLabel(w.topAgent)}</span></td>
+      </tr>`;
+    });
+    h += '</tbody></table></div>';
+  }
+
+  document.getElementById('slBody').innerHTML = h;
+}
+
+</script>
+
+<div id="slideOverlay" onclick="closeSlide()"></div>
+<div id="userSlide">
+  <div class="sl-hdr">
+    <div>
+      <div style="font-size:16px;font-weight:700;color:var(--text)" id="slName">—</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px" id="slEmail">—</div>
+      <div style="font-size:10px;color:var(--muted2);margin-top:2px;font-family:'JetBrains Mono',monospace" id="slId">—</div>
+    </div>
+    <button class="sl-close" onclick="closeSlide()">✕ Close</button>
+  </div>
+  <div class="sl-body" id="slBody">
+    <div style="padding:60px;text-align:center;color:var(--muted)">⏳ Loading…</div>
+  </div>
+</div>
+</body>
+</html>

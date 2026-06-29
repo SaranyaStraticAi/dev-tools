@@ -57,12 +57,59 @@ interface UserDetails {
   deleteSelfEnabled: boolean;
   createOrganizationEnabled: boolean;
   lastActiveAt: number | null;
+  metaApiConnection?: {
+    accountId: string;
+    connected: boolean;
+    lastUpdated: string | null;
+    brokerName: string | null;
+    server: string | null;
+    platform: string | null;
+    region: string | null;
+    metadata: Record<string, unknown>;
+  } | null;
+}
+
+interface MetaApiHealth {
+  id: string;
+  name: string;
+  state: string;
+  connectionStatus: string;
+  rpcConnectionStatus: string | null;
+  region: string;
+  platform: string;
+  reliability: string;
+  type: string;
+  login: string;
+  server: string;
+  tags: string[];
+  copyFactoryRoles: string[];
+  resourceSlots: number;
+  connections: Array<{
+    region: string;
+    zone: string;
+    application: string;
+  }>;
 }
 
 const STORAGE_KEY = 'clerk-instances';
 
+const DEFAULT_INSTANCES: ClerkInstance[] = [
+  {
+    id: 'default-1',
+    name: 'Dev Account',
+    publishableKey: 'pk_test_Y3Jpc3Atb3J5eC05NC5jbGVyay5hY2NvdW50cy5kZXYk',
+    secretKey: '', // Handled by server
+  },
+  {
+    id: 'default-2',
+    name: 'Live Account (VibeTrader)',
+    publishableKey: 'pk_live_Y2xlcmsudmliZXRyYWRlci5jb20k',
+    secretKey: '', // Handled by server
+  }
+];
+
 export default function ClerkSearchPage() {
-  const [instances, setInstances] = useState<ClerkInstance[]>([]);
+  const [instances, setInstances] = useState<ClerkInstance[]>(DEFAULT_INSTANCES);
   const [newInstance, setNewInstance] = useState({
     publishableKey: '',
     secretKey: '',
@@ -73,6 +120,9 @@ export default function ClerkSearchPage() {
   const [error, setError] = useState<string | null>(null);
   const [foundInInstance, setFoundInInstance] = useState<string | null>(null);
   const [notFoundMessage, setNotFoundMessage] = useState<string | null>(null);
+  const [healthData, setHealthData] = useState<MetaApiHealth | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [healthError, setHealthError] = useState<string | null>(null);
 
   // Load instances from localStorage on mount
   useEffect(() => {
@@ -139,14 +189,14 @@ export default function ClerkSearchPage() {
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (instances.length === 0) {
       setError('Please add at least one Clerk instance');
       return;
     }
 
     if (!userId.trim()) {
-      setError('Please enter a user ID');
+      setError('Please enter a user ID or email address');
       return;
     }
 
@@ -164,6 +214,7 @@ export default function ClerkSearchPage() {
         },
         body: JSON.stringify({
           instances: instances.map((inst) => ({
+            id: inst.id,
             name: inst.name,
             publishableKey: inst.publishableKey,
             secretKey: inst.secretKey,
@@ -199,6 +250,70 @@ export default function ClerkSearchPage() {
   const formatMetadata = (metadata: any) => {
     if (!metadata || Object.keys(metadata).length === 0) return 'None';
     return JSON.stringify(metadata, null, 2);
+  };
+
+  const checkHealth = async (accountId: string) => {
+    setHealthLoading(true);
+    setHealthError(null);
+    setHealthData(null);
+
+    try {
+      const response = await fetch('/api/metaapi-health', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountId }),
+      });
+
+      let result;
+      try {
+        result = await response.json();
+      } catch {
+        setHealthError(`Server returned ${response.status} (non-JSON response)`);
+        return;
+      }
+
+      if (!response.ok) {
+        setHealthError(result.error || `Server returned ${response.status}`);
+        return;
+      }
+
+      if (result.success) {
+        setHealthData(result.health);
+      } else {
+        setHealthError(result.error || 'Health check returned unsuccessful');
+      }
+    } catch (err: any) {
+      setHealthError(`Network error: ${err.message || 'Could not reach the server'}`);
+    } finally {
+      setHealthLoading(false);
+    }
+  };
+
+  const getStateColor = (state: string) => {
+    switch (state) {
+      case 'DEPLOYED': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400';
+      case 'DEPLOYING': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400';
+      case 'UNDEPLOYED': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400';
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400';
+    }
+  };
+
+  const getConnectionColor = (status: string | null) => {
+    switch (status) {
+      case 'CONNECTED': return 'text-green-600 dark:text-green-400';
+      case 'DISCONNECTED': return 'text-red-600 dark:text-red-400';
+      case 'UNREACHABLE': return 'text-orange-600 dark:text-orange-400';
+      default: return 'text-gray-600 dark:text-gray-400';
+    }
+  };
+
+  const getConnectionIcon = (status: string | null) => {
+    switch (status) {
+      case 'CONNECTED': return '●';
+      case 'DISCONNECTED': return '○';
+      case 'UNREACHABLE': return '◌';
+      default: return '?';
+    }
   };
 
   return (
@@ -298,13 +413,13 @@ export default function ClerkSearchPage() {
             <div className="flex gap-4">
               <div className="flex-1">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  User ID
+                  User ID or Email Address
                 </label>
                 <input
                   type="text"
                   value={userId}
                   onChange={(e) => setUserId(e.target.value)}
-                  placeholder="Enter user ID to search"
+                  placeholder="Enter user ID (user_...) or email address to search"
                   className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm"
                   required
                 />
@@ -353,6 +468,152 @@ export default function ClerkSearchPage() {
             </h2>
 
             <div className="space-y-6">
+              {/* MetaAPI Connection Info */}
+              {userDetails.metaApiConnection && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                      MetaAPI Connection
+                    </h3>
+                    <button
+                      onClick={() => checkHealth(userDetails.metaApiConnection!.accountId)}
+                      disabled={healthLoading}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white text-sm font-medium rounded-lg transition-colors duration-200 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      {healthLoading ? (
+                        <><span className="animate-spin">⟳</span> Checking...</>
+                      ) : (
+                        <><span>♥</span> Check Health</>
+                      )}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="p-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-lg">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Account ID</p>
+                      <p className="text-gray-900 dark:text-white font-mono text-sm break-all mt-1">
+                        {userDetails.metaApiConnection.accountId}
+                      </p>
+                    </div>
+                    <div className="p-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-lg">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">DB Status</p>
+                      <p className={`font-medium mt-1 ${userDetails.metaApiConnection.connected ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {userDetails.metaApiConnection.connected ? '● Connected' : '○ Disconnected'}
+                      </p>
+                    </div>
+                    {userDetails.metaApiConnection.brokerName && (
+                      <div className="p-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-lg">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Broker</p>
+                        <p className="text-gray-900 dark:text-white mt-1">{userDetails.metaApiConnection.brokerName}</p>
+                      </div>
+                    )}
+                    {userDetails.metaApiConnection.server && (
+                      <div className="p-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-lg">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Server</p>
+                        <p className="text-gray-900 dark:text-white mt-1">{userDetails.metaApiConnection.server}</p>
+                      </div>
+                    )}
+                    {userDetails.metaApiConnection.platform && (
+                      <div className="p-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-lg">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Platform</p>
+                        <p className="text-gray-900 dark:text-white mt-1">{userDetails.metaApiConnection.platform}</p>
+                      </div>
+                    )}
+                    <div className="p-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-lg">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Last Updated</p>
+                      <p className="text-gray-900 dark:text-white mt-1">
+                        {formatDate(userDetails.metaApiConnection.lastUpdated as any)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Health Check Error */}
+                  {healthError && (
+                    <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                      <p className="text-red-600 dark:text-red-400 text-sm">Health check failed: {healthError}</p>
+                    </div>
+                  )}
+
+                  {/* Live Health Data */}
+                  {healthData && (
+                    <div className="mt-4">
+                      <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        Live Account Health
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="p-4 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/30 rounded-lg">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Container State</p>
+                          <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-bold ${getStateColor(healthData.state)}`}>
+                            {healthData.state}
+                          </span>
+                        </div>
+                        <div className="p-4 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/30 rounded-lg">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Provisioning Connection</p>
+                          <p className={`font-medium mt-1 ${getConnectionColor(healthData.connectionStatus)}`}>
+                            {getConnectionIcon(healthData.connectionStatus)} {healthData.connectionStatus}
+                          </p>
+                        </div>
+                        <div className="p-4 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/30 rounded-lg">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">RPC Connection (Live)</p>
+                          <p className={`font-medium mt-1 ${getConnectionColor(healthData.rpcConnectionStatus)}`}>
+                            {getConnectionIcon(healthData.rpcConnectionStatus)} {healthData.rpcConnectionStatus || 'N/A'}
+                          </p>
+                        </div>
+                        <div className="p-4 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/30 rounded-lg">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Region</p>
+                          <p className="text-gray-900 dark:text-white mt-1">{healthData.region}</p>
+                        </div>
+                        <div className="p-4 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/30 rounded-lg">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Platform</p>
+                          <p className="text-gray-900 dark:text-white mt-1 uppercase">{healthData.platform}</p>
+                        </div>
+                        <div className="p-4 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/30 rounded-lg">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Reliability</p>
+                          <p className="text-gray-900 dark:text-white mt-1 capitalize">{healthData.reliability}</p>
+                        </div>
+                        <div className="p-4 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/30 rounded-lg">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Account Name</p>
+                          <p className="text-gray-900 dark:text-white mt-1 text-sm break-all">{healthData.name}</p>
+                        </div>
+                        <div className="p-4 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/30 rounded-lg">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Login</p>
+                          <p className="text-gray-900 dark:text-white mt-1 font-mono">{healthData.login}</p>
+                        </div>
+                        <div className="p-4 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/30 rounded-lg">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Server</p>
+                          <p className="text-gray-900 dark:text-white mt-1">{healthData.server}</p>
+                        </div>
+                        {healthData.tags.length > 0 && (
+                          <div className="p-4 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/30 rounded-lg md:col-span-2 lg:col-span-3">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Tags</p>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {healthData.tags.map((tag, i) => (
+                                <span key={i} className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 text-xs rounded-full font-medium">
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {healthData.connections.length > 0 && (
+                          <div className="p-4 bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/30 rounded-lg md:col-span-2 lg:col-span-3">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider font-semibold">Active Connections</p>
+                            <div className="mt-1 space-y-1">
+                              {healthData.connections.map((conn, i) => (
+                                <p key={i} className="text-gray-900 dark:text-white text-sm">
+                                  {conn.application} — {conn.region} ({conn.zone})
+                                </p>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Basic Information */}
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">

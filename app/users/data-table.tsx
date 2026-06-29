@@ -105,8 +105,8 @@ export function DataTable<TData, TValue>({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <div className="rounded-md shadow-sm border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800">
-        <Table>
+      <div className="rounded-md shadow-sm border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800 overflow-x-auto">
+        <Table className="w-full">
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
